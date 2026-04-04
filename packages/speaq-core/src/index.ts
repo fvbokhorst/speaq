@@ -30,3 +30,10 @@ export { Pipeline, createMessagePipeline, unpad } from "./coordinator/pipeline";
 // Memory (ported from plexaris-agent-core)
 export { MemoryManager, InMemoryStore } from "./memory/manager";
 export type { MemoryStore } from "./memory/manager";
+
+// Identity & QR Pairing
+export * as identity from "./crypto/identity";
+
+// Session Manager (main entry point)
+export { SpeaqSession } from "./session";
+export type { Contact, EncryptedBlob } from "./session";
