@@ -1,0 +1,25 @@
+{
+  "name": "@speaq/relay",
+  "version": "0.1.0",
+  "description": "SPEAQ Relay Server - Zero knowledge message relay",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx tsx --watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "echo 'relay tests pending'"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "express": "^5.1.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "tsx": "^4.21.0"
+  }
+}
