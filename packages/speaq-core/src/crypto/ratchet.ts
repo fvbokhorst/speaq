@@ -43,21 +43,28 @@ export function initState(
   sharedSecret: Buffer,
   isInitiator: boolean
 ): RatchetState {
-  // Derive root key and initial chain keys from shared secret
+  // Derive root key and two chain keys (send + receive) from shared secret
   const rootKey = crypto
     .createHmac("sha256", Buffer.from("speaq-root"))
     .update(sharedSecret)
     .digest();
 
-  const chainKey = crypto
+  const chainKeyA = crypto
     .createHmac("sha256", rootKey)
-    .update(Buffer.from("speaq-chain"))
+    .update(Buffer.from("speaq-chain-a"))
     .digest();
 
+  const chainKeyB = crypto
+    .createHmac("sha256", rootKey)
+    .update(Buffer.from("speaq-chain-b"))
+    .digest();
+
+  // Initiator sends on chain A, receives on chain B
+  // Responder sends on chain B, receives on chain A
   return {
     rootKey,
-    chainKeySend: isInitiator ? chainKey : null,
-    chainKeyRecv: isInitiator ? null : chainKey,
+    chainKeySend: isInitiator ? chainKeyA : chainKeyB,
+    chainKeyRecv: isInitiator ? chainKeyB : chainKeyA,
     sendCount: 0,
     recvCount: 0,
     previousChainLength: 0,
