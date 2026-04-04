@@ -11,31 +11,56 @@ import { StatusBar, View, StyleSheet, TouchableOpacity, Text } from "react-nativ
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
+import WelcomeScreen from "./src/screens/WelcomeScreen";
+import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 
-type Screen = "chatList" | "chat" | "contacts" | "wallet" | "settings";
+type Screen = "welcome" | "chatList" | "chat" | "contacts" | "wallet" | "settings";
 
 function App() {
-  const [screen, setScreen] = useState<Screen>("chatList");
+  const [screen, setScreen] = useState<Screen>("welcome");
 
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={colors.depth.void} />
       <View style={styles.container}>
         {/* Screen Router */}
+        {screen === "welcome" && (
+          <WelcomeScreen onCreateIdentity={() => setScreen("chatList")} />
+        )}
         {screen === "chatList" && <ChatListScreen />}
         {screen === "chat" && <ChatScreen />}
-        {screen === "contacts" && <PlaceholderScreen title="Contacts" icon="👤" />}
-        {screen === "wallet" && <PlaceholderScreen title="Wallet" icon="💰" />}
-        {screen === "settings" && <PlaceholderScreen title="Settings" icon="⚙️" />}
+        {screen === "contacts" && <PlaceholderScreen title="Contacts" />}
+        {screen === "wallet" && <PlaceholderScreen title="Wallet" />}
+        {screen === "settings" && <PlaceholderScreen title="Settings" />}
 
-        {/* Bottom Navigation */}
-        <View style={styles.nav}>
-          <NavTab icon="💬" label="Chats" active={screen === "chatList"} onPress={() => setScreen("chatList")} />
-          <NavTab icon="👤" label="Contacts" active={screen === "contacts"} onPress={() => setScreen("contacts")} />
-          <NavTab icon="💰" label="Wallet" active={screen === "wallet"} onPress={() => setScreen("wallet")} />
-          <NavTab icon="⚙️" label="Settings" active={screen === "settings"} onPress={() => setScreen("settings")} />
-        </View>
+        {/* Bottom Navigation (hidden on welcome) */}
+        {screen !== "welcome" && <View style={styles.nav}>
+          <NavTab
+            icon={<ChatIcon active={screen === "chatList"} />}
+            label="Chats"
+            active={screen === "chatList"}
+            onPress={() => setScreen("chatList")}
+          />
+          <NavTab
+            icon={<ContactIcon active={screen === "contacts"} />}
+            label="Contacts"
+            active={screen === "contacts"}
+            onPress={() => setScreen("contacts")}
+          />
+          <NavTab
+            icon={<WalletIcon active={screen === "wallet"} />}
+            label="Wallet"
+            active={screen === "wallet"}
+            onPress={() => setScreen("wallet")}
+          />
+          <NavTab
+            icon={<SettingsIcon active={screen === "settings"} />}
+            label="Settings"
+            active={screen === "settings"}
+            onPress={() => setScreen("settings")}
+          />
+        </View>}
       </View>
     </SafeAreaProvider>
   );
@@ -47,24 +72,23 @@ function NavTab({
   active,
   onPress,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   active: boolean;
   onPress: () => void;
 }) {
   return (
     <TouchableOpacity style={styles.navTab} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.navIcon}>{icon}</Text>
+      {icon}
       <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
       {active && <View style={styles.navDot} />}
     </TouchableOpacity>
   );
 }
 
-function PlaceholderScreen({ title, icon }: { title: string; icon: string }) {
+function PlaceholderScreen({ title }: { title: string }) {
   return (
     <View style={styles.placeholder}>
-      <Text style={styles.placeholderIcon}>{icon}</Text>
       <Text style={styles.placeholderTitle}>{title}</Text>
       <Text style={styles.placeholderSub}>Coming soon</Text>
     </View>
@@ -82,20 +106,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border.subtle,
     paddingBottom: 24,
-    paddingTop: 8,
+    paddingTop: 10,
   },
   navTab: {
     flex: 1,
     alignItems: "center",
     paddingVertical: 4,
   },
-  navIcon: {
-    fontSize: 20,
-  },
   navLabel: {
     fontSize: 10,
     color: colors.signal.steel,
-    marginTop: 2,
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
   navLabelActive: {
     color: colors.voice.gold,
@@ -113,19 +135,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.depth.void,
   },
-  placeholderIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
   placeholderTitle: {
     color: colors.signal.white,
-    fontSize: 24,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "500",
+    letterSpacing: 1,
   },
   placeholderSub: {
     color: colors.signal.steel,
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 8,
+    letterSpacing: 0.5,
   },
 });
 
