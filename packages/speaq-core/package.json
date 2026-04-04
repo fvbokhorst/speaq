@@ -1,0 +1,22 @@
+{
+  "name": "@speaq/core",
+  "version": "0.1.0",
+  "description": "SPEAQ Core - Quantum encryption, cost tracking, hooks, coordinator, memory",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "crystals-kyber": "^5.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
+    "jest": "^30.0.0",
+    "@types/jest": "^30.0.0",
+    "ts-jest": "^29.3.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "speaq",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SPEAQ - Quantum Freedom Platform",
+  "workspaces": [
+    "packages/speaq-core",
+    "packages/speaq-relay"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "dev:relay": "npm run dev --workspace=packages/speaq-relay"
+  },
+  "author": "Frank van Bokhorst <frank@plexaris.com>",
+  "license": "MIT"
+}
