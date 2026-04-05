@@ -17,11 +17,13 @@ import {
   ratchetEncrypt, saveRatchetState,
   KyberKeyPair,
 } from "./crypto";
+import { generateDID, saveDID, loadDID } from "./identity-manager";
 
 // State
 let identity: {
   speaqId: string;
   displayName: string;
+  did?: string;
   createdAt: number;
 } | null = null;
 
@@ -64,17 +66,22 @@ function generateSpeaqId(): string {
  * NOW: also generates a Kyber keypair for quantum key exchange
  */
 export async function createIdentity(displayName: string): Promise<typeof identity> {
-  identity = {
-    speaqId: generateSpeaqId(),
-    displayName,
-    createdAt: Date.now(),
-  };
-
   // Generate Kyber keypair for quantum key exchange
   kyberKeys = generateKyberKeyPair();
   await saveKyberKeyPair(kyberKeys);
 
-  // Persist identity
+  // Generate DID from Kyber public key
+  const did = generateDID(kyberKeys.publicKey);
+  await saveDID(did);
+
+  identity = {
+    speaqId: generateSpeaqId(),
+    displayName,
+    did,
+    createdAt: Date.now(),
+  };
+
+  // Persist identity (includes DID)
   await AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
 
   // Connect to relay
@@ -98,6 +105,18 @@ export async function loadIdentity(): Promise<typeof identity> {
         // Migration: existing identity without Kyber keys -- generate now
         kyberKeys = generateKyberKeyPair();
         await saveKyberKeyPair(kyberKeys);
+      }
+
+      // Migration: existing identity without DID -- generate now
+      if (identity && !identity.did && kyberKeys) {
+        const did = generateDID(kyberKeys.publicKey);
+        await saveDID(did);
+        identity.did = did;
+        await AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
+      } else if (identity && !identity.did) {
+        // Load DID from separate storage
+        const storedDid = await loadDID();
+        if (storedDid) identity.did = storedDid;
       }
 
       connectRelay();

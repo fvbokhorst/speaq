@@ -22,7 +22,8 @@
     "react-native-image-picker": "^7.2.3",
     "react-native-quick-crypto": "^1.0.18",
     "react-native-safe-area-context": "^5.5.2",
-    "react-native-webrtc": "^124.0.7"
+    "react-native-webrtc": "^124.0.7",
+    "react-native-webview": "^14.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

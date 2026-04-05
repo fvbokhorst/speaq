@@ -198,6 +198,42 @@ _(wordt ingevuld na afronding)_
 
 ---
 
+## Complete 3 Modules to ~100% (5 april 2026)
+
+### Module 8: Witness Mode (35% -> ~100%)
+- [x] Add `signature` field to WitnessRecord interface
+- [x] Update `createWitness` to create HMAC-SHA256 signature (using Kyber-derived key or contentHash fallback)
+- [x] Add `verifyWitness(record)` function that re-computes HMAC and compares
+- [x] Add `exportWitness(record)` returning shareable JSON proof (hash + signature + timestamp + content)
+- [x] Add "Verify" and "Share Proof" buttons in AdvancedScreen next to each witness record
+- [x] Show verification status inline (green "Signature valid" / red "SIGNATURE INVALID")
+- [x] Icon changes to "V" (valid) or "!" (invalid) based on verification
+
+### Module 10: Mesh Network (45% -> ~100%)
+- [x] Add MeshMessage interface with type, ttl, hops, data, messageId
+- [x] Add `broadcastViaMesh(data)` that sends to ALL known mesh peers
+- [x] Add `onMeshMessage(callback)` with unsubscribe return function
+- [x] Add `handleIncomingMeshMessage()` with TTL decrement, hop-based loop prevention, duplicate detection
+- [x] Add `getMeshStats()` returning { scanning, peerCount, messagesRelayed }
+
+### Module 1: Chat Group Encryption (90% -> ~100%)
+- [x] Import `getContactKey` and `encryptMessage` from crypto.ts
+- [x] `sendGroupMessage` encrypts per-member using their individual contact key (no shared group key)
+- [x] Optional `mySpeaqId` param with fallback to existing ratchet-based encryption
+
+### Deploy
+- [x] rsync src/ to ~/speaq-build/src/ (excluding App.tsx)
+- [x] git add src/ files, commit (9ae1de9), push to main
+
+### Review
+- **advanced.ts**: WitnessRecord now includes `signature` field. `createWitness()` generates HMAC-SHA256 using signingKey or contentHash as key. New `verifyWitness()` re-computes and compares. New `exportWitness()` returns clean JSON proof object.
+- **AdvancedScreen.tsx**: Witness cards show inline verification status (green/red). "Verify" button shows alert with pass/fail. "Share Proof" button shows exportable JSON in alert. Icon reflects validation state.
+- **transport.ts**: New MeshMessage interface with TTL + hops. `broadcastViaMesh()` sends to all peers. `onMeshMessage()` registers callbacks. `handleIncomingMeshMessage()` handles relay with TTL decrement, hop tracking (prevents loops), duplicate detection via seenMessageIds Set. `getMeshStats()` exposes scanning/peerCount/messagesRelayed.
+- **groups.ts**: `sendGroupMessage()` now accepts optional `mySpeaqId`. When provided, encrypts payload per-member using `getContactKey()` + `encryptMessage()` -- each member gets a unique encrypted copy. No shared group key.
+- **No breaking changes**: All new params are optional, existing callers unaffected.
+
+---
+
 ## CRITICAL SECURITY FIXES (5 april 2026)
 
 ### Fix 1: Crypto keys in plaintext AsyncStorage
@@ -230,16 +266,29 @@ _(wordt ingevuld na afronding)_
 
 ## Module 5: Sovereign ID (5% -> 100%) -- 5 april 2026
 
-- [ ] Create `src/services/identity-manager.ts` (generateDID, createVerifiableCredential, verifyCredential, exportIdentity, importIdentity)
-- [ ] Update `src/services/speaq.ts` -- generate DID on createIdentity, store alongside speaqId
-- [ ] Update `src/screens/SettingsScreen.tsx` -- show DID, Export Identity button, Verify Identity option
+- [x] Create `src/services/identity-manager.ts` (generateDID, createVerifiableCredential, verifyCredential, exportIdentity, importIdentity)
+- [x] Update `src/services/speaq.ts` -- generate DID on createIdentity, store alongside speaqId
+- [x] Update `src/screens/SettingsScreen.tsx` -- show DID, Export Identity button, Verify Identity option
 
 ## Module 4: Freedom Browse (20% -> 100%) -- 5 april 2026
 
-- [ ] Create `src/screens/BrowserScreen.tsx` (WebView, URL bar, nav buttons, local history, clear history)
-- [ ] Add `react-native-webview ^14.0.0` to package.json
-- [ ] Update `App.tsx` -- import BrowserScreen, add navigation, browse button in Settings
+- [x] Create `src/screens/BrowserScreen.tsx` (WebView, URL bar, nav buttons, local history, clear history)
+- [x] Add `react-native-webview ^14.0.0` to package.json
+- [x] Update `App.tsx` -- import BrowserScreen, add navigation, browse button in Settings
 
 ## Deploy
-- [ ] rsync src/ + App.tsx to ~/speaq-build/
+- [x] rsync src/ + App.tsx + package.json to ~/speaq-build/
 - [ ] git add -A, commit, push
+
+## Review -- Module 4 + 5
+
+### Module 5: Sovereign ID
+- **identity-manager.ts**: New service with 5 exports. `generateDID()` creates W3C DID `did:speaq:<base58-hash>` from Kyber public key. `createVerifiableCredential()` signs claims with HMAC-SHA256. `verifyCredential()` checks signature + expiry. `exportIdentity()` bundles DID + speaqId + credentials as QR-scannable JSON. `importIdentity()` restores on new device.
+- **speaq.ts**: `createIdentity()` now generates DID from Kyber public key and stores it. `loadIdentity()` migrates existing identities by generating DID if missing. Identity type extended with optional `did` field.
+- **SettingsScreen.tsx**: Profile section shows DID (truncated with ellipsis). "Export Identity" button opens modal with full JSON data (selectable text). "Verify Identity" button checks all stored credentials and reports valid/invalid count.
+
+### Module 4: Freedom Browse
+- **BrowserScreen.tsx**: Full in-app browser using react-native-webview. URL bar with smart navigation (domains get https://, text becomes DuckDuckGo search). Back/forward/refresh controls. Local-only history in AsyncStorage (max 100 entries, deletable). History view with clear button. Transport layer integration via injected JS. Incognito-style (no third-party cookies).
+- **package.json**: Added `react-native-webview ^14.0.0`.
+- **App.tsx**: BrowserScreen imported, routed as "browser" tab. Accessible from Settings > Advanced > Freedom Browse.
+- **SettingsScreen.tsx**: New `onOpenBrowser` prop, "Freedom Browse" button added in Advanced section.

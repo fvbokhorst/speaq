@@ -24,6 +24,7 @@ import VaultScreen from "./src/screens/VaultScreen";
 import MiningScreen from "./src/screens/MiningScreen";
 import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
+import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
@@ -256,12 +257,13 @@ function App() {
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");
-        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
+        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onOpenBrowser={() => setActiveTab("browser")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "info" && <InfoScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "lightning" && <LightningScreen onBack={() => setActiveTab("wallet")} />}
+        {activeTab === "browser" && <BrowserScreen onBack={() => setActiveTab("settings")} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />

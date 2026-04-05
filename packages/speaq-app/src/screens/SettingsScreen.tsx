@@ -7,9 +7,10 @@ import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
-import { getIdentity } from "../services/speaq";
+import { getIdentity, getKyberPublicKey } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
+import { exportIdentity, loadCredentials, verifyCredential, VerifiableCredential } from "../services/identity-manager";
 
 const PRIVACY_POLICY_EN = `SPEAQ Privacy Policy
 Last updated: April 2026
@@ -131,12 +132,15 @@ interface Props {
   onOpenVault: () => void;
   onOpenMining: () => void;
   onOpenInfo: () => void;
+  onOpenBrowser: () => void;
   onLanguageChange: () => void;
 }
 
-export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onOpenInfo, onLanguageChange }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onOpenInfo, onOpenBrowser, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportData, setExportData] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const identity = getIdentity();
 
@@ -149,6 +153,40 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   async function handleChangePhoto() {
     const uri = await pickProfilePhoto();
     if (uri) setPhotoUri(uri);
+  }
+
+  async function handleExportIdentity() {
+    try {
+      const data = await exportIdentity();
+      setExportData(data);
+      setShowExport(true);
+    } catch (e: any) {
+      Alert.alert("Export Failed", e.message || "Could not export identity.");
+    }
+  }
+
+  async function handleVerifyIdentity() {
+    try {
+      const credentials = await loadCredentials();
+      const pubKey = getKyberPublicKey();
+      if (credentials.length === 0) {
+        Alert.alert("No Credentials", "You have no verifiable credentials to verify.");
+        return;
+      }
+      if (!pubKey) {
+        Alert.alert("Error", "No public key available.");
+        return;
+      }
+      let valid = 0;
+      let invalid = 0;
+      for (const cred of credentials) {
+        if (verifyCredential(cred, pubKey)) valid++;
+        else invalid++;
+      }
+      Alert.alert("Verification Complete", `${valid} valid, ${invalid} invalid out of ${credentials.length} credentials.`);
+    } catch (e: any) {
+      Alert.alert("Verification Failed", e.message || "Could not verify credentials.");
+    }
   }
 
   function handleDeleteData() {
@@ -217,6 +255,20 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
             <Text style={st.rowLabel}>SPEAQ ID</Text>
             <Text style={st.rowValueMono}>{identity?.speaqId || "None"}</Text>
           </View>
+          {identity?.did && (
+            <View style={st.row}>
+              <Text style={st.rowLabel}>DID</Text>
+              <Text style={[st.rowValueMono, { fontSize: 9, maxWidth: 180 }]} numberOfLines={1} ellipsizeMode="middle">{identity.did}</Text>
+            </View>
+          )}
+          <TouchableOpacity style={st.row} onPress={handleExportIdentity}>
+            <Text style={st.rowLabel}>Export Identity</Text>
+            <Text style={st.rowAction}>QR</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={st.row} onPress={handleVerifyIdentity}>
+            <Text style={st.rowLabel}>Verify Identity</Text>
+            <Text style={st.rowAction}>Check</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Security */}
@@ -265,6 +317,10 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={onOpenAdvanced}>
             <Text style={st.rowLabel}>{t("ghostWitness")}</Text>
+            <Text style={st.rowAction}>{t("open")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={st.row} onPress={onOpenBrowser}>
+            <Text style={st.rowLabel}>Freedom Browse</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
         </View>
@@ -320,6 +376,27 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Export Identity Modal */}
+      <Modal visible={showExport} animationType="slide">
+        <View style={st.privacyContainer}>
+          <View style={st.privacyHeader}>
+            <Text style={st.privacyTitle}>Export Identity</Text>
+            <TouchableOpacity onPress={() => setShowExport(false)}>
+              <Text style={st.privacyClose}>{t("close")}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={st.privacyScroll}>
+            <Text style={[st.privacyText, { marginBottom: 12 }]}>
+              Scan this data on your new device to transfer your identity.
+              Note: private keys must be transferred separately for security.
+            </Text>
+            <View style={st.exportBox}>
+              <Text style={st.exportData} selectable>{exportData}</Text>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -356,4 +433,6 @@ const st = StyleSheet.create({
   privacyClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
   privacyScroll: { flex: 1, padding: 24 },
   privacyText: { color: colors.signal.light, fontSize: 14, lineHeight: 22 },
+  exportBox: { backgroundColor: colors.depth.card, borderRadius: 8, padding: 16, borderWidth: 1, borderColor: colors.border.subtle },
+  exportData: { color: colors.quantum.teal, fontSize: 10, fontFamily: "Courier", lineHeight: 16 },
 });
