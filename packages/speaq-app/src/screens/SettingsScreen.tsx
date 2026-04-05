@@ -13,9 +13,10 @@ import { getProfilePhoto, pickProfilePhoto } from "../services/profile";
 interface Props {
   onLogout: () => void;
   onOpenAdvanced: () => void;
+  onOpenVault: () => void;
 }
 
-export default function SettingsScreen({ onLogout, onOpenAdvanced }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [photoUri, setPhotoUri] = useState(getProfilePhoto());
   const identity = getIdentity();
@@ -113,6 +114,10 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced }: Props) {
         {/* Advanced Features */}
         <Text style={st.sectionLabel}>Advanced</Text>
         <View style={st.card}>
+          <TouchableOpacity style={st.row} onPress={onOpenVault}>
+            <Text style={st.rowLabel}>Quantum Vault</Text>
+            <Text style={st.rowAction}>Open</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={onOpenAdvanced}>
             <Text style={st.rowLabel}>Ghost Groups, Witness, Switch</Text>
             <Text style={st.rowAction}>Open</Text>

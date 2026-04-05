@@ -18,6 +18,7 @@ import WalletScreen from "./src/screens/WalletScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import AdvancedScreen from "./src/screens/AdvancedScreen";
 import TransactionsScreen from "./src/screens/TransactionsScreen";
+import VaultScreen from "./src/screens/VaultScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
@@ -228,8 +229,9 @@ function App() {
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");
-        }} onOpenAdvanced={() => setActiveTab("advanced")} />}
+        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
+        {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label="Chats" active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label="Contacts" active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
