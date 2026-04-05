@@ -18,6 +18,8 @@ import { createIdentity, getIdentity } from "./src/services/speaq";
 function App() {
   const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
+  const [chatContactId, setChatContactId] = useState("");
+  const [chatContactName, setChatContactName] = useState("");
   const [pin, setPin] = useState("");
   const [savedPin, setSavedPin] = useState("");
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
@@ -148,8 +150,12 @@ function App() {
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" />
       <View style={st.container}>
-        {activeTab === "chats" && <ChatListScreen />}
-        {activeTab === "chat" && <ChatScreen />}
+        {activeTab === "chats" && <ChatListScreen onOpenChat={(id: string, name: string) => {
+          setChatContactId(id);
+          setChatContactName(name);
+          setActiveTab("chat");
+        }} />}
+        {activeTab === "chat" && <ChatScreen contactId={chatContactId} contactName={chatContactName} onBack={() => setActiveTab("chats")} />}
         {activeTab === "contacts" && <PH title="Contacts" />}
         {activeTab === "wallet" && <PH title="Wallet" />}
         {activeTab === "settings" && <PH title="Settings" />}
