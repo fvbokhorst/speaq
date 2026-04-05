@@ -20,6 +20,7 @@ interface Props {
 
 export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const identity = getIdentity();
 
@@ -120,19 +121,19 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         </View>
 
         {/* Language */}
-        <Text style={st.sectionLabel}>Language</Text>
+        <Text style={st.sectionLabel}>{t("language")}</Text>
         <View style={st.card}>
-          <TouchableOpacity style={st.row} onPress={() => {
-            const buttons = LANGUAGES.map((l) => ({
-              text: `${l.native}${getLanguage() === l.key ? " (current)" : ""}`,
-              onPress: () => { setLanguage(l.key); onLanguageChange(); },
-            }));
-            buttons.push({ text: "Cancel", onPress: () => {} });
-            Alert.alert("Language", "Select your language", buttons);
-          }}>
+          <TouchableOpacity style={st.row} onPress={() => setShowLangPicker(!showLangPicker)}>
             <Text style={st.rowLabel}>{t("language")}</Text>
             <Text style={st.rowAction}>{LANGUAGES.find((l) => l.key === getLanguage())?.native || "English"}</Text>
           </TouchableOpacity>
+          {showLangPicker && LANGUAGES.map((l) => (
+            <TouchableOpacity key={l.key} style={[st.langRow, getLanguage() === l.key && st.langRowActive]}
+              onPress={() => { setLanguage(l.key); onLanguageChange(); setShowLangPicker(false); }}>
+              <Text style={[st.langNative, getLanguage() === l.key && st.langNativeActive]}>{l.native}</Text>
+              <Text style={st.langLabel}>{l.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Advanced Features */}
@@ -272,6 +273,11 @@ const st = StyleSheet.create({
   rowValueMono: { color: colors.voice.gold, fontSize: 12, fontFamily: "Courier" },
   rowValueTeal: { color: colors.quantum.teal, fontSize: 12 },
   rowAction: { color: colors.voice.gold, fontSize: 14, fontWeight: "500" },
+  langRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle },
+  langRowActive: { backgroundColor: "rgba(212,168,83,0.08)" },
+  langNative: { color: colors.signal.white, fontSize: 14 },
+  langNativeActive: { color: colors.voice.gold, fontWeight: "600" },
+  langLabel: { color: colors.signal.steel, fontSize: 12 },
   rowActionRed: { color: colors.signal.red, fontSize: 14, fontWeight: "500" },
 
   privacyContainer: { flex: 1, backgroundColor: colors.depth.void },
