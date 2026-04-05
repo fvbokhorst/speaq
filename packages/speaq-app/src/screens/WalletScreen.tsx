@@ -66,19 +66,41 @@ export default function WalletScreen({ onOpenChat }: Props) {
     setShowNewProject(false);
   }
 
-  function handleFundProject(project: Project) {
-    Alert.prompt("Fund Project", `How many QC to allocate to "${project.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Fund", onPress: (val) => {
-        const amount = parseFloat(val || "0");
-        if (amount > 0) {
-          walletService.fundProject(project.id, amount);
-          setBalance(walletService.getBalance());
-          setProjects(walletService.getProjects());
-          setTransactions(walletService.getTransactions());
-        }
+  function handleProjectAction(project: Project) {
+    Alert.alert(project.name, `Balance: ${project.balance.toFixed(2)} QC`, [
+      { text: "Fund", onPress: () => {
+        Alert.prompt("Fund Project", `How many QC to add? (Available: ${balance.toFixed(2)})`, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Fund", onPress: (val) => {
+            const amount = parseFloat(val || "0");
+            if (amount > 0 && walletService.fundProject(project.id, amount)) {
+              setBalance(walletService.getBalance());
+              setProjects(walletService.getProjects());
+              setTransactions(walletService.getTransactions());
+            }
+          }},
+        ], "plain-text", "", "decimal-pad");
       }},
-    ], "plain-text", "", "decimal-pad");
+      { text: "Withdraw", onPress: () => {
+        Alert.prompt("Withdraw", `How many QC to withdraw? (Project: ${project.balance.toFixed(2)})`, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Withdraw", onPress: (val) => {
+            const amount = parseFloat(val || "0");
+            if (amount > 0 && walletService.withdrawFromProject(project.id, amount)) {
+              setBalance(walletService.getBalance());
+              setProjects(walletService.getProjects());
+              setTransactions(walletService.getTransactions());
+            }
+          }},
+        ], "plain-text", "", "decimal-pad");
+      }},
+      { text: "Delete", style: "destructive", onPress: () => {
+        walletService.deleteProject(project.id);
+        setBalance(walletService.getBalance());
+        setProjects(walletService.getProjects());
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
   }
 
   function handleLinkWallet() {
@@ -165,7 +187,7 @@ export default function WalletScreen({ onOpenChat }: Props) {
           </View>
         ) : (
           projects.map((p) => (
-            <TouchableOpacity key={p.id} style={st.projectCard} onPress={() => handleFundProject(p)}>
+            <TouchableOpacity key={p.id} style={st.projectCard} onPress={() => handleProjectAction(p)}>
               <View style={st.projectInfo}>
                 <Text style={st.projectName}>{p.name}</Text>
                 {p.description ? <Text style={st.projectDesc} numberOfLines={1}>{p.description}</Text> : null}

@@ -15,6 +15,7 @@ import ContactsScreen from "./src/screens/ContactsScreen";
 import CallScreen from "./src/screens/CallScreen";
 import WalletScreen from "./src/screens/WalletScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import AdvancedScreen from "./src/screens/AdvancedScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity } from "./src/services/speaq";
@@ -203,7 +204,8 @@ function App() {
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");
-        }} />}
+        }} onOpenAdvanced={() => setActiveTab("advanced")} />}
+        {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label="Chats" active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label="Contacts" active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />

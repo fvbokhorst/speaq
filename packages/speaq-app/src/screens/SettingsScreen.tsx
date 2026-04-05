@@ -11,9 +11,10 @@ import { getIdentity } from "../services/speaq";
 
 interface Props {
   onLogout: () => void;
+  onOpenAdvanced: () => void;
 }
 
-export default function SettingsScreen({ onLogout }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const identity = getIdentity();
 
@@ -87,6 +88,15 @@ export default function SettingsScreen({ onLogout }: Props) {
           <TouchableOpacity style={st.row} onPress={handleResetPIN}>
             <Text style={st.rowLabel}>Reset PIN</Text>
             <Text style={st.rowAction}>Reset</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Advanced Features */}
+        <Text style={st.sectionLabel}>Advanced</Text>
+        <View style={st.card}>
+          <TouchableOpacity style={st.row} onPress={onOpenAdvanced}>
+            <Text style={st.rowLabel}>Ghost Groups, Witness, Switch</Text>
+            <Text style={st.rowAction}>Open</Text>
           </TouchableOpacity>
         </View>
 
