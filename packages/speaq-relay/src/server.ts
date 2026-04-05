@@ -188,6 +188,88 @@ app.get("/api/v1/mining/network-stats", (_req, res) => {
   });
 });
 
+// --- Dead Man's Switch (Server-Side) ---
+// Server stores DMS configs in-memory. Checks every 60 seconds.
+// If a user is overdue, sends their encrypted message to all recipients.
+
+interface DMSConfig {
+  speaqId: string;
+  intervalMs: number;
+  lastCheckIn: number;
+  recipientIds: string[];
+  encryptedMessage: string; // Server never decrypts this
+}
+
+const dmsConfigs = new Map<string, DMSConfig>();
+
+// Register a DMS config
+app.post("/api/v1/dms/register", (req, res) => {
+  const { speaqId, intervalMs, recipientIds, encryptedMessage } = req.body;
+  if (!speaqId || !intervalMs || !recipientIds || !encryptedMessage) {
+    return res.status(400).json({ error: "speaqId, intervalMs, recipientIds, and encryptedMessage required" });
+  }
+  if (!Array.isArray(recipientIds) || recipientIds.length === 0) {
+    return res.status(400).json({ error: "recipientIds must be a non-empty array" });
+  }
+  if (intervalMs < 60000) {
+    return res.status(400).json({ error: "intervalMs must be at least 60000 (1 minute)" });
+  }
+
+  dmsConfigs.set(speaqId, {
+    speaqId,
+    intervalMs,
+    lastCheckIn: Date.now(),
+    recipientIds,
+    encryptedMessage,
+  });
+
+  res.json({ registered: true, speaqId });
+});
+
+// Check in (reset timer)
+app.post("/api/v1/dms/checkin", (req, res) => {
+  const { speaqId } = req.body;
+  if (!speaqId) {
+    return res.status(400).json({ error: "speaqId required" });
+  }
+
+  const config = dmsConfigs.get(speaqId);
+  if (!config) {
+    return res.status(404).json({ error: "No DMS registered for this speaqId" });
+  }
+
+  config.lastCheckIn = Date.now();
+  res.json({ checkedIn: true, speaqId, nextDeadline: config.lastCheckIn + config.intervalMs });
+});
+
+// Background DMS check every 60 seconds
+setInterval(() => {
+  const now = Date.now();
+  for (const [speaqId, config] of dmsConfigs.entries()) {
+    const elapsed = now - config.lastCheckIn;
+    if (elapsed > config.intervalMs) {
+      // Overdue: send encrypted message to all recipients
+      for (const recipientId of config.recipientIds) {
+        const recipient = clients.get(recipientId);
+        if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+          recipient.ws.send(JSON.stringify({
+            type: "RECEIVE",
+            from: speaqId,
+            blob: config.encryptedMessage,
+            id: crypto.randomUUID(),
+            deadManSwitch: true,
+          }));
+        } else {
+          // Queue for offline recipient
+          queueOfflineMessage(recipientId, speaqId, config.encryptedMessage);
+        }
+      }
+      // Remove the triggered DMS config
+      dmsConfigs.delete(speaqId);
+    }
+  }
+}, 60_000);
+
 // --- HTTP Server + WebSocket ---
 
 const server = http.createServer(app);
