@@ -82,12 +82,49 @@ export default function GroupsScreen({ onOpenGroupChat }: Props) {
     }
   }
 
-  function handleDeleteGroup(group: Group) {
-    Alert.alert("Delete Group", `Delete "${group.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => {
+  function handleGroupActions(group: Group) {
+    Alert.alert(group.name, `${group.members.length} members`, [
+      { text: "Rename", onPress: () => {
+        Alert.prompt("Rename Group", "New name:", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Save", onPress: async (newName) => {
+            if (newName && newName.trim()) {
+              // Update group name in storage
+              const allGroups = getGroups();
+              const g = allGroups.find((gr) => gr.id === group.id);
+              if (g) {
+                g.name = newName.trim();
+                await AsyncStorage.setItem("speaq_groups", JSON.stringify(allGroups));
+                setGroups(getGroups());
+              }
+            }
+          }},
+        ], "plain-text", group.name);
+      }},
+      { text: "Change Photo", onPress: async () => {
+        try {
+          const result = await launchImageLibrary({ mediaType: "photo", selectionLimit: 1, quality: 0.5 });
+          if (result.assets && result.assets[0]?.uri) {
+            const destPath = `${RNFS.DocumentDirectoryPath}/group_photo_${group.id}.jpg`;
+            try {
+              await RNFS.copyFile(result.assets[0].uri, destPath);
+            } catch {
+              await RNFS.copyFile(result.assets[0].uri.replace("file://", ""), destPath);
+            }
+            await saveGroupPhoto(group.id, `file://${destPath}`);
+          }
+        } catch (e) {}
+      }},
+      { text: "Remove Photo", onPress: async () => {
+        const updated = { ...groupPhotos };
+        delete updated[group.id];
+        setGroupPhotos(updated);
+        await AsyncStorage.setItem("speaq_group_photos", JSON.stringify(updated));
+      }},
+      { text: "Delete Group", style: "destructive", onPress: () => {
         deleteGroup(group.id).then(() => setGroups(getGroups()));
       }},
+      { text: "Cancel", style: "cancel" },
     ]);
   }
 
@@ -108,7 +145,7 @@ export default function GroupsScreen({ onOpenGroupChat }: Props) {
           </View>
         ) : (
           groups.map((g) => (
-            <TouchableOpacity key={g.id} style={st.groupRow} onPress={() => onOpenGroupChat(g.id, g.name)} onLongPress={() => handleDeleteGroup(g)}>
+            <TouchableOpacity key={g.id} style={st.groupRow} onPress={() => onOpenGroupChat(g.id, g.name)} onLongPress={() => handleGroupActions(g)}>
               {groupPhotos[g.id] ? (
                 <Image source={{ uri: groupPhotos[g.id] }} style={st.groupPhoto} />
               ) : (
