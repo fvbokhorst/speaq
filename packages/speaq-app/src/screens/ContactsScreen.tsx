@@ -8,18 +8,14 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Shar
 import QRCode from "react-native-qrcode-svg";
 import { colors, spacing, radius } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
-
-interface Contact {
-  id: string;
-  name: string;
-}
+import { contactsService, Contact } from "../services/contacts";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
 }
 
 export default function ContactsScreen({ onOpenChat }: Props) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>(contactsService.getContacts());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [newContactId, setNewContactId] = useState("");
@@ -29,7 +25,8 @@ export default function ContactsScreen({ onOpenChat }: Props) {
 
   function addContact() {
     if (!newContactId.trim() || !newContactName.trim()) return;
-    setContacts((prev) => [...prev, { id: newContactId.trim(), name: newContactName.trim() }]);
+    contactsService.addContact(newContactId.trim(), newContactName.trim());
+    setContacts(contactsService.getContacts());
     setNewContactId("");
     setNewContactName("");
     setShowAddModal(false);

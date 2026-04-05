@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { colors } from "../theme/brand";
 import { advancedService, GhostGroup, WitnessRecord, DeadManSwitch } from "../services/advanced";
+import { contactsService, Contact } from "../services/contacts";
 
 interface Props {
   onBack: () => void;
@@ -28,6 +29,9 @@ export default function AdvancedScreen({ onBack }: Props) {
   const [dmsHours, setDmsHours] = useState("24");
   const [dmsMessage, setDmsMessage] = useState("");
   const [dmsRecipient, setDmsRecipient] = useState("");
+  const [showContactPicker, setShowContactPicker] = useState(false);
+  const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
 
   useEffect(() => {
     advancedService.load().then(() => {
@@ -49,15 +53,10 @@ export default function AdvancedScreen({ onBack }: Props) {
 
   function handleGhostAction(group: GhostGroup) {
     Alert.alert(group.name, `${group.members.length} members`, [
-      { text: "Add Member", onPress: () => {
-        Alert.prompt("Add Member", "Enter SPEAQ ID:", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Add", onPress: (val) => {
-            if (val && advancedService.addMemberToGhost(group.id, val.trim())) {
-              setGhostGroups(advancedService.getGhostGroups());
-            }
-          }},
-        ]);
+      { text: "Add from Contacts", onPress: () => {
+        setAllContacts(contactsService.getContacts());
+        setPickerGroupId(group.id);
+        setShowContactPicker(true);
       }},
       { text: "Send Message", onPress: () => {
         Alert.prompt("Ghost Message", "Message to all members:", [
@@ -108,6 +107,15 @@ export default function AdvancedScreen({ onBack }: Props) {
   async function handleDisableDms() {
     await advancedService.disableDeadManSwitch();
     setDms(advancedService.getDeadManSwitch());
+  }
+
+  function handlePickContact(contact: Contact) {
+    if (pickerGroupId) {
+      advancedService.addMemberToGhost(pickerGroupId, contact.id);
+      setGhostGroups(advancedService.getGhostGroups());
+    }
+    setShowContactPicker(false);
+    setPickerGroupId(null);
   }
 
   function formatDate(ts: number): string {
@@ -259,6 +267,35 @@ export default function AdvancedScreen({ onBack }: Props) {
         </View>
       </Modal>
 
+      {/* Contact Picker Modal */}
+      <Modal visible={showContactPicker} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Select Contact</Text>
+            {allContacts.length === 0 ? (
+              <Text style={st.emptyText}>No contacts yet. Add contacts first.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 300 }}>
+                {allContacts.map((c) => (
+                  <TouchableOpacity key={c.id} style={st.contactPickRow} onPress={() => handlePickContact(c)}>
+                    <View style={st.contactPickAvatar}>
+                      <Text style={st.contactPickInit}>{c.name.charAt(0)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.contactPickName}>{c.name}</Text>
+                      <Text style={st.contactPickId}>{c.id}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => setShowContactPicker(false)}>
+              <Text style={st.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* DMS Config Modal */}
       <Modal visible={showDmsConfig} transparent animationType="fade">
         <View style={st.modalOverlay}>
@@ -343,4 +380,9 @@ const st = StyleSheet.create({
   cancelText: { color: colors.signal.steel, fontSize: 14 },
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
   confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  contactPickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  contactPickAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
+  contactPickInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactPickName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
+  contactPickId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
 });

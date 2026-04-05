@@ -21,6 +21,8 @@ import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
+import { contactsService } from "./src/services/contacts";
+import { advancedService } from "./src/services/advanced";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -38,9 +40,9 @@ function App() {
 
   // Check if user is registered on startup + load wallet
   useEffect(() => {
-    walletService.load().then(() => {
-      walletService.addWelcomeBonus();
-    });
+    walletService.load().then(() => walletService.addWelcomeBonus());
+    contactsService.load();
+    advancedService.load();
     AsyncStorage.getItem("speaq_pin").then((storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
