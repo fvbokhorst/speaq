@@ -362,3 +362,30 @@ _(wordt ingevuld na afronding)_
 - **config.ts**: meshNetwork: false.
 - **App.tsx**: handlePinSubmit made async, both setKeystorePin calls awaited.
 - **ChatScreen.tsx**: ratchetDecrypt call updated to await with contactId. Removed saveRatchetState import.
+
+---
+
+## PWA IN WEBSITE PLAN (volgende sessie)
+
+### Wat te bouwen
+- /app route op speaq-web (Next.js)
+- Chat UI (WebSocket naar relay server)
+- Kyber KEM + Double Ratchet (port crypto.ts naar browser)
+- WebRTC voor voice/video
+- Wallet (Q-Credits, lokale opslag)
+- Service worker voor offline
+
+### Wat EERLIJK communiceren op de website
+PWA kan: Quantum-encrypted chat, voice/video, Q-Credits, 9 talen, installeerbaar
+PWA kan NIET: Tor, Mesh/Bluetooth, push notifications iOS, volledige vault
+
+### Verificatie VOOR lancering
+- [ ] Bericht sturen en controleren of het encrypted is
+- [ ] Bellen en controleren of WebRTC P2P verbindt
+- [ ] Check dat relay SEND_SEALED ontvangt
+- [ ] Test op iPhone Safari + Android Chrome
+- [ ] Test "Add to Home Screen"
+
+### Optioneel
+- [ ] Face ID / Touch ID optie (standaard uit, waarschuwing)
+- [ ] Apple Developer Account -> TestFlight -> Tor + Mesh
