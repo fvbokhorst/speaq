@@ -5,6 +5,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sendMessage } from "./speaq";
+import { getContactKey, encryptMessage } from "./crypto";
 
 export interface Group {
   id: string;
@@ -74,13 +75,30 @@ export async function deleteGroup(groupId: string): Promise<void> {
   await save();
 }
 
-export function sendGroupMessage(group: Group, text: string): void {
+/**
+ * Send a group message encrypted individually for each member.
+ * Each member gets a separately encrypted copy using their unique contact key.
+ * No shared group key -- if one member is compromised, others remain secure.
+ *
+ * @param mySpeaqId - the sender's SPEAQ ID (needed for per-contact key derivation)
+ */
+export function sendGroupMessage(group: Group, text: string, mySpeaqId?: string): void {
+  const payload = JSON.stringify({
+    type: "group_message",
+    groupId: group.id,
+    groupName: group.name,
+    text,
+  });
+
   for (const member of group.members) {
-    sendMessage(member.speaqId, JSON.stringify({
-      type: "group_message",
-      groupId: group.id,
-      groupName: group.name,
-      text,
-    }));
+    if (mySpeaqId) {
+      // Encrypt individually per member using their unique contact key
+      const contactKey = getContactKey(mySpeaqId, member.speaqId);
+      const encrypted = encryptMessage(contactKey, payload);
+      sendMessage(member.speaqId, encrypted);
+    } else {
+      // Fallback: sendMessage handles its own encryption via ratchet
+      sendMessage(member.speaqId, payload);
+    }
   }
 }

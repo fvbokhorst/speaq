@@ -185,6 +185,89 @@ export async function sendViaMesh(peerId: string, data: string): Promise<boolean
   return false;
 }
 
+// --- Mesh Message Format ---
+
+export interface MeshMessage {
+  type: "MESH_RELAY";
+  ttl: number; // decrements at each hop, dropped at 0
+  hops: string[]; // node IDs that have seen this message (prevents loops)
+  data: string; // encrypted blob
+  messageId: string; // unique ID to detect duplicates
+}
+
+let messagesRelayed = 0;
+const meshMessageCallbacks: ((msg: MeshMessage) => void)[] = [];
+const seenMessageIds = new Set<string>();
+
+export function broadcastViaMesh(data: string): void {
+  const msg: MeshMessage = {
+    type: "MESH_RELAY",
+    ttl: 3,
+    hops: [],
+    data,
+    messageId: Date.now().toString(36) + Math.random().toString(36).substring(2, 8),
+  };
+
+  // Send to all known peers
+  for (const peer of meshPeers) {
+    sendViaMesh(peer.id, JSON.stringify(msg));
+  }
+}
+
+export function onMeshMessage(callback: (msg: MeshMessage) => void): () => void {
+  meshMessageCallbacks.push(callback);
+  // Return unsubscribe function
+  return () => {
+    const idx = meshMessageCallbacks.indexOf(callback);
+    if (idx !== -1) meshMessageCallbacks.splice(idx, 1);
+  };
+}
+
+export function handleIncomingMeshMessage(raw: string, fromNodeId: string): void {
+  try {
+    const msg: MeshMessage = JSON.parse(raw);
+    if (msg.type !== "MESH_RELAY") return;
+
+    // Drop if we've seen this message before (duplicate)
+    if (seenMessageIds.has(msg.messageId)) return;
+    seenMessageIds.add(msg.messageId);
+
+    // Drop if TTL is 0 or below
+    if (msg.ttl <= 0) return;
+
+    // Notify local listeners
+    for (const cb of meshMessageCallbacks) {
+      cb(msg);
+    }
+
+    // Relay to other peers (decrement TTL, add ourselves to hops)
+    const relayMsg: MeshMessage = {
+      ...msg,
+      ttl: msg.ttl - 1,
+      hops: [...msg.hops, fromNodeId],
+    };
+
+    if (relayMsg.ttl > 0) {
+      for (const peer of meshPeers) {
+        // Don't relay back to sender or to any node that already saw this message
+        if (peer.id === fromNodeId || relayMsg.hops.includes(peer.id)) continue;
+        sendViaMesh(peer.id, JSON.stringify(relayMsg));
+        messagesRelayed++;
+      }
+    }
+  } catch {
+    // Invalid message format, ignore
+  }
+}
+
+export function getMeshStats(): { scanning: boolean; peerCount: number; messagesRelayed: number } {
+  return {
+    scanning: meshScanning,
+    peerCount: meshPeers.length,
+    messagesRelayed,
+  };
+}
+
 // --- Automatic Fallback ---
 
 export async function selectBestTransport(): Promise<TransportMode> {

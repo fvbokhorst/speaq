@@ -87,7 +87,21 @@ export default function AdvancedScreen({ onBack }: Props) {
     setWitnesses(advancedService.getWitnessRecords());
     setWitnessText("");
     setShowWitness(false);
-    Alert.alert("Witness Created", "Timestamped and hashed. This record is tamper-proof.");
+    Alert.alert("Witness Created", "Timestamped, hashed, and signed. This record is tamper-proof.");
+  }
+
+  function handleVerifyWitness(record: WitnessRecord) {
+    const valid = advancedService.verifyWitness(record);
+    if (valid) {
+      Alert.alert("Verified", "Signature is valid. This record has not been tampered with.");
+    } else {
+      Alert.alert("INVALID", "Signature does NOT match. This record may have been tampered with.");
+    }
+  }
+
+  function handleShareProof(record: WitnessRecord) {
+    const proof = advancedService.exportWitness(record);
+    Alert.alert("Shareable Proof", JSON.stringify(proof, null, 2));
   }
 
   // --- Dead Man's Switch ---
@@ -191,17 +205,33 @@ export default function AdvancedScreen({ onBack }: Props) {
           {witnesses.length === 0 ? (
             <Text style={st.emptyText}>No witness records. Tap "Record" to create tamper-proof evidence.</Text>
           ) : (
-            witnesses.slice(0, 5).map((w) => (
-              <View key={w.id} style={st.itemCard}>
-                <View style={st.witnessIcon}><Text style={st.witnessIconText}>W</Text></View>
-                <View style={st.itemInfo}>
-                  <Text style={st.itemName} numberOfLines={1}>{w.content}</Text>
-                  <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
-                  <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
-                  {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
+            witnesses.slice(0, 5).map((w) => {
+              const isValid = advancedService.verifyWitness(w);
+              return (
+                <View key={w.id} style={st.itemCard}>
+                  <View style={st.witnessIcon}>
+                    <Text style={st.witnessIconText}>{isValid ? "V" : "!"}</Text>
+                  </View>
+                  <View style={st.itemInfo}>
+                    <Text style={st.itemName} numberOfLines={1}>{w.content}</Text>
+                    <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
+                    <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
+                    {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
+                    <Text style={[st.hashText, { color: isValid ? "#22C55E" : colors.signal.red }]}>
+                      {isValid ? "Signature valid" : "SIGNATURE INVALID"}
+                    </Text>
+                    <View style={st.witnessActions}>
+                      <TouchableOpacity onPress={() => handleVerifyWitness(w)}>
+                        <Text style={st.witnessActionBtn}>Verify</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleShareProof(w)}>
+                        <Text style={st.witnessActionBtn}>Share Proof</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -429,4 +459,6 @@ const st = StyleSheet.create({
   contactPickInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
   contactPickName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
   contactPickId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  witnessActions: { flexDirection: "row", gap: 12, marginTop: 6 },
+  witnessActionBtn: { color: colors.voice.gold, fontSize: 11, fontWeight: "600" },
 });

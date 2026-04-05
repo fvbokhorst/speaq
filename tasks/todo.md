@@ -225,3 +225,21 @@ _(wordt ingevuld na afronding)_
 - **server.ts**: New `SEND_SEALED` message type -- relay delivers without `from` field. Recipient gets `RECEIVE_SEALED` with blob only. Offline queue stores "sealed" as sender. Relay cannot build social graph.
 - **WalletScreen.tsx**: Balance check uses `amount > balance + 0.0001` for float tolerance. Amount parsing uses `parseFloat(parseFloat(sendAmount).toFixed(8))` for decimal precision.
 - **lightning.ts**: Privacy header added. `generateRandomAlias()` for LNURL discovery. `createInvoice()` sends generic "payment" memo to LSP, stores user memo locally only. SPEAQ ID never touches LSP.
+
+---
+
+## Module 5: Sovereign ID (5% -> 100%) -- 5 april 2026
+
+- [ ] Create `src/services/identity-manager.ts` (generateDID, createVerifiableCredential, verifyCredential, exportIdentity, importIdentity)
+- [ ] Update `src/services/speaq.ts` -- generate DID on createIdentity, store alongside speaqId
+- [ ] Update `src/screens/SettingsScreen.tsx` -- show DID, Export Identity button, Verify Identity option
+
+## Module 4: Freedom Browse (20% -> 100%) -- 5 april 2026
+
+- [ ] Create `src/screens/BrowserScreen.tsx` (WebView, URL bar, nav buttons, local history, clear history)
+- [ ] Add `react-native-webview ^14.0.0` to package.json
+- [ ] Update `App.tsx` -- import BrowserScreen, add navigation, browse button in Settings
+
+## Deploy
+- [ ] rsync src/ + App.tsx to ~/speaq-build/
+- [ ] git add -A, commit, push

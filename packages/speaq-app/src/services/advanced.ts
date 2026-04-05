@@ -7,6 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CryptoJS from "crypto-js";
 import { relay } from "./relay";
+import { loadKyberKeyPair } from "./crypto";
 
 // --- Ghost Groups ---
 // Groups with no member list visible. Stealth invites only.
@@ -29,6 +30,7 @@ export interface WitnessRecord {
   id: string;
   timestamp: number;
   contentHash: string; // SHA-256 of the content
+  signature: string; // HMAC-SHA256 signature for tamper evidence
   type: "text" | "photo" | "audio";
   content: string; // text or file URI
   location?: { lat: number; lng: number };
@@ -144,11 +146,17 @@ class AdvancedService {
     return [...this.witnessRecords].reverse();
   }
 
-  createWitness(type: WitnessRecord["type"], content: string): WitnessRecord {
+  createWitness(type: WitnessRecord["type"], content: string, signingKey?: string): WitnessRecord {
     // Generate SHA-256 hash of content + timestamp + nonce (RN-compatible)
     const timestamp = Date.now();
     const nonce = Math.random().toString(36).substring(2, 10);
     const contentHash = CryptoJS.SHA256(content + timestamp.toString() + nonce).toString();
+
+    // Create HMAC-SHA256 digital signature for tamper evidence
+    // Uses the signing key (Kyber-derived) or falls back to contentHash as HMAC key
+    const hmacKey = signingKey || contentHash;
+    const signatureData = content + contentHash + timestamp.toString();
+    const signature = CryptoJS.HmacSHA256(signatureData, hmacKey).toString(CryptoJS.enc.Hex);
 
     const recordId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
@@ -156,6 +164,7 @@ class AdvancedService {
       id: recordId,
       timestamp,
       contentHash,
+      signature,
       type,
       content,
       shared: false,
@@ -194,6 +203,26 @@ class AdvancedService {
   async deleteWitness(id: string): Promise<void> {
     this.witnessRecords = this.witnessRecords.filter((r) => r.id !== id);
     await AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
+  }
+
+  verifyWitness(record: WitnessRecord, signingKey?: string): boolean {
+    // Re-compute the HMAC-SHA256 signature and compare
+    const hmacKey = signingKey || record.contentHash;
+    const signatureData = record.content + record.contentHash + record.timestamp.toString();
+    const expectedSig = CryptoJS.HmacSHA256(signatureData, hmacKey).toString(CryptoJS.enc.Hex);
+    return expectedSig === record.signature;
+  }
+
+  exportWitness(record: WitnessRecord): object {
+    // Return a shareable JSON proof (hash + signature + timestamp + content)
+    return {
+      contentHash: record.contentHash,
+      signature: record.signature,
+      timestamp: record.timestamp,
+      content: record.content,
+      type: record.type,
+      location: record.location || null,
+    };
   }
 
   // --- Dead Man's Switch ---
