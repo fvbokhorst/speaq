@@ -42,8 +42,10 @@ export const config = {
     videoCalls: true,     // Phase 3 - ACTIVE
     quantumPay: false,    // Phase 5
     freedomBrowse: false, // Phase 4
-    witnessMode: false,   // Phase 5
-    meshNetwork: false,   // Phase 4
+    witnessMode: true,    // Phase 5 - ACTIVE
+    meshNetwork: true,    // Phase 4 - ACTIVE (transport layer)
+    torRouting: true,     // Phase 4 - ACTIVE (transport layer)
+    lightning: true,      // Phase 8 - ACTIVE
     mining: true,         // Phase 6 - ACTIVE
   },
 };
