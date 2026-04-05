@@ -96,21 +96,43 @@ export async function getVaultFiles(): Promise<VaultFile[]> {
   }
 }
 
-export async function addToVault(name: string, sourceUri: string, type: VaultFile["type"]): Promise<VaultFile> {
+export async function addToVault(name: string, sourceUri: string, type: VaultFile["type"], textContent?: string): Promise<VaultFile> {
   const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-  const ext = name.split(".").pop() || "dat";
-  const destPath = `${getVaultDir()}/${id}.${ext}`;
+  const dir = getVaultDir();
 
-  const src = sourceUri.replace("file://", "");
-  await RNFS.copyFile(src, destPath);
-  const stat = await RNFS.stat(destPath);
+  // Ensure directory exists
+  const dirExists = await RNFS.exists(dir);
+  if (!dirExists) await RNFS.mkdir(dir);
+
+  let destPath: string;
+  let size = 0;
+
+  if (type === "note" && textContent) {
+    // Write text directly
+    destPath = `${dir}/${id}.txt`;
+    await RNFS.writeFile(destPath, textContent, "utf8");
+    size = textContent.length;
+  } else if (sourceUri) {
+    // Copy file
+    const ext = name.split(".").pop() || "dat";
+    destPath = `${dir}/${id}.${ext}`;
+    try {
+      await RNFS.copyFile(sourceUri, destPath);
+    } catch {
+      await RNFS.copyFile(sourceUri.replace("file://", ""), destPath);
+    }
+    const stat = await RNFS.stat(destPath);
+    size = parseInt(stat.size as any) || 0;
+  } else {
+    return { id, name, type, uri: "", size: 0, addedAt: Date.now() };
+  }
 
   const file: VaultFile = {
     id,
     name,
     type,
     uri: `file://${destPath}`,
-    size: parseInt(stat.size as any) || 0,
+    size,
     addedAt: Date.now(),
   };
 
@@ -137,6 +159,9 @@ export async function removeFromVault(fileId: string): Promise<void> {
 // so it doesn't look empty/suspicious
 
 export async function addDecoyNote(text: string): Promise<void> {
+  const dirExists = await RNFS.exists(VAULT_DIR);
+  if (!dirExists) await RNFS.mkdir(VAULT_DIR);
+
   const files = await AsyncStorage.getItem(VAULT_FILES_KEY);
   const existing: VaultFile[] = files ? JSON.parse(files) : [];
 

@@ -12,10 +12,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
+import RNFS from "react-native-fs";
 import {
   initVault, getVaultFiles, addToVault, removeFromVault,
   hasHiddenLayer, setupHiddenPin, unlockHidden, switchToNormal,
-  getCurrentLayer, addDecoyNote, VaultFile,
+  getCurrentLayer, VaultFile,
 } from "../services/vault";
 
 interface Props {
@@ -68,11 +69,7 @@ export default function VaultScreen({ onBack }: Props) {
       { text: "Cancel", style: "cancel" },
       { text: "Save", onPress: async (text) => {
         if (text && text.trim()) {
-          if (getCurrentLayer() === "hidden") {
-            await addToVault("note.txt", "", "note");
-          } else {
-            await addDecoyNote(text.trim());
-          }
+          await addToVault("note.txt", "", "note", text.trim());
           loadFiles();
         }
       }},
@@ -90,9 +87,33 @@ export default function VaultScreen({ onBack }: Props) {
 
   const [viewFile, setViewFile] = useState<VaultFile | null>(null);
 
-  function handleTapFile(file: VaultFile) {
+  async function handleTapFile(file: VaultFile) {
     if (file.type === "photo") {
       setViewFile(file);
+    } else if (file.type === "note" && file.uri) {
+      try {
+        const content = await RNFS.readFile(file.uri.replace("file://", ""), "utf8");
+        Alert.alert(file.name, content, [
+          { text: "Edit", onPress: () => {
+            Alert.prompt("Edit Note", "Update your note:", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Save", onPress: async (newText) => {
+                if (newText) {
+                  await RNFS.writeFile(file.uri.replace("file://", ""), newText, "utf8");
+                  Alert.alert("Saved");
+                }
+              }},
+            ], "plain-text", content);
+          }},
+          { text: "Delete", style: "destructive", onPress: async () => {
+            await removeFromVault(file.id);
+            loadFiles();
+          }},
+          { text: "Close", style: "cancel" },
+        ]);
+      } catch (e) {
+        handleFileActions(file);
+      }
     } else {
       handleFileActions(file);
     }
