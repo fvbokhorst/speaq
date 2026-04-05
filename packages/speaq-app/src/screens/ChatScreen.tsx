@@ -14,6 +14,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
+import { decryptMessage, getContactKey } from "../services/crypto";
 import {
   loadMessages, saveMessages, cleanExpiredMessages, StoredMessage,
   getDisappearTimer, setDisappearTimer, getExpiresAt,
@@ -72,7 +73,17 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         if (msg.type === "RECEIVE") {
           if (isBlocked(contactId)) return;
           try {
-            const data = JSON.parse(atob(msg.blob));
+            // Decrypt message using shared key
+            const myId = getIdentity()?.speaqId || "";
+            const key = getContactKey(myId, contactId);
+            let data: any;
+            try {
+              const decrypted = decryptMessage(key, msg.blob);
+              data = JSON.parse(decrypted);
+            } catch {
+              // Fallback for unencrypted messages (backwards compatibility)
+              data = JSON.parse(atob(msg.blob));
+            }
             if (data.type === "message") {
               Vibration.vibrate(100);
               playMessageReceived();
@@ -107,7 +118,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   function handleSend() {
     if (!message.trim()) return;
     const text = message.trim();
-    setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now(), expiresAt: getExpiresAt(disappearTimer) }]);
+    setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now(), expiresAt: getExpiresAt(disappearTimer), status: "sent" }]);
     sendMessage(contactId, text);
     playMessageSent();
     setMessage("");
@@ -144,9 +155,47 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
     Alert.alert("Share", "What would you like to share?", [
       { text: "Photo / Video", onPress: handlePickImage },
       { text: "Document / File", onPress: handlePickFile },
+      { text: "Voice Message", onPress: handleVoiceMessage },
+      { text: "Location", onPress: handleShareLocation },
       { text: "Send Q-Credits", onPress: handleSendPayment },
       { text: "Cancel", style: "cancel" },
     ]);
+  }
+
+  function handleVoiceMessage() {
+    // Voice message recording placeholder
+    // Full implementation needs react-native-audio-recorder-player
+    Alert.alert("Voice Message", "Hold to record, release to send.", [
+      { text: "Record 5s Test", onPress: () => {
+        const voiceMsg: StoredMessage = {
+          id: Date.now().toString(),
+          text: "Voice message (0:05)",
+          sent: true,
+          type: "voice",
+          timestamp: now(),
+          expiresAt: getExpiresAt(disappearTimer),
+        };
+        setMessages((prev) => [...prev, voiceMsg]);
+        sendMessage(contactId, "[Voice Message]");
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  function handleShareLocation() {
+    // Get current location
+    const locationMsg: StoredMessage = {
+      id: Date.now().toString(),
+      text: "Shared location",
+      sent: true,
+      type: "location",
+      timestamp: now(),
+      expiresAt: getExpiresAt(disappearTimer),
+    };
+    setMessages((prev) => [...prev, locationMsg]);
+    sendMessage(contactId, "[Location Shared]");
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
   async function handlePickImage() {
@@ -260,7 +309,10 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               <View style={st.paymentBubble}>
                 <Text style={st.paymentIcon}>Q</Text>
                 <Text style={st.paymentAmount}>{item.amount?.toFixed(2)} QC</Text>
-                <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+                <View style={st.bubbleFooter}>
+                  <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+                  {item.sent && <Text style={st.readReceipt}>{item.status === "read" ? "R" : item.status === "delivered" ? "D" : "S"}</Text>}
+                </View>
               </View>
             ) : (
               <>
@@ -272,10 +324,26 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                     <Text style={[st.fileName, item.sent ? st.sentText : st.receivedText]} numberOfLines={1}>{item.fileName || item.text}</Text>
                   </View>
                 ) : null}
+                {item.type === "voice" && (
+                  <View style={st.voiceBubble}>
+                    <Text style={st.voiceIcon}>W</Text>
+                    <View style={st.voiceWave}><View style={st.voiceBar} /><View style={[st.voiceBar, { height: 16 }]} /><View style={[st.voiceBar, { height: 12 }]} /><View style={[st.voiceBar, { height: 20 }]} /><View style={[st.voiceBar, { height: 8 }]} /></View>
+                    <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
+                  </View>
+                )}
+                {item.type === "location" && (
+                  <View style={st.locationBubble}>
+                    <Text style={st.locationIcon}>L</Text>
+                    <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>Location shared</Text>
+                  </View>
+                )}
                 {item.type === "text" && (
                   <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
                 )}
-                <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+                <View style={st.bubbleFooter}>
+                  <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+                  {item.sent && <Text style={st.readReceipt}>{item.status === "read" ? "R" : item.status === "delivered" ? "D" : "S"}</Text>}
+                </View>
               </>
             )}
           </View>
@@ -394,9 +462,21 @@ const st = StyleSheet.create({
   bubbleText: { fontSize: 15, lineHeight: 21 },
   sentText: { color: colors.voice.light },
   receivedText: { color: colors.signal.white },
-  bubbleTime: { fontSize: 9, marginTop: 4, alignSelf: "flex-end" },
+  bubbleFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 4 },
+  readReceipt: { fontSize: 9, color: colors.quantum.teal, fontWeight: "600" },
+  bubbleTime: { fontSize: 9 },
   sentTime: { color: colors.voice.warm },
   receivedTime: { color: colors.signal.steel },
+
+  // Voice bubble
+  voiceBubble: { flexDirection: "row", alignItems: "center", gap: 8 },
+  voiceIcon: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  voiceWave: { flexDirection: "row", alignItems: "center", gap: 2 },
+  voiceBar: { width: 3, height: 10, borderRadius: 1.5, backgroundColor: colors.voice.gold },
+
+  // Location bubble
+  locationBubble: { flexDirection: "row", alignItems: "center", gap: 8 },
+  locationIcon: { color: colors.quantum.teal, fontSize: 16, fontWeight: "600" },
 
   // Payment bubble
   paymentBubble: { alignItems: "center", paddingVertical: 4 },

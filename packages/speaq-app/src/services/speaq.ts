@@ -5,6 +5,7 @@
 
 import { config } from "./config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { encryptMessage, decryptMessage, getContactKey, generateSecureId } from "./crypto";
 
 // State
 let identity: {
@@ -19,14 +20,9 @@ let connected = false;
 type MessageCallback = (msg: any) => void;
 const listeners: MessageCallback[] = [];
 
-// Generate a simple SPEAQ ID (in production: from Kyber public key hash)
+// Generate cryptographically secure SPEAQ ID
 function generateSpeaqId(): string {
-  const chars = "abcdef0123456789";
-  let id = "";
-  for (let i = 0; i < 16; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
+  return generateSecureId();
 }
 
 /**
@@ -103,19 +99,21 @@ function connectRelay() {
 export function sendMessage(toSpeaqId: string, text: string): void {
   if (!ws || !connected || !identity) return;
 
-  // In production: encrypt with Double Ratchet via speaq-core
-  // For now: base64 encode (protocol layer will be added)
-  const blob = btoa(JSON.stringify({
+  // Encrypt with AES-256-GCM using shared key
+  const key = getContactKey(identity.speaqId, toSpeaqId);
+  const plaintext = JSON.stringify({
     type: "message",
     text,
     from: identity.displayName,
     timestamp: Date.now(),
-  }));
+  });
+  const blob = encryptMessage(key, plaintext);
 
   ws.send(JSON.stringify({
     type: "SEND",
     to: toSpeaqId,
     blob,
+    encrypted: true,
   }));
 }
 

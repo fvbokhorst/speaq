@@ -12,12 +12,13 @@ export interface StoredMessage {
   text: string;
   sent: boolean;
   timestamp: string;
-  type: "text" | "image" | "file" | "payment";
+  type: "text" | "image" | "file" | "payment" | "voice" | "location";
   fileName?: string;
   fileUri?: string;
   amount?: number;
   deleted?: boolean;
   expiresAt?: number; // timestamp when message auto-deletes
+  status?: "sent" | "delivered" | "read"; // delivery status for sent messages
 }
 
 // Disappearing message timer options
