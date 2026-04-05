@@ -161,6 +161,14 @@ export default function MiningScreen({ onBack }: Props) {
             <Text style={st.networkLabel}>Remaining</Text>
             <Text style={st.networkValue}>{(getSupplyInfo().remaining).toLocaleString()} QC</Text>
           </View>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Current Halving</Text>
+            <Text style={st.networkValue}>#{getSupplyInfo().currentHalving}</Text>
+          </View>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Smallest Unit</Text>
+            <Text style={st.networkValue}>1 Spark = 0.00000001 QC</Text>
+          </View>
           <View style={st.levelBar}>
             <View style={[st.levelFill, { width: `${Math.min(100, (getSupplyInfo().totalMined / 21000000) * 100)}%` }]} />
           </View>

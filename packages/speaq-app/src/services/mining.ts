@@ -62,7 +62,10 @@ const REWARD_RATES: Record<MiningType, { perAction: number; dailyCap: number; de
 // Minimum reward: 0.001 QC per action
 const MAX_SUPPLY = 21_000_000;
 const HALVING_INTERVAL = 2_100_000;
-let totalNetworkMined = 0; // simulated, in production: from blockchain/ledger
+// 1 QC = 100,000,000 Sparks (smallest unit, like Bitcoin satoshis)
+const SPARKS_PER_QC = 100_000_000;
+
+let totalNetworkMined = 0;
 let networkMiners = 1;
 
 let stats: MiningStats = {
@@ -93,7 +96,10 @@ export async function loadMining(): Promise<void> {
       AsyncStorage.getItem(REWARDS_KEY),
       AsyncStorage.getItem(MINING_ACTIVE_KEY),
     ]);
-    if (s) stats = JSON.parse(s);
+    if (s) {
+      stats = JSON.parse(s);
+      totalNetworkMined = stats.totalEarned; // Local approximation until network ledger
+    }
     if (r) rewards = JSON.parse(r);
     if (a === "true") startMining();
 
@@ -278,12 +284,17 @@ export function getRewardRates(): typeof REWARD_RATES {
   return REWARD_RATES;
 }
 
-export function getSupplyInfo(): { maxSupply: number; totalMined: number; remaining: number; halvingProgress: number } {
+export function getSupplyInfo(): {
+  maxSupply: number; totalMined: number; remaining: number;
+  halvingProgress: number; sparksPerQC: number; currentHalving: number;
+} {
   return {
     maxSupply: MAX_SUPPLY,
     totalMined: totalNetworkMined,
     remaining: MAX_SUPPLY - totalNetworkMined,
     halvingProgress: (totalNetworkMined % HALVING_INTERVAL) / HALVING_INTERVAL,
+    sparksPerQC: SPARKS_PER_QC,
+    currentHalving: Math.floor(totalNetworkMined / HALVING_INTERVAL),
   };
 }
 
