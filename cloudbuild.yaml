@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'speaq-relay'
+      - '--source=.'
+      - '--region=europe-west1'
+      - '--allow-unauthenticated'
+      - '--memory=256Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=2'
+      - '--clear-base-image'
+timeout: '600s'
