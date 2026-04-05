@@ -23,6 +23,7 @@ import GroupsScreen from "./src/screens/GroupsScreen";
 import VaultScreen from "./src/screens/VaultScreen";
 import MiningScreen from "./src/screens/MiningScreen";
 import InfoScreen from "./src/screens/InfoScreen";
+import LightningScreen from "./src/screens/LightningScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
@@ -32,6 +33,7 @@ import { contactsService } from "./src/services/contacts";
 import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
 import { loadGroups } from "./src/services/groups";
+import { loadLightning } from "./src/services/lightning";
 import { loadMining } from "./src/services/mining";
 import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
@@ -65,6 +67,7 @@ function App() {
     loadProfile();
     loadGroups();
     loadLanguage();
+    loadLightning();
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
@@ -245,7 +248,7 @@ function App() {
           setChatContactId(id);
           setChatContactName(name);
           setActiveTab("chat");
-        }} onOpenTransactions={() => setActiveTab("transactions")} />}
+        }} onOpenTransactions={() => setActiveTab("transactions")} onOpenLightning={() => setActiveTab("lightning")} />}
         {activeTab === "transactions" && <TransactionsScreen onBack={() => setActiveTab("wallet")} />}
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
@@ -255,6 +258,7 @@ function App() {
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "info" && <InfoScreen onBack={() => setActiveTab("settings")} />}
+        {activeTab === "lightning" && <LightningScreen onBack={() => setActiveTab("wallet")} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />

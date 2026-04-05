@@ -18,9 +18,10 @@ import { t } from "../services/i18n";
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
   onOpenTransactions: () => void;
+  onOpenLightning: () => void;
 }
 
-export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) {
+export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLightning }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
 
@@ -228,6 +229,16 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
             </TouchableOpacity>
           ))
         )}
+
+        {/* Lightning Network */}
+        <TouchableOpacity style={st.lightningCard} onPress={onOpenLightning}>
+          <Text style={st.lightningIcon}>L</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={st.lightningTitle}>Lightning Network</Text>
+            <Text style={st.lightningSub}>Bitcoin instant payments</Text>
+          </View>
+          <Text style={{ color: "#F7931A", fontSize: 14 }}>{">"}</Text>
+        </TouchableOpacity>
 
         {/* Linked Wallets */}
         <View style={st.sectionRow}>
@@ -500,6 +511,10 @@ const st = StyleSheet.create({
   sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   sectionAdd: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
 
+  lightningCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 16, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: "#F7931A" },
+  lightningIcon: { color: "#F7931A", fontSize: 24, fontWeight: "700", marginRight: 14 },
+  lightningTitle: { color: colors.signal.white, fontSize: 15, fontWeight: "600" },
+  lightningSub: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
   emptySmall: { paddingHorizontal: 24, paddingVertical: 12 },
   emptySub: { color: colors.signal.steel, fontSize: 12 },
 
