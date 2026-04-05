@@ -34,6 +34,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SPEAQ needs microphone access for quantum-encrypted voice calls</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SPEAQ needs camera access for quantum-encrypted video calls</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>UILaunchStoryboardName</key>
