@@ -86,14 +86,14 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
               <Text style={st.profilePhotoInit}>{identity?.displayName?.charAt(0) || "?"}</Text>
             </View>
           )}
-          <Text style={st.photoHint}>Tap to change photo</Text>
+          <Text style={st.photoHint}>{t("tapChangePhoto")}</Text>
         </TouchableOpacity>
 
         {/* Profile */}
-        <Text style={st.sectionLabel}>Profile</Text>
+        <Text style={st.sectionLabel}>{t("profile")}</Text>
         <View style={st.card}>
           <View style={st.row}>
-            <Text style={st.rowLabel}>Name</Text>
+            <Text style={st.rowLabel}>{t("name")}</Text>
             <Text style={st.rowValue}>{identity?.displayName || "Unknown"}</Text>
           </View>
           <View style={st.row}>
@@ -103,19 +103,19 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         </View>
 
         {/* Security */}
-        <Text style={st.sectionLabel}>Security</Text>
+        <Text style={st.sectionLabel}>{t("security")}</Text>
         <View style={st.card}>
           <View style={st.row}>
             <Text style={st.rowLabel}>{t("encryption")}</Text>
             <Text style={st.rowValueTeal}>Kyber-768 + AES-256-GCM</Text>
           </View>
           <View style={st.row}>
-            <Text style={st.rowLabel}>Forward Secrecy</Text>
+            <Text style={st.rowLabel}>{t("forwardSecrecy")}</Text>
             <Text style={st.rowValueTeal}>Double Ratchet</Text>
           </View>
           <TouchableOpacity style={st.row} onPress={handleResetPIN}>
-            <Text style={st.rowLabel}>Reset PIN</Text>
-            <Text style={st.rowAction}>Reset</Text>
+            <Text style={st.rowLabel}>{t("resetPin")}</Text>
+            <Text style={st.rowAction}>{t("reset")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -136,24 +136,24 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         </View>
 
         {/* Advanced Features */}
-        <Text style={st.sectionLabel}>Advanced</Text>
+        <Text style={st.sectionLabel}>{t("advanced")}</Text>
         <View style={st.card}>
           <TouchableOpacity style={st.row} onPress={onOpenVault}>
-            <Text style={st.rowLabel}>Quantum Vault</Text>
-            <Text style={st.rowAction}>Open</Text>
+            <Text style={st.rowLabel}>{t("quantumVault")}</Text>
+            <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={onOpenAdvanced}>
-            <Text style={st.rowLabel}>Ghost Groups, Witness, Switch</Text>
-            <Text style={st.rowAction}>Open</Text>
+            <Text style={st.rowLabel}>{t("ghostWitness")}</Text>
+            <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Privacy & Data */}
-        <Text style={st.sectionLabel}>Privacy & Data</Text>
+        <Text style={st.sectionLabel}>{t("privacyData")}</Text>
         <View style={st.card}>
           <TouchableOpacity style={st.row} onPress={() => setShowPrivacy(true)}>
             <Text style={st.rowLabel}>{t("privacyPolicy")}</Text>
-            <Text style={st.rowAction}>View</Text>
+            <Text style={st.rowAction}>{t("view")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={handleDeleteData}>
             <Text style={st.rowLabelRed}>{t("deleteAllData")}</Text>
@@ -162,14 +162,14 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         </View>
 
         {/* About */}
-        <Text style={st.sectionLabel}>About</Text>
+        <Text style={st.sectionLabel}>{t("about")}</Text>
         <View style={st.card}>
           <View style={st.row}>
             <Text style={st.rowLabel}>{t("version")}</Text>
             <Text style={st.rowValue}>0.1.0 (Phase 5)</Text>
           </View>
           <View style={st.row}>
-            <Text style={st.rowLabel}>Platform</Text>
+            <Text style={st.rowLabel}>{t("platform")}</Text>
             <Text style={st.rowValue}>SPEAQ Freely.</Text>
           </View>
           <View style={st.row}>
