@@ -158,24 +158,23 @@ export default function WalletScreen({ onOpenChat }: Props) {
         <Text style={st.headerSub}>Quantum Pay</Text>
       </View>
 
-      {/* Balance Card */}
-      <View style={st.balanceCard}>
-        <Text style={st.balanceLabel}>Q-Credits Balance</Text>
-        <Text style={st.balanceAmount}>{balance.toFixed(2)}</Text>
-        <Text style={st.balanceUsd}>~ ${balance.toFixed(2)} USD</Text>
-        <View style={st.balanceActions}>
-          <TouchableOpacity style={st.actionBtn} onPress={() => setShowSend(true)}>
-            <Text style={st.actionIcon}>S</Text>
-            <Text style={st.actionLabel}>Send</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.actionBtn} onPress={() => setShowReceive(true)}>
-            <Text style={st.actionIcon}>R</Text>
-            <Text style={st.actionLabel}>Receive</Text>
-          </TouchableOpacity>
+      <ScrollView style={st.scrollArea} contentContainerStyle={st.scrollContent}>
+        {/* Balance Card */}
+        <View style={st.balanceCard}>
+          <Text style={st.balanceLabel}>Q-Credits Balance</Text>
+          <Text style={st.balanceAmount}>{balance.toFixed(2)}</Text>
+          <Text style={st.balanceUsd}>~ ${balance.toFixed(2)} USD</Text>
+          <View style={st.balanceActions}>
+            <TouchableOpacity style={st.actionBtn} onPress={() => setShowSend(true)}>
+              <Text style={st.actionIcon}>S</Text>
+              <Text style={st.actionLabel}>Send</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.actionBtn} onPress={() => setShowReceive(true)}>
+              <Text style={st.actionIcon}>R</Text>
+              <Text style={st.actionLabel}>Receive</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-
-      <ScrollView style={st.scrollArea}>
         {/* Projects */}
         <View style={st.sectionRow}>
           <Text style={st.sectionTitle}>Projects</Text>
@@ -275,7 +274,6 @@ export default function WalletScreen({ onOpenChat }: Props) {
             </View>
           ));
         })()}
-        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Send Modal */}
@@ -396,6 +394,7 @@ const st = StyleSheet.create({
   actionLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4 },
 
   scrollArea: { flex: 1 },
+  scrollContent: { paddingBottom: 100 },
   sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, marginTop: 20, marginBottom: 8 },
   sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   sectionAdd: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
