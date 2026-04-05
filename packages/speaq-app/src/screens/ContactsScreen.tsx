@@ -9,6 +9,7 @@ import QRCode from "react-native-qrcode-svg";
 import { colors, spacing, radius } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { contactsService, Contact } from "../services/contacts";
+import { t } from "../services/i18n";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -42,7 +43,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
     <View style={st.container}>
       {/* Header */}
       <View style={st.header}>
-        <Text style={st.title}>Contacts</Text>
+        <Text style={st.title}>{t("contacts")}</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity onPress={onOpenGroups} style={[st.addBtn, { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.voice.gold }]}>
             <Text style={[st.addBtnText, { color: colors.voice.gold }]}>Groups</Text>
@@ -70,7 +71,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
       {/* Contact List */}
       {contacts.length === 0 ? (
         <View style={st.empty}>
-          <Text style={st.emptyTitle}>No contacts yet</Text>
+          <Text style={st.emptyTitle}>{t("noContacts")}</Text>
           <Text style={st.emptySub}>Tap "+ Add" to add a contact by SPEAQ ID{"\n"}or scan their QR code</Text>
         </View>
       ) : (

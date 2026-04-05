@@ -13,6 +13,7 @@ import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
+import { t } from "../services/i18n";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -171,14 +172,14 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
     <View style={st.container}>
       {/* Header */}
       <View style={st.header}>
-        <Text style={st.title}>Wallet</Text>
+        <Text style={st.title}>{t("wallet")}</Text>
         <Text style={st.headerSub}>Quantum Pay</Text>
       </View>
 
       <ScrollView style={st.scrollArea} contentContainerStyle={st.scrollContent}>
         {/* Balance Card */}
         <View style={st.balanceCard}>
-          <Text style={st.balanceLabel}>Q-Credits Balance</Text>
+          <Text style={st.balanceLabel}>{t("qCredits")}</Text>
           <Text style={st.balanceAmount}>{balance.toFixed(2)}</Text>
           <Text style={st.balanceUsd}>~ ${balance.toFixed(2)} USD</Text>
           <View style={st.balanceActions}>

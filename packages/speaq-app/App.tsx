@@ -30,7 +30,7 @@ import { contactsService } from "./src/services/contacts";
 import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
 import { loadGroups } from "./src/services/groups";
-import { loadLanguage } from "./src/services/i18n";
+import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
 
 function App() {
@@ -42,6 +42,7 @@ function App() {
   const [callIsVideo, setCallIsVideo] = useState(false);
   const [callIsIncoming, setCallIsIncoming] = useState(false);
   const [callContactName, setCallContactName] = useState("");
+  const [langKey, setLangKey] = useState(0); // force re-render on language change
   const [pin, setPin] = useState("");
   const [savedPin, setSavedPin] = useState("");
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
@@ -240,14 +241,14 @@ function App() {
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");
-        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} />}
+        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
         <View style={st.nav}>
-          <Tab icon={<ChatIcon active={activeTab === "chats"} />} label="Chats" active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
-          <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label="Contacts" active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
-          <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label="Wallet" active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
-          <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label="Settings" active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
+          <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
+          <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
+          <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label={t("wallet")} active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
+          <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label={t("settings")} active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
         </View>
       </View>
     </SafeAreaProvider>

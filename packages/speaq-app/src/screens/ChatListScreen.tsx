@@ -11,6 +11,7 @@ import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { contactsService } from "../services/contacts";
 import { getContactPhoto } from "../services/profile";
+import { t } from "../services/i18n";
 
 interface ChatPreview {
   id: string;
@@ -115,8 +116,8 @@ export default function ChatListScreen({ onOpenChat }: Props) {
       </View>
       {chats.length === 0 ? (
         <View style={st.empty}>
-          <Text style={st.emptyTitle}>No conversations yet</Text>
-          <Text style={st.emptySub}>Add a contact and start a quantum-encrypted chat</Text>
+          <Text style={st.emptyTitle}>{t("noChats")}</Text>
+          <Text style={st.emptySub}>{t("addContact")}</Text>
         </View>
       ) : (
         <FlatList data={chats} renderItem={renderChat} keyExtractor={(i) => i.id} style={st.list} contentContainerStyle={st.listPad} />

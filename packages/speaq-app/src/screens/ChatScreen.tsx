@@ -24,6 +24,7 @@ import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
 import { getContactPhoto } from "../services/profile";
 import { playMessageReceived, playMessageSent } from "../services/sound";
+import { t } from "../services/i18n";
 
 interface Props {
   contactId: string;
@@ -368,7 +369,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           )}
           <View style={st.headerInfo}>
             <Text style={st.headerName}>{contactName}</Text>
-            <Text style={st.headerStatus}>{isTyping ? "typing..." : "Quantum Secured"}</Text>
+            <Text style={st.headerStatus}>{isTyping ? "typing..." : t("quantumSecured")}</Text>
           </View>
           <TouchableOpacity style={st.callBtn} onPress={() => onCall(false)}>
             <Text style={st.callBtnText}>P</Text>
@@ -407,7 +408,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           style={st.input}
           value={message}
           onChangeText={setMessage}
-          placeholder="SPEAQ Freely..."
+          placeholder={t("speaqFreely")}
           placeholderTextColor={colors.signal.steel}
           multiline
           returnKeyType="send"

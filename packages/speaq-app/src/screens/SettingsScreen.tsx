@@ -9,15 +9,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
-import { getLanguage, setLanguage, LANGUAGES, Language } from "../services/i18n";
+import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
 
 interface Props {
   onLogout: () => void;
   onOpenAdvanced: () => void;
   onOpenVault: () => void;
+  onLanguageChange: () => void;
 }
 
-export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const identity = getIdentity();
@@ -72,7 +73,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
   return (
     <View style={st.container}>
       <View style={st.header}>
-        <Text style={st.title}>Settings</Text>
+        <Text style={st.title}>{t("settings")}</Text>
       </View>
 
       <ScrollView style={st.list}>
@@ -105,7 +106,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
         <Text style={st.sectionLabel}>Security</Text>
         <View style={st.card}>
           <View style={st.row}>
-            <Text style={st.rowLabel}>Encryption</Text>
+            <Text style={st.rowLabel}>{t("encryption")}</Text>
             <Text style={st.rowValueTeal}>Kyber-768 + AES-256-GCM</Text>
           </View>
           <View style={st.row}>
@@ -124,12 +125,12 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
           <TouchableOpacity style={st.row} onPress={() => {
             const buttons = LANGUAGES.map((l) => ({
               text: `${l.native}${getLanguage() === l.key ? " (current)" : ""}`,
-              onPress: () => setLanguage(l.key),
+              onPress: () => { setLanguage(l.key); onLanguageChange(); },
             }));
             buttons.push({ text: "Cancel", onPress: () => {} });
             Alert.alert("Language", "Select your language", buttons);
           }}>
-            <Text style={st.rowLabel}>Language</Text>
+            <Text style={st.rowLabel}>{t("language")}</Text>
             <Text style={st.rowAction}>{LANGUAGES.find((l) => l.key === getLanguage())?.native || "English"}</Text>
           </TouchableOpacity>
         </View>
@@ -151,12 +152,12 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
         <Text style={st.sectionLabel}>Privacy & Data</Text>
         <View style={st.card}>
           <TouchableOpacity style={st.row} onPress={() => setShowPrivacy(true)}>
-            <Text style={st.rowLabel}>Privacy Policy</Text>
+            <Text style={st.rowLabel}>{t("privacyPolicy")}</Text>
             <Text style={st.rowAction}>View</Text>
           </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={handleDeleteData}>
-            <Text style={st.rowLabelRed}>Delete All Data</Text>
-            <Text style={st.rowActionRed}>Delete</Text>
+            <Text style={st.rowLabelRed}>{t("deleteAllData")}</Text>
+            <Text style={st.rowActionRed}>{t("delete")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -164,7 +165,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
         <Text style={st.sectionLabel}>About</Text>
         <View style={st.card}>
           <View style={st.row}>
-            <Text style={st.rowLabel}>Version</Text>
+            <Text style={st.rowLabel}>{t("version")}</Text>
             <Text style={st.rowValue}>0.1.0 (Phase 5)</Text>
           </View>
           <View style={st.row}>
