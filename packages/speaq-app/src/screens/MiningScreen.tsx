@@ -13,7 +13,7 @@ import { t } from "../services/i18n";
 import {
   loadMining, isMiningActive, startMining, stopMining,
   toggleMiningType, getMiningStats, getMiningRewards, getEstimatedDaily,
-  getRewardRates, MiningType, MiningReward, MiningStats,
+  getRewardRates, getSupplyInfo, MiningType, MiningReward, MiningStats,
 } from "../services/mining";
 
 interface Props {
@@ -139,6 +139,30 @@ export default function MiningScreen({ onBack }: Props) {
           <View style={st.levelCard}>
             <Text style={st.levelValue}>{stats.streak}</Text>
             <Text style={st.levelLabel}>Day Streak</Text>
+          </View>
+        </View>
+
+        {/* Supply Info */}
+        <View style={st.networkCard}>
+          <Text style={st.networkTitle}>Q-Credits Supply</Text>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Max Supply</Text>
+            <Text style={st.networkValue}>21,000,000 QC</Text>
+          </View>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Value Peg</Text>
+            <Text style={st.networkValue}>1 QC = 0.01g Gold</Text>
+          </View>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Network Mined</Text>
+            <Text style={st.networkValue}>{getSupplyInfo().totalMined.toFixed(2)} QC</Text>
+          </View>
+          <View style={st.networkRow}>
+            <Text style={st.networkLabel}>Remaining</Text>
+            <Text style={st.networkValue}>{(getSupplyInfo().remaining).toLocaleString()} QC</Text>
+          </View>
+          <View style={st.levelBar}>
+            <View style={[st.levelFill, { width: `${Math.min(100, (getSupplyInfo().totalMined / 21000000) * 100)}%` }]} />
           </View>
         </View>
 

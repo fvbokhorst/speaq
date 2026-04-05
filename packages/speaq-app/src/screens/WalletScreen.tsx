@@ -190,7 +190,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
         <View style={st.balanceCard}>
           <Text style={st.balanceLabel}>{t("qCredits")}</Text>
           <Text style={st.balanceAmount}>{balance.toFixed(2)}</Text>
-          <Text style={st.balanceUsd}>~ ${balance.toFixed(2)} USD</Text>
+          <Text style={st.balanceUsd}>~ {(balance * 0.01).toFixed(4)} gram gold</Text>
           <View style={st.balanceActions}>
             <TouchableOpacity style={st.actionBtn} onPress={() => setShowSend(true)}>
               <Text style={st.actionIcon}>S</Text>

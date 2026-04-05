@@ -55,9 +55,15 @@ const REWARD_RATES: Record<MiningType, { perAction: number; dailyCap: number; de
   onboarding: { perAction: 1.00, dailyCap: 10.0, description: "Onboarded new user" },
 };
 
-// Halving: rewards decrease as network grows
-const HALVING_THRESHOLDS = [100, 500, 2000, 10000, 50000]; // total network miners
-let networkMiners = 1; // simulated for now
+// === Q-Credits Tokenomics ===
+// Max supply: 21,000,000 QC (fixed, like Bitcoin)
+// Value: 1 QC = 0.01 gram gold (pegged to gold spot price)
+// Halving: every 2,100,000 QC mined, rewards halve
+// Minimum reward: 0.001 QC per action
+const MAX_SUPPLY = 21_000_000;
+const HALVING_INTERVAL = 2_100_000;
+let totalNetworkMined = 0; // simulated, in production: from blockchain/ledger
+let networkMiners = 1;
 
 let stats: MiningStats = {
   totalEarned: 0,
@@ -155,14 +161,18 @@ export function toggleMiningType(type: MiningType): void {
 // --- Mining Cycle ---
 
 function getHalvingMultiplier(): number {
-  let multiplier = 1.0;
-  for (const threshold of HALVING_THRESHOLDS) {
-    if (networkMiners > threshold) multiplier *= 0.5;
-  }
-  return Math.max(multiplier, 0.03125); // minimum 1/32 of base rate
+  // Halving based on total QC mined (not number of miners)
+  const halvings = Math.floor(totalNetworkMined / HALVING_INTERVAL);
+  const multiplier = Math.pow(0.5, halvings);
+  return Math.max(multiplier, 0.001); // minimum 0.1% of base rate
+}
+
+function isSupplyExhausted(): boolean {
+  return totalNetworkMined >= MAX_SUPPLY;
 }
 
 function simulateMiningCycle(): void {
+  if (isSupplyExhausted()) return; // No more QC to mine
   const halvingMult = getHalvingMultiplier();
 
   for (const type of stats.activeTypes) {
@@ -194,6 +204,7 @@ function simulateMiningCycle(): void {
     rewards.push(reward);
     stats.totalEarned += amount;
     stats.todayEarned += amount;
+    totalNetworkMined += amount;
 
     // Update type-specific counters
     if (type === "relay") stats.relayCount++;
@@ -265,6 +276,15 @@ export function getMiningRewards(limit: number = 50): MiningReward[] {
 
 export function getRewardRates(): typeof REWARD_RATES {
   return REWARD_RATES;
+}
+
+export function getSupplyInfo(): { maxSupply: number; totalMined: number; remaining: number; halvingProgress: number } {
+  return {
+    maxSupply: MAX_SUPPLY,
+    totalMined: totalNetworkMined,
+    remaining: MAX_SUPPLY - totalNetworkMined,
+    halvingProgress: (totalNetworkMined % HALVING_INTERVAL) / HALVING_INTERVAL,
+  };
 }
 
 export function getEstimatedDaily(): number {
