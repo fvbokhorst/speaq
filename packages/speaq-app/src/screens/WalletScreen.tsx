@@ -6,12 +6,12 @@
 
 import React, { useState } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, TextInput, Alert,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
-import { walletService, Transaction } from "../services/wallet";
+import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -20,11 +20,20 @@ interface Props {
 export default function WalletScreen({ onOpenChat }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
+  const [projects, setProjects] = useState<Project[]>(walletService.getProjects());
+  const [linkedWallets, setLinkedWallets] = useState<LinkedWallet[]>(walletService.getLinkedWallets());
   const [showSend, setShowSend] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showLinkWallet, setShowLinkWallet] = useState(false);
   const [sendTo, setSendTo] = useState("");
   const [sendAmount, setSendAmount] = useState("");
   const [sendNote, setSendNote] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectDesc, setProjectDesc] = useState("");
+  const [walletType, setWalletType] = useState<LinkedWallet["type"]>("monero");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletLabel, setWalletLabel] = useState("");
   const identity = getIdentity();
 
   function handleSend() {
@@ -47,6 +56,51 @@ export default function WalletScreen({ onOpenChat }: Props) {
     setSendNote("");
     Alert.alert("Sent", `${amount.toFixed(2)} QC sent.`);
   }
+
+  function handleCreateProject() {
+    if (!projectName.trim()) return;
+    walletService.createProject(projectName.trim(), projectDesc.trim());
+    setProjects(walletService.getProjects());
+    setProjectName("");
+    setProjectDesc("");
+    setShowNewProject(false);
+  }
+
+  function handleFundProject(project: Project) {
+    Alert.prompt("Fund Project", `How many QC to allocate to "${project.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Fund", onPress: (val) => {
+        const amount = parseFloat(val || "0");
+        if (amount > 0) {
+          walletService.fundProject(project.id, amount);
+          setBalance(walletService.getBalance());
+          setProjects(walletService.getProjects());
+          setTransactions(walletService.getTransactions());
+        }
+      }},
+    ], "plain-text", "", "decimal-pad");
+  }
+
+  function handleLinkWallet() {
+    if (!walletAddress.trim()) return;
+    walletService.linkWallet(walletType, walletAddress.trim(), walletLabel.trim() || walletType.toUpperCase());
+    setLinkedWallets(walletService.getLinkedWallets());
+    setWalletAddress("");
+    setWalletLabel("");
+    setShowLinkWallet(false);
+  }
+
+  function handleUnlinkWallet(id: string) {
+    walletService.unlinkWallet(id);
+    setLinkedWallets(walletService.getLinkedWallets());
+  }
+
+  const WALLET_TYPES: { key: LinkedWallet["type"]; label: string; color: string }[] = [
+    { key: "monero", label: "Monero (XMR)", color: "#FF6600" },
+    { key: "bitcoin", label: "Bitcoin (BTC)", color: "#F7931A" },
+    { key: "ethereum", label: "Ethereum (ETH)", color: "#627EEA" },
+    { key: "usdt", label: "USDT (Tether)", color: "#26A17B" },
+  ];
 
   function formatDate(ts: number): string {
     const d = new Date(ts);
@@ -97,21 +151,83 @@ export default function WalletScreen({ onOpenChat }: Props) {
         </View>
       </View>
 
-      {/* Transactions */}
-      <Text style={st.sectionTitle}>Transactions</Text>
-      {transactions.length === 0 ? (
-        <View style={st.empty}>
-          <Text style={st.emptyTitle}>No transactions yet</Text>
-          <Text style={st.emptySub}>Send or receive Q-Credits to get started</Text>
+      <ScrollView style={st.scrollArea}>
+        {/* Projects */}
+        <View style={st.sectionRow}>
+          <Text style={st.sectionTitle}>Projects</Text>
+          <TouchableOpacity onPress={() => setShowNewProject(true)}>
+            <Text style={st.sectionAdd}>+ New</Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <FlatList
-          data={transactions}
-          renderItem={renderTransaction}
-          keyExtractor={(item) => item.id}
-          style={st.txList}
-        />
-      )}
+        {projects.length === 0 ? (
+          <View style={st.emptySmall}>
+            <Text style={st.emptySub}>No projects yet. Create one to allocate Q-Credits.</Text>
+          </View>
+        ) : (
+          projects.map((p) => (
+            <TouchableOpacity key={p.id} style={st.projectCard} onPress={() => handleFundProject(p)}>
+              <View style={st.projectInfo}>
+                <Text style={st.projectName}>{p.name}</Text>
+                {p.description ? <Text style={st.projectDesc} numberOfLines={1}>{p.description}</Text> : null}
+              </View>
+              <Text style={st.projectBalance}>{p.balance.toFixed(2)} QC</Text>
+            </TouchableOpacity>
+          ))
+        )}
+
+        {/* Linked Wallets */}
+        <View style={st.sectionRow}>
+          <Text style={st.sectionTitle}>Linked Wallets</Text>
+          <TouchableOpacity onPress={() => setShowLinkWallet(true)}>
+            <Text style={st.sectionAdd}>+ Link</Text>
+          </TouchableOpacity>
+        </View>
+        {linkedWallets.length === 0 ? (
+          <View style={st.emptySmall}>
+            <Text style={st.emptySub}>Link a Monero, Bitcoin, or Ethereum wallet to convert Q-Credits.</Text>
+          </View>
+        ) : (
+          linkedWallets.map((w) => (
+            <View key={w.id} style={st.walletCard}>
+              <View style={[st.walletDot, { backgroundColor: WALLET_TYPES.find((t) => t.key === w.type)?.color || colors.voice.gold }]} />
+              <View style={st.walletInfo}>
+                <Text style={st.walletLabel}>{w.label}</Text>
+                <Text style={st.walletAddr} numberOfLines={1}>{w.address}</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleUnlinkWallet(w.id)}>
+                <Text style={st.walletUnlink}>X</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+
+        {/* Transactions */}
+        <Text style={st.sectionTitle}>Transactions</Text>
+        {transactions.length === 0 ? (
+          <View style={st.emptySmall}>
+            <Text style={st.emptySub}>No transactions yet</Text>
+          </View>
+        ) : (
+          transactions.map((item) => (
+            <View key={item.id} style={st.txRow}>
+              <View style={[st.txIcon, item.type === "receive" ? st.txIn : st.txOut]}>
+                <Text style={st.txIconText}>{item.type === "receive" ? "+" : "-"}</Text>
+              </View>
+              <View style={st.txInfo}>
+                <Text style={st.txPeer} numberOfLines={1}>{item.peer}</Text>
+                {item.note ? <Text style={st.txNote} numberOfLines={1}>{item.note}</Text> : null}
+              </View>
+              <View style={st.txRight}>
+                <Text style={[st.txAmount, item.type === "receive" ? st.txAmountIn : st.txAmountOut]}>
+                  {item.type === "receive" ? "+" : "-"}{item.amount.toFixed(2)} QC
+                </Text>
+                <Text style={st.txTime}>{formatDate(item.timestamp)}</Text>
+              </View>
+            </View>
+          ))
+        )}
+        <View style={{ height: 40 }} />
+      </ScrollView>
 
       {/* Send Modal */}
       <Modal visible={showSend} transparent animationType="fade">
@@ -130,6 +246,60 @@ export default function WalletScreen({ onOpenChat }: Props) {
               </TouchableOpacity>
               <TouchableOpacity style={st.confirmBtn} onPress={handleSend}>
                 <Text style={st.confirmText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* New Project Modal */}
+      <Modal visible={showNewProject} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>New Project</Text>
+            <TextInput style={st.modalInput} value={projectName} onChangeText={setProjectName}
+              placeholder="Project name" placeholderTextColor={colors.signal.steel} autoFocus />
+            <TextInput style={st.modalInput} value={projectDesc} onChangeText={setProjectDesc}
+              placeholder="Description (optional)" placeholderTextColor={colors.signal.steel} />
+            <View style={st.modalBtns}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => setShowNewProject(false)}>
+                <Text style={st.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[st.confirmBtn, !projectName.trim() && { opacity: 0.3 }]}
+                onPress={handleCreateProject} disabled={!projectName.trim()}>
+                <Text style={st.confirmText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Link Wallet Modal */}
+      <Modal visible={showLinkWallet} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Link Crypto Wallet</Text>
+            <View style={st.walletTypeRow}>
+              {WALLET_TYPES.map((t) => (
+                <TouchableOpacity key={t.key}
+                  style={[st.walletTypeBtn, walletType === t.key && { borderColor: t.color, backgroundColor: t.color + "20" }]}
+                  onPress={() => setWalletType(t.key)}>
+                  <Text style={[st.walletTypeTxt, walletType === t.key && { color: t.color }]}>{t.key.toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput style={st.modalInput} value={walletAddress} onChangeText={setWalletAddress}
+              placeholder={`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} address`}
+              placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+            <TextInput style={st.modalInput} value={walletLabel} onChangeText={setWalletLabel}
+              placeholder="Label (optional)" placeholderTextColor={colors.signal.steel} />
+            <View style={st.modalBtns}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => setShowLinkWallet(false)}>
+                <Text style={st.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[st.confirmBtn, !walletAddress.trim() && { opacity: 0.3 }]}
+                onPress={handleLinkWallet} disabled={!walletAddress.trim()}>
+                <Text style={st.confirmText}>Link</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -176,13 +346,29 @@ const st = StyleSheet.create({
   actionIcon: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
   actionLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4 },
 
-  sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600", paddingHorizontal: 24, marginTop: 16, marginBottom: 8 },
+  scrollArea: { flex: 1 },
+  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, marginTop: 20, marginBottom: 8 },
+  sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
+  sectionAdd: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
 
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 100 },
-  emptyTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
+  emptySmall: { paddingHorizontal: 24, paddingVertical: 12 },
   emptySub: { color: colors.signal.steel, fontSize: 12 },
 
-  txList: { flex: 1, paddingHorizontal: 16 },
+  projectCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  projectInfo: { flex: 1 },
+  projectName: { color: colors.signal.white, fontSize: 15, fontWeight: "600" },
+  projectDesc: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
+  projectBalance: { color: colors.voice.gold, fontSize: 16, fontWeight: "700", fontFamily: "Georgia" },
+
+  walletCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 14, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  walletDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+  walletInfo: { flex: 1 },
+  walletLabel: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
+  walletAddr: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 2 },
+  walletUnlink: { color: colors.signal.red, fontSize: 16, fontWeight: "600", paddingHorizontal: 8 },
+  walletTypeRow: { flexDirection: "row", gap: 8, marginBottom: 12, width: "100%" },
+  walletTypeBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
+  walletTypeTxt: { color: colors.signal.steel, fontSize: 10, fontWeight: "600" },
   txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
   txIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginRight: 12 },
   txIn: { backgroundColor: "rgba(34,197,94,0.15)" },
