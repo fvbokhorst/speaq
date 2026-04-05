@@ -32,11 +32,21 @@ export async function pickProfilePhoto(): Promise<string | null> {
   try {
     const result = await launchImageLibrary({ mediaType: "photo", selectionLimit: 1, quality: 0.5 });
     if (result.assets && result.assets[0]?.uri) {
-      // Copy to permanent location so it survives app restart
       const srcUri = result.assets[0].uri;
       const destPath = `${RNFS.DocumentDirectoryPath}/profile_photo.jpg`;
-      const src = srcUri.replace("file://", "");
-      await RNFS.copyFile(src, destPath);
+
+      // Remove existing file first
+      const exists = await RNFS.exists(destPath);
+      if (exists) await RNFS.unlink(destPath);
+
+      // Copy -- try with and without file:// prefix
+      try {
+        await RNFS.copyFile(srcUri, destPath);
+      } catch {
+        const stripped = srcUri.replace("file://", "");
+        await RNFS.copyFile(stripped, destPath);
+      }
+
       profilePhotoUri = `file://${destPath}`;
       await AsyncStorage.setItem(PHOTO_KEY, profilePhotoUri);
       return profilePhotoUri;
