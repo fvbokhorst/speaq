@@ -6,8 +6,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, Image,
 } from "react-native";
+import { launchImageLibrary } from "react-native-image-picker";
+import DocumentPicker from "react-native-document-picker";
 import { colors, spacing, radius } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
 
@@ -16,6 +18,9 @@ interface Message {
   text: string;
   sent: boolean;
   timestamp: string;
+  type: "text" | "image" | "file";
+  fileName?: string;
+  fileUri?: string;
 }
 
 interface Props {
@@ -56,6 +61,7 @@ export default function ChatScreen({ contactId, contactName, onBack }: Props) {
       id: Date.now().toString(),
       text,
       sent: true,
+      type: "text",
       timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
     }]);
 
@@ -64,9 +70,71 @@ export default function ChatScreen({ contactId, contactName, onBack }: Props) {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
+  function handleAttach() {
+    Alert.alert("Share", "What would you like to share?", [
+      { text: "Photo / Video", onPress: handlePickImage },
+      { text: "Document / File", onPress: handlePickFile },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  async function handlePickImage() {
+    try {
+      const result = await launchImageLibrary({ mediaType: "mixed", selectionLimit: 1 });
+      if (result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        const name = asset.fileName || "photo";
+        setMessages((prev) => [...prev, {
+          id: Date.now().toString(),
+          text: name,
+          sent: true,
+          type: "image",
+          fileName: name,
+          fileUri: asset.uri,
+          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        }]);
+        sendMessage(contactId, `[File: ${name}]`);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    } catch (e) {}
+  }
+
+  async function handlePickFile() {
+    try {
+      const result = await DocumentPicker.pick({ type: [DocumentPicker.types.allFiles] });
+      if (result[0]) {
+        const file = result[0];
+        const name = file.name || "document";
+        setMessages((prev) => [...prev, {
+          id: Date.now().toString(),
+          text: name,
+          sent: true,
+          type: "file",
+          fileName: name,
+          fileUri: file.uri,
+          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        }]);
+        sendMessage(contactId, `[File: ${name}]`);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    } catch (e) {
+      if (!DocumentPicker.isCancel(e)) console.error(e);
+    }
+  }
+
   const renderMessage = ({ item }: { item: Message }) => (
     <View style={[st.bubble, item.sent ? st.sent : st.received]}>
-      <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
+      {item.type === "image" && item.fileUri ? (
+        <Image source={{ uri: item.fileUri }} style={st.msgImage} resizeMode="cover" />
+      ) : item.type === "file" ? (
+        <View style={st.fileRow}>
+          <View style={st.fileIcon}><Text style={st.fileIconText}>F</Text></View>
+          <Text style={[st.fileName, item.sent ? st.sentText : st.receivedText]} numberOfLines={1}>{item.fileName || item.text}</Text>
+        </View>
+      ) : null}
+      {item.type === "text" && (
+        <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
+      )}
       <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
     </View>
   );
@@ -101,6 +169,9 @@ export default function ChatScreen({ contactId, contactName, onBack }: Props) {
       />
 
       <View style={st.inputRow}>
+        <TouchableOpacity style={st.attachBtn} onPress={handleAttach}>
+          <Text style={st.attachIcon}>+</Text>
+        </TouchableOpacity>
         <TextInput
           style={st.input}
           value={message}
@@ -162,7 +233,14 @@ const st = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, color: colors.signal.white,
     fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.border.subtle,
   },
+  attachBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle },
+  attachIcon: { color: colors.voice.gold, fontSize: 22, fontWeight: "400" },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center" },
   sendActive: { backgroundColor: colors.voice.gold },
   sendIcon: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  msgImage: { width: 200, height: 150, borderRadius: 12, marginBottom: 4 },
+  fileRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: colors.border.subtle },
+  fileIconText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
+  fileName: { fontSize: 13, flex: 1 },
 });
