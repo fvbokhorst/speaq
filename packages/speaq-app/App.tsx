@@ -167,8 +167,8 @@ function App() {
     return (
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
-        <WelcomeScreen onCreateIdentity={(name: string) => {
-          const id = createIdentity(name);
+        <WelcomeScreen onCreateIdentity={async (name: string) => {
+          const id = await createIdentity(name);
           Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
             [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
         }} />

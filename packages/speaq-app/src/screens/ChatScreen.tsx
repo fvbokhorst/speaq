@@ -14,7 +14,11 @@ import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
-import { decryptMessage, getContactKey } from "../services/crypto";
+import {
+  decryptMessage, getContactKey,
+  getOrCreateRatchet, ratchetDecrypt, saveRatchetState,
+  loadRatchetState, RatchetState,
+} from "../services/crypto";
 import {
   loadMessages, saveMessages, cleanExpiredMessages, StoredMessage,
   getDisappearTimer, setDisappearTimer, getExpiresAt,
@@ -63,7 +67,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
   // Listen for incoming messages + typing
   useEffect(() => {
-    const unsubscribe = onMessage((msg: any) => {
+    const unsubscribe = onMessage(async (msg: any) => {
       if (msg.from === contactId) {
         if (msg.type === "TYPING") {
           setIsTyping(true);
@@ -74,29 +78,46 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         if (msg.type === "RECEIVE") {
           if (isBlocked(contactId)) return;
           try {
-            // Decrypt message using shared key
             const myId = getIdentity()?.speaqId || "";
-            const key = getContactKey(myId, contactId);
             let data: any;
-            try {
-              const decrypted = decryptMessage(key, msg.blob);
-              data = JSON.parse(decrypted);
-            } catch (decryptErr) {
-              // Fallback for unencrypted messages (backwards compatibility)
+
+            // Try ratchet decryption first (quantum-grade, forward secrecy)
+            if (msg.protocol === "ratchet-v1") {
               try {
-                data = JSON.parse(atob(msg.blob));
-              } catch (base64Err) {
-                console.warn("[ChatScreen] Failed to decrypt message from", contactId, "- decryption and base64 fallback both failed");
-                // Show as encrypted message rather than garbage text
-                const encMsg: StoredMessage = {
-                  id: Date.now().toString(),
-                  text: t("encryptedMessage"),
-                  sent: false,
-                  type: "text",
-                  timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-                };
-                setMessages((prev) => [...prev, encMsg]);
-                return;
+                const ratchetMsg = JSON.parse(msg.blob);
+                const { state } = await getOrCreateRatchet(myId, contactId);
+                const decrypted = ratchetDecrypt(state, ratchetMsg);
+                await saveRatchetState(contactId, state);
+                data = JSON.parse(decrypted);
+              } catch (ratchetErr) {
+                console.warn("[ChatScreen] Ratchet decrypt failed, trying legacy:", ratchetErr);
+                // Fall through to legacy decryption
+                data = null;
+              }
+            }
+
+            // Legacy decryption fallback (pre-ratchet messages)
+            if (!data) {
+              const key = getContactKey(myId, contactId);
+              try {
+                const decrypted = decryptMessage(key, msg.blob);
+                data = JSON.parse(decrypted);
+              } catch (decryptErr) {
+                // Fallback for unencrypted messages (backwards compatibility)
+                try {
+                  data = JSON.parse(atob(msg.blob));
+                } catch (base64Err) {
+                  console.warn("[ChatScreen] All decryption methods failed for message from", contactId);
+                  const encMsg: StoredMessage = {
+                    id: Date.now().toString(),
+                    text: t("encryptedMessage"),
+                    sent: false,
+                    type: "text",
+                    timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+                  };
+                  setMessages((prev) => [...prev, encMsg]);
+                  return;
+                }
               }
             }
             if (data.type === "message") {

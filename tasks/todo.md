@@ -58,3 +58,27 @@ Voice eerst, simpel, werkend. Video daarna. Geen group calls, geen screen sharin
 
 ## Review
 _(wordt ingevuld na afronding)_
+
+---
+
+## CRITICAL FIX: Real Quantum Crypto Integration
+
+### Problem
+The React Native app claims quantum encryption but uses CryptoJS with SHA256-derived keys.
+speaq-core has real Kyber-768 + Double Ratchet but uses Node.js `crypto` (incompatible with RN).
+
+### Plan
+- [ ] 1. Rewrite `crypto.ts` with real lattice-based KEM (pure JS, RN-compatible)
+- [ ] 2. Implement HMAC-SHA256 and AES-256-GCM using CryptoJS (already available)
+- [ ] 3. Implement Double Ratchet with per-message key derivation and forward secrecy
+- [ ] 4. Store Kyber keypair + ratchet state in AsyncStorage
+- [ ] 5. Update `speaq.ts` to use ratchet encrypt, key exchange on first contact
+- [ ] 6. Update `ChatScreen.tsx` to use ratchet decrypt
+- [ ] 7. Backwards compatibility: fallback for old unencrypted messages
+- [ ] 8. rsync to ~/speaq-build, git add + commit + push
+
+### Key decisions
+- Use CryptoJS for HMAC-SHA256 and AES (pure JS, already works in RN)
+- Implement lattice-based KEM in pure JS (polynomial rings mod q)
+- Ratchet state persisted per contact in AsyncStorage
+- Keep same export signatures where possible to minimize changes
