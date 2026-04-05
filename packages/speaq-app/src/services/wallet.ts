@@ -213,7 +213,6 @@ class WalletService {
     this.linkedWallets = this.linkedWallets.filter((w) => w.id !== walletId);
     this.save();
   }
-}
 
   // --- Stablecoin Wallets ---
 
