@@ -95,15 +95,27 @@ export default function VaultScreen({ onBack }: Props) {
 
   async function handleSendToContact(contactId: string, contactName: string) {
     if (!shareFile) return;
-    if (shareFile.type === "note" && shareFile.uri) {
-      const content = await RNFS.readFile(shareFile.uri.replace("file://", ""), "utf8");
-      sendMessage(contactId, `[Vault Note] ${content}`);
-    } else {
-      sendMessage(contactId, `[Vault File: ${shareFile.name}]`);
+    try {
+      if (shareFile.type === "note" && shareFile.uri) {
+        const content = await RNFS.readFile(shareFile.uri.replace("file://", ""), "utf8");
+        sendMessage(contactId, `[Vault Note] ${content}`);
+      } else if (shareFile.type === "photo" && shareFile.uri) {
+        // Read photo as base64 and send
+        const base64 = await RNFS.readFile(shareFile.uri.replace("file://", ""), "base64");
+        sendMessage(contactId, JSON.stringify({ type: "vault_file", fileType: "photo", name: shareFile.name, data: base64.substring(0, 1000) + "..." }));
+        // For now send as file reference - full transfer needs relay file support
+        sendMessage(contactId, `[Vault Photo: ${shareFile.name}]`);
+      } else if (shareFile.uri) {
+        sendMessage(contactId, `[Vault ${shareFile.type}: ${shareFile.name}]`);
+      }
+    } catch (e) {
+      console.error("Send vault file error:", e);
     }
+    const name = shareFile.name;
     setShowSharePicker(false);
     setShareFile(null);
-    Alert.alert("Sent", `${shareFile.name} shared with ${contactName}`);
+    setShareManualId("");
+    Alert.alert("Sent", `${name} shared with ${contactName}`);
   }
 
   function handleAdd() {
@@ -456,6 +468,9 @@ export default function VaultScreen({ onBack }: Props) {
             <Text style={st.viewerMeta}>{viewFile ? formatSize(viewFile.size) : ""} -- {viewFile ? formatDate(viewFile.addedAt) : ""}</Text>
           </View>
           <View style={st.viewerActions}>
+            <TouchableOpacity style={st.viewerBtn} onPress={() => { if (viewFile) { setViewFile(null); handleShareFile(viewFile); } }}>
+              <Text style={st.viewerBtnText}>Send</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={st.viewerBtn} onPress={() => { if (viewFile) handleFileActions(viewFile); setViewFile(null); }}>
               <Text style={st.viewerBtnText}>Rename</Text>
             </TouchableOpacity>

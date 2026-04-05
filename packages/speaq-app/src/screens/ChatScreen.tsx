@@ -332,6 +332,9 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         <TouchableOpacity style={st.attachBtn} onPress={handleAttach}>
           <Text style={st.attachIcon}>+</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[st.timerBtn, disappearTimer !== "off" && st.timerBtnActive]} onPress={handleSetDisappear}>
+          <Text style={[st.timerIcon, disappearTimer !== "off" && st.timerIconActive]}>T</Text>
+        </TouchableOpacity>
         <TextInput
           style={st.input}
           value={message}
@@ -414,6 +417,10 @@ const st = StyleSheet.create({
   callBtnText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
   attachBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle },
   attachIcon: { color: colors.voice.gold, fontSize: 22, fontWeight: "400" },
+  timerBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle, alignSelf: "center" },
+  timerBtnActive: { borderColor: colors.quantum.teal, backgroundColor: "rgba(45,212,191,0.1)" },
+  timerIcon: { color: colors.signal.steel, fontSize: 14, fontWeight: "600" },
+  timerIconActive: { color: colors.quantum.teal },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center" },
   sendActive: { backgroundColor: colors.voice.gold },
   sendIcon: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
