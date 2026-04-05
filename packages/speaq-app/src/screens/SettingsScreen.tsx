@@ -3,12 +3,12 @@
  * Profile, privacy, data deletion, about
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
-import { getProfilePhoto, pickProfilePhoto } from "../services/profile";
+import { getProfilePhoto, pickProfilePhoto, loadProfile } from "../services/profile";
 
 interface Props {
   onLogout: () => void;
@@ -18,8 +18,14 @@ interface Props {
 
 export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const [photoUri, setPhotoUri] = useState(getProfilePhoto());
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const identity = getIdentity();
+
+  useEffect(() => {
+    loadProfile().then(() => {
+      setPhotoUri(getProfilePhoto());
+    });
+  }, []);
 
   async function handleChangePhoto() {
     const uri = await pickProfilePhoto();
