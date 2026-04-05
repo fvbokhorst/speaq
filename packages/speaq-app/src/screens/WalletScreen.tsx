@@ -56,11 +56,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
   function handleProceedToConfirm() {
     const amount = parseFloat(sendAmount);
     if (!sendTo.trim() || isNaN(amount) || amount <= 0) {
-      Alert.alert("Invalid", "Enter a valid recipient and amount.");
+      Alert.alert(t("invalid"), t("invalidRecipientAmount"));
       return;
     }
     if (amount > balance) {
-      Alert.alert("Insufficient", `You have ${balance.toFixed(2)} QC.`);
+      Alert.alert(t("insufficient"), t("youHaveQC").replace("%s", balance.toFixed(2)));
       return;
     }
     setShowSend(false);
@@ -77,7 +77,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
     setSendToName("");
     setSendAmount("");
     setSendNote("");
-    Alert.alert("Sent", `${amount.toFixed(2)} QC sent successfully.`);
+    Alert.alert(t("sentSuccess"), t("sentSuccessMsg").replace("%s", amount.toFixed(2)));
   }
 
   function handlePickContactForSend(contact: Contact) {
@@ -96,11 +96,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
   }
 
   function handleProjectAction(project: Project) {
-    Alert.alert(project.name, `Balance: ${project.balance.toFixed(2)} QC`, [
-      { text: "Fund", onPress: () => {
-        Alert.prompt("Fund Project", `How many QC to add? (Available: ${balance.toFixed(2)})`, [
-          { text: "Cancel", style: "cancel" },
-          { text: "Fund", onPress: (val) => {
+    Alert.alert(project.name, `${t("balance")}: ${project.balance.toFixed(2)} QC`, [
+      { text: t("fund"), onPress: () => {
+        Alert.prompt(t("fundProject"), t("fundProjectMsg").replace("%s", balance.toFixed(2)), [
+          { text: t("cancel"), style: "cancel" },
+          { text: t("fund"), onPress: (val) => {
             const amount = parseFloat(val || "0");
             if (amount > 0 && walletService.fundProject(project.id, amount)) {
               setBalance(walletService.getBalance());
@@ -110,10 +110,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
           }},
         ], "plain-text", "", "decimal-pad");
       }},
-      { text: "Withdraw", onPress: () => {
-        Alert.prompt("Withdraw", `How many QC to withdraw? (Project: ${project.balance.toFixed(2)})`, [
-          { text: "Cancel", style: "cancel" },
-          { text: "Withdraw", onPress: (val) => {
+      { text: t("withdraw"), onPress: () => {
+        Alert.prompt(t("withdraw"), t("withdrawMsg").replace("%s", project.balance.toFixed(2)), [
+          { text: t("cancel"), style: "cancel" },
+          { text: t("withdraw"), onPress: (val) => {
             const amount = parseFloat(val || "0");
             if (amount > 0 && walletService.withdrawFromProject(project.id, amount)) {
               setBalance(walletService.getBalance());
@@ -123,12 +123,12 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
           }},
         ], "plain-text", "", "decimal-pad");
       }},
-      { text: "Delete", style: "destructive", onPress: () => {
+      { text: t("delete"), style: "destructive", onPress: () => {
         walletService.deleteProject(project.id);
         setBalance(walletService.getBalance());
         setProjects(walletService.getProjects());
       }},
-      { text: "Cancel", style: "cancel" },
+      { text: t("cancel"), style: "cancel" },
     ]);
   }
 
@@ -215,7 +215,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
         </View>
         {projects.length === 0 ? (
           <View style={st.emptySmall}>
-            <Text style={st.emptySub}>No projects yet. Create one to allocate Q-Credits.</Text>
+            <Text style={st.emptySub}>{t("noProjectsYet")}</Text>
           </View>
         ) : (
           projects.map((p) => (
@@ -291,26 +291,26 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showSend} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Send Q-Credits</Text>
+            <Text style={st.modalTitle}>{t("sendQCredits")}</Text>
             <TouchableOpacity style={st.contactPickBtn} onPress={() => setShowContactPicker(true)}>
-              <Text style={st.contactPickText}>{sendToName || "Choose contact..."}</Text>
+              <Text style={st.contactPickText}>{sendToName || t("chooseContact")}</Text>
               <Text style={st.contactPickArrow}>{">"}</Text>
             </TouchableOpacity>
             {!sendToName && (
               <TextInput style={st.modalInput} value={sendTo} onChangeText={setSendTo}
-                placeholder="Or enter SPEAQ ID" placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+                placeholder={t("enterSpeaqId")} placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
             )}
             <TextInput style={st.modalInput} value={sendAmount} onChangeText={setSendAmount}
-              placeholder="Amount (QC)" placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
+              placeholder={t("amountQC")} placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
             <TextInput style={st.modalInput} value={sendNote} onChangeText={setSendNote}
-              placeholder="Note (optional)" placeholderTextColor={colors.signal.steel} />
-            <Text style={st.balanceHint}>Available: {balance.toFixed(2)} QC</Text>
+              placeholder={t("noteOptional")} placeholderTextColor={colors.signal.steel} />
+            <Text style={st.balanceHint}>{t("available")}: {balance.toFixed(2)} QC</Text>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowSend(false); setSendTo(""); setSendToName(""); setSendAmount(""); setSendNote(""); }}>
-                <Text style={st.cancelText}>Cancel</Text>
+                <Text style={st.cancelText}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={st.confirmBtn} onPress={handleProceedToConfirm}>
-                <Text style={st.confirmText}>Next</Text>
+                <Text style={st.confirmText}>{t("next")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -321,26 +321,26 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showConfirm} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Confirm Payment</Text>
+            <Text style={st.modalTitle}>{t("confirmPayment")}</Text>
             <View style={st.confirmCard}>
               <Text style={st.confirmAmount}>{parseFloat(sendAmount || "0").toFixed(2)}</Text>
               <Text style={st.confirmQC}>Q-Credits</Text>
               <View style={st.confirmDivider} />
-              <Text style={st.confirmLabel}>To</Text>
+              <Text style={st.confirmLabel}>{t("to")}</Text>
               <Text style={st.confirmValue}>{sendToName || sendTo}</Text>
               {sendNote ? <>
-                <Text style={st.confirmLabel}>Note</Text>
+                <Text style={st.confirmLabel}>{t("note")}</Text>
                 <Text style={st.confirmValue}>{sendNote}</Text>
               </> : null}
-              <Text style={st.confirmLabel}>Remaining</Text>
+              <Text style={st.confirmLabel}>{t("remaining")}</Text>
               <Text style={st.confirmValue}>{(balance - parseFloat(sendAmount || "0")).toFixed(2)} QC</Text>
             </View>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowConfirm(false); setShowSend(true); }}>
-                <Text style={st.cancelText}>Back</Text>
+                <Text style={st.cancelText}>{t("back")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={st.confirmBtnGold} onPress={handleConfirmSend}>
-                <Text style={st.confirmText}>Confirm</Text>
+                <Text style={st.confirmText}>{t("confirm")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -351,9 +351,9 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showContactPicker} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Select Contact</Text>
+            <Text style={st.modalTitle}>{t("selectContact")}</Text>
             {contactsService.getContacts().length === 0 ? (
-              <Text style={st.emptySub}>No contacts yet. Add contacts first.</Text>
+              <Text style={st.emptySub}>{t("noContactsYet")}</Text>
             ) : (
               <ScrollView style={{ maxHeight: 300 }}>
                 {contactsService.getContacts().map((c) => (
@@ -368,7 +368,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
               </ScrollView>
             )}
             <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => setShowContactPicker(false)}>
-              <Text style={st.cancelText}>Cancel</Text>
+              <Text style={st.cancelText}>{t("cancel")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -378,10 +378,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showRequest} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Request Payment</Text>
-            <Text style={st.modalSub}>Generate a QR code with a specific amount</Text>
+            <Text style={st.modalTitle}>{t("requestPayment")}</Text>
+            <Text style={st.modalSub}>{t("requestPaymentSub")}</Text>
             <TextInput style={st.modalInput} value={receiveAmount} onChangeText={setReceiveAmount}
-              placeholder="Amount (QC)" placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
+              placeholder={t("amountQC")} placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
             {receiveAmount && parseFloat(receiveAmount) > 0 && (
               <View style={st.qrBox}>
                 <QRCode
@@ -394,7 +394,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
               </View>
             )}
             <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowRequest(false); setReceiveAmount(""); }}>
-              <Text style={st.cancelText}>Close</Text>
+              <Text style={st.cancelText}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -404,18 +404,18 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showNewProject} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>New Project</Text>
+            <Text style={st.modalTitle}>{t("newProject")}</Text>
             <TextInput style={st.modalInput} value={projectName} onChangeText={setProjectName}
-              placeholder="Project name" placeholderTextColor={colors.signal.steel} autoFocus />
+              placeholder={t("projectName")} placeholderTextColor={colors.signal.steel} autoFocus />
             <TextInput style={st.modalInput} value={projectDesc} onChangeText={setProjectDesc}
-              placeholder="Description (optional)" placeholderTextColor={colors.signal.steel} />
+              placeholder={t("description")} placeholderTextColor={colors.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowNewProject(false)}>
-                <Text style={st.cancelText}>Cancel</Text>
+                <Text style={st.cancelText}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[st.confirmBtn, !projectName.trim() && { opacity: 0.3 }]}
                 onPress={handleCreateProject} disabled={!projectName.trim()}>
-                <Text style={st.confirmText}>Create</Text>
+                <Text style={st.confirmText}>{t("create")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -426,7 +426,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showLinkWallet} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Link Crypto Wallet</Text>
+            <Text style={st.modalTitle}>{t("linkCryptoWallet")}</Text>
             <View style={st.walletTypeRow}>
               {WALLET_TYPES.map((t) => (
                 <TouchableOpacity key={t.key}
@@ -440,14 +440,14 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
               placeholder={`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} address`}
               placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
             <TextInput style={st.modalInput} value={walletLabel} onChangeText={setWalletLabel}
-              placeholder="Label (optional)" placeholderTextColor={colors.signal.steel} />
+              placeholder={t("labelOptional")} placeholderTextColor={colors.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowLinkWallet(false)}>
-                <Text style={st.cancelText}>Cancel</Text>
+                <Text style={st.cancelText}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[st.confirmBtn, !walletAddress.trim() && { opacity: 0.3 }]}
                 onPress={handleLinkWallet} disabled={!walletAddress.trim()}>
-                <Text style={st.confirmText}>Link</Text>
+                <Text style={st.confirmText}>{t("link")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -458,7 +458,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       <Modal visible={showReceive} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Receive Q-Credits</Text>
+            <Text style={st.modalTitle}>{t("receiveQCredits")}</Text>
             <View style={st.qrBox}>
               <QRCode
                 value={`speaq-pay://${identity?.speaqId || "unknown"}`}
@@ -468,9 +468,9 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
               />
             </View>
             <Text style={st.qrId}>{identity?.speaqId || "No ID"}</Text>
-            <Text style={st.qrHint}>Share this QR code to receive Q-Credits</Text>
+            <Text style={st.qrHint}>{t("shareQrHint")}</Text>
             <TouchableOpacity style={st.cancelBtn} onPress={() => setShowReceive(false)}>
-              <Text style={st.cancelText}>Close</Text>
+              <Text style={st.cancelText}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
         </View>

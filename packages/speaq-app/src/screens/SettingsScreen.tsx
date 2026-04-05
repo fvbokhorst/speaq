@@ -11,6 +11,120 @@ import { getIdentity } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
 
+const PRIVACY_POLICY_EN = `SPEAQ Privacy Policy
+Last updated: April 2026
+
+1. What SPEAQ Collects
+SPEAQ collects NO personal data on its servers. All data stays on your device.
+- Your SPEAQ ID is generated locally and never linked to your real identity
+- Messages are end-to-end encrypted; the relay server sees only encrypted blobs
+- No email, phone number, or real name is required
+- No cookies are used (SPEAQ is a native app)
+- No analytics or tracking is implemented
+
+2. Data Storage
+All data is stored locally on your device:
+- Identity (SPEAQ ID, display name)
+- PIN (encrypted)
+- Messages (encrypted)
+- Contacts
+- Wallet (Q-Credits balance, transaction history)
+- No data is stored on SPEAQ servers except temporarily queued encrypted messages (max 7 days, then auto-deleted)
+
+3. Relay Server (Zero Knowledge)
+The SPEAQ relay server operates on a zero-knowledge principle:
+- It sees ONLY encrypted blobs
+- It cannot read messages, identify senders/receivers, or determine message content
+- It does not log IP addresses of users
+- It does not store wallet balances or transaction details
+- Offline messages are auto-deleted after 7 days
+
+4. Your Rights (GDPR)
+Under the EU General Data Protection Regulation, you have the right to:
+- Access: View all your data (it is all on your device)
+- Deletion: Delete all data via Settings > Delete All Data
+- Portability: Your data is stored locally and can be exported
+- Rectification: Edit your profile in the app
+- Restriction: You control what you share
+
+5. Data Deletion
+To delete all your data:
+1. Open SPEAQ > Settings > Delete All Data
+2. This permanently removes your identity, messages, contacts, wallet, and PIN
+3. This action cannot be undone
+4. No server-side data needs deletion (zero-knowledge architecture)
+
+6. Children
+SPEAQ is not intended for use by children under 16.
+
+7. Changes
+We may update this policy. Changes will be reflected in the app.
+
+8. Contact
+For privacy inquiries: privacy@thespeaq.com
+Plexaris Technology Consulting
+The Netherlands`;
+
+const PRIVACY_POLICY_NL = `SPEAQ Privacybeleid
+Laatst bijgewerkt: april 2026
+
+1. Wat SPEAQ Verzamelt
+SPEAQ verzamelt GEEN persoonlijke gegevens op haar servers. Alle data blijft op je apparaat.
+- Je SPEAQ ID wordt lokaal gegenereerd en nooit gekoppeld aan je echte identiteit
+- Berichten zijn end-to-end versleuteld; de relay-server ziet alleen versleutelde blobs
+- Geen e-mail, telefoonnummer of echte naam vereist
+- Geen cookies (SPEAQ is een native app)
+- Geen analytics of tracking
+
+2. Data Opslag
+Alle data wordt lokaal opgeslagen op je apparaat:
+- Identiteit (SPEAQ ID, weergavenaam)
+- PIN (versleuteld)
+- Berichten (versleuteld)
+- Contacten
+- Portemonnee (Q-Credits saldo, transactiegeschiedenis)
+- Geen data wordt opgeslagen op SPEAQ servers behalve tijdelijk in wachtrij geplaatste versleutelde berichten (max 7 dagen, daarna automatisch verwijderd)
+
+3. Relay Server (Zero Knowledge)
+De SPEAQ relay-server werkt op een zero-knowledge principe:
+- Ziet ALLEEN versleutelde blobs
+- Kan geen berichten lezen, afzenders/ontvangers identificeren of berichtinhoud bepalen
+- Logt geen IP-adressen van gebruikers
+- Slaat geen portemonnee-saldi of transactiedetails op
+- Offline berichten worden na 7 dagen automatisch verwijderd
+
+4. Je Rechten (AVG/GDPR)
+Onder de EU Algemene Verordening Gegevensbescherming heb je het recht op:
+- Inzage: Bekijk al je data (het staat allemaal op je apparaat)
+- Verwijdering: Verwijder alle data via Instellingen > Alle Gegevens Wissen
+- Overdraagbaarheid: Je data is lokaal opgeslagen en kan worden geexporteerd
+- Rectificatie: Bewerk je profiel in de app
+- Beperking: Jij bepaalt wat je deelt
+
+5. Data Verwijdering
+Om al je data te verwijderen:
+1. Open SPEAQ > Instellingen > Alle Gegevens Wissen
+2. Dit verwijdert permanent je identiteit, berichten, contacten, portemonnee en PIN
+3. Deze actie kan niet ongedaan worden gemaakt
+4. Geen server-side data hoeft verwijderd te worden (zero-knowledge architectuur)
+
+6. Kinderen
+SPEAQ is niet bedoeld voor gebruik door kinderen onder de 16 jaar.
+
+7. Wijzigingen
+We kunnen dit beleid bijwerken. Wijzigingen worden weergegeven in de app.
+
+8. Contact
+Voor privacy vragen: privacy@thespeaq.com
+Plexaris Technology Consulting
+Nederland`;
+
+function getPrivacyPolicyText(): string {
+  const lang = getLanguage();
+  if (lang === "nl") return PRIVACY_POLICY_NL;
+  return PRIVACY_POLICY_EN;
+}
+
 interface Props {
   onLogout: () => void;
   onOpenAdvanced: () => void;
@@ -39,16 +153,16 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
 
   function handleDeleteData() {
     Alert.alert(
-      "Delete All Data",
-      "This will permanently delete your identity, messages, wallet, and all local data. This cannot be undone.",
+      t("deleteAllDataTitle"),
+      t("deleteAllDataMsg"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("cancel"), style: "cancel" },
         {
-          text: "Delete Everything",
+          text: t("deleteEverything"),
           style: "destructive",
           onPress: async () => {
             await AsyncStorage.clear();
-            Alert.alert("Done", "All data deleted.", [{ text: "OK", onPress: onLogout }]);
+            Alert.alert(t("done"), t("allDataDeleted"), [{ text: t("ok"), onPress: onLogout }]);
           },
         },
       ]
@@ -57,12 +171,12 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
 
   function handleResetPIN() {
     Alert.alert(
-      "Reset PIN",
-      "This will log you out. You will need to create a new identity.",
+      t("resetPinTitle"),
+      t("resetPinMsg"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("cancel"), style: "cancel" },
         {
-          text: "Reset",
+          text: t("reset"),
           style: "destructive",
           onPress: async () => {
             await AsyncStorage.removeItem("speaq_pin");
@@ -196,67 +310,13 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
       <Modal visible={showPrivacy} animationType="slide">
         <View style={st.privacyContainer}>
           <View style={st.privacyHeader}>
-            <Text style={st.privacyTitle}>Privacy Policy</Text>
+            <Text style={st.privacyTitle}>{t("privacyPolicy")}</Text>
             <TouchableOpacity onPress={() => setShowPrivacy(false)}>
-              <Text style={st.privacyClose}>Close</Text>
+              <Text style={st.privacyClose}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={st.privacyScroll}>
-            <Text style={st.privacyText}>
-              {`SPEAQ Privacy Policy
-Last updated: April 2026
-
-1. What SPEAQ Collects
-SPEAQ collects NO personal data on its servers. All data stays on your device.
-- Your SPEAQ ID is generated locally and never linked to your real identity
-- Messages are end-to-end encrypted; the relay server sees only encrypted blobs
-- No email, phone number, or real name is required
-- No cookies are used (SPEAQ is a native app)
-- No analytics or tracking is implemented
-
-2. Data Storage
-All data is stored locally on your device:
-- Identity (SPEAQ ID, display name)
-- PIN (encrypted)
-- Messages (encrypted)
-- Contacts
-- Wallet (Q-Credits balance, transaction history)
-- No data is stored on SPEAQ servers except temporarily queued encrypted messages (max 7 days, then auto-deleted)
-
-3. Relay Server (Zero Knowledge)
-The SPEAQ relay server operates on a zero-knowledge principle:
-- It sees ONLY encrypted blobs
-- It cannot read messages, identify senders/receivers, or determine message content
-- It does not log IP addresses of users
-- It does not store wallet balances or transaction details
-- Offline messages are auto-deleted after 7 days
-
-4. Your Rights (GDPR)
-Under the EU General Data Protection Regulation, you have the right to:
-- Access: View all your data (it is all on your device)
-- Deletion: Delete all data via Settings > Delete All Data
-- Portability: Your data is stored locally and can be exported
-- Rectification: Edit your profile in the app
-- Restriction: You control what you share
-
-5. Data Deletion
-To delete all your data:
-1. Open SPEAQ > Settings > Delete All Data
-2. This permanently removes your identity, messages, contacts, wallet, and PIN
-3. This action cannot be undone
-4. No server-side data needs deletion (zero-knowledge architecture)
-
-6. Children
-SPEAQ is not intended for use by children under 16.
-
-7. Changes
-We may update this policy. Changes will be reflected in the app.
-
-8. Contact
-For privacy inquiries: privacy@thespeaq.com
-Plexaris Technology Consulting
-The Netherlands`}
-            </Text>
+            <Text style={st.privacyText}>{getPrivacyPolicyText()}</Text>
           </ScrollView>
         </View>
       </Modal>

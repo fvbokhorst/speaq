@@ -81,9 +81,23 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
             try {
               const decrypted = decryptMessage(key, msg.blob);
               data = JSON.parse(decrypted);
-            } catch {
+            } catch (decryptErr) {
               // Fallback for unencrypted messages (backwards compatibility)
-              data = JSON.parse(atob(msg.blob));
+              try {
+                data = JSON.parse(atob(msg.blob));
+              } catch (base64Err) {
+                console.warn("[ChatScreen] Failed to decrypt message from", contactId, "- decryption and base64 fallback both failed");
+                // Show as encrypted message rather than garbage text
+                const encMsg: StoredMessage = {
+                  id: Date.now().toString(),
+                  text: t("encryptedMessage"),
+                  sent: false,
+                  type: "text",
+                  timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+                };
+                setMessages((prev) => [...prev, encMsg]);
+                return;
+              }
             }
             if (data.type === "message") {
               Vibration.vibrate(100);
@@ -103,7 +117,9 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                 m.id === data.messageId ? { ...m, deleted: true, text: "This message was deleted" } : m
               ));
             }
-          } catch (e) {}
+          } catch (e) {
+            console.warn("[ChatScreen] Unexpected error processing message from", contactId, e);
+          }
         }
       }
     });
@@ -127,13 +143,13 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   }
 
   function handleSendPayment() {
-    Alert.prompt("Send Q-Credits", `Send QC to ${contactName}:`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Send", onPress: (val) => {
+    Alert.prompt(t("sendQCreditsChat"), `${t("send")} QC ${t("to")} ${contactName}:`, [
+      { text: t("cancel"), style: "cancel" },
+      { text: t("send"), onPress: (val) => {
         const amount = parseFloat(val || "0");
         if (amount <= 0) return;
         if (amount > walletService.getBalance()) {
-          Alert.alert("Insufficient", "Not enough Q-Credits.");
+          Alert.alert(t("insufficient"), t("insufficientQC"));
           return;
         }
         walletService.send(contactId, amount, `Payment to ${contactName}`);
@@ -153,21 +169,21 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   }
 
   function handleAttach() {
-    Alert.alert("Share", "What would you like to share?", [
-      { text: "Photo / Video", onPress: handlePickImage },
-      { text: "Document / File", onPress: handlePickFile },
-      { text: "Voice Message", onPress: handleVoiceMessage },
-      { text: "Location", onPress: handleShareLocation },
-      { text: "Send Q-Credits", onPress: handleSendPayment },
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("shareTitle"), t("shareWhat"), [
+      { text: t("photoVideo"), onPress: handlePickImage },
+      { text: t("documentFile"), onPress: handlePickFile },
+      { text: t("voiceMessage"), onPress: handleVoiceMessage },
+      { text: t("location"), onPress: handleShareLocation },
+      { text: t("sendQCreditsChat"), onPress: handleSendPayment },
+      { text: t("cancel"), style: "cancel" },
     ]);
   }
 
   function handleVoiceMessage() {
     // Voice message recording placeholder
-    // Full implementation needs react-native-audio-recorder-player
-    Alert.alert("Voice Message", "Hold to record, release to send.", [
-      { text: "Record 5s Test", onPress: () => {
+    // Full implementation needs react-native-audio-recorder-player + real device
+    Alert.alert(t("voiceMessageTitle"), t("voiceMessageBody"), [
+      { text: t("voiceMessageRecord"), onPress: () => {
         const voiceMsg: StoredMessage = {
           id: Date.now().toString(),
           text: "Voice message (0:05)",
@@ -180,15 +196,16 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         sendMessage(contactId, "[Voice Message]");
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       }},
-      { text: "Cancel", style: "cancel" },
+      { text: t("cancel"), style: "cancel" },
     ]);
   }
 
   function handleShareLocation() {
-    // Get current location
+    // Location sharing placeholder - real GPS requires device permissions (NSLocationWhenInUseUsageDescription)
+    // Currently sends placeholder coordinates; replace with Geolocation API on real device
     const locationMsg: StoredMessage = {
       id: Date.now().toString(),
-      text: "Shared location",
+      text: t("locationShared"),
       sent: true,
       type: "location",
       timestamp: now(),
@@ -236,53 +253,53 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   function handleLongPress(item: StoredMessage) {
     if (item.deleted) return;
     const options: any[] = [
-      { text: "Delete for Me", onPress: () => {
+      { text: t("deleteForMe"), onPress: () => {
         setMessages((prev) => prev.map((m) =>
           m.id === item.id ? { ...m, deleted: true, text: "You deleted this message" } : m
         ));
       }},
     ];
     if (item.sent) {
-      options.push({ text: "Delete for Everyone", style: "destructive", onPress: () => {
+      options.push({ text: t("deleteForEveryone"), style: "destructive", onPress: () => {
         setMessages((prev) => prev.map((m) =>
           m.id === item.id ? { ...m, deleted: true, text: "This message was deleted" } : m
         ));
         sendMessage(contactId, JSON.stringify({ type: "delete", messageId: item.id }));
       }});
     }
-    options.push({ text: "Cancel", style: "cancel" });
-    Alert.alert("Message", item.text.substring(0, 50), options);
+    options.push({ text: t("cancel"), style: "cancel" });
+    Alert.alert(t("message"), item.text.substring(0, 50), options);
   }
 
   function handleBlockUser() {
-    Alert.alert("Block User", `Block ${contactName}? You will no longer receive messages from them.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Block", style: "destructive", onPress: () => {
+    Alert.alert(t("blockUser"), t("blockUserMsg").replace("%s", contactName), [
+      { text: t("cancel"), style: "cancel" },
+      { text: t("block"), style: "destructive", onPress: () => {
         blockUser(contactId);
-        Alert.alert("Blocked", `${contactName} has been blocked.`);
+        Alert.alert(t("blocked"), t("blockedMsg").replace("%s", contactName));
       }},
     ]);
   }
 
   function handleHeaderLongPress() {
     Alert.alert(contactName, contactId, [
-      { text: "Disappearing Messages", onPress: handleSetDisappear },
-      { text: "Block User", style: "destructive", onPress: handleBlockUser },
-      { text: "Cancel", style: "cancel" },
+      { text: t("disappearingMessages"), onPress: handleSetDisappear },
+      { text: t("blockUser"), style: "destructive", onPress: handleBlockUser },
+      { text: t("cancel"), style: "cancel" },
     ]);
   }
 
   function handleSetDisappear() {
     const buttons = DISAPPEAR_OPTIONS.map((opt) => ({
-      text: `${opt.label}${disappearTimer === opt.key ? " (current)" : ""}`,
+      text: `${opt.label}${disappearTimer === opt.key ? ` (${t("current")})` : ""}`,
       onPress: () => {
         setDisappearTimer(contactId, opt.key);
         setDisappearTimerState(opt.key);
-        Alert.alert("Set", opt.key === "off" ? "Messages will not disappear." : `Messages will disappear after ${opt.label}.`);
+        Alert.alert(t("disappearSet"), opt.key === "off" ? t("disappearOff") : t("disappearOn").replace("%s", opt.label));
       },
     }));
-    buttons.push({ text: "Cancel", onPress: () => {} });
-    Alert.alert("Disappearing Messages", `Current: ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label || "Off"}`, buttons);
+    buttons.push({ text: t("cancel"), onPress: () => {} });
+    Alert.alert(t("disappearingMessages"), `${t("current")}: ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label || "Off"}`, buttons);
   }
 
   // Date separator logic
