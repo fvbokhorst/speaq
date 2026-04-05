@@ -393,18 +393,18 @@ export default function VaultScreen({ onBack }: Props) {
             </TouchableOpacity>
 
             {/* Contact list */}
-            {contactsService.getContacts().length > 0 && (
-              <>
-                <Text style={st.shareContactsLabel}>Your Contacts</Text>
-                <ScrollView style={{ maxHeight: 200 }}>
-                  {contactsService.getContacts().map((c) => (
-                    <TouchableOpacity key={c.id} style={st.shareContactRow} onPress={() => handleSendToContact(c.id, c.name)}>
-                      <View style={st.shareContactAvatar}><Text style={st.shareContactInit}>{c.name.charAt(0)}</Text></View>
-                      <Text style={st.shareContactName}>{c.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
+            <Text style={st.shareContactsLabel}>Your Contacts</Text>
+            {contactsService.getContacts().length === 0 ? (
+              <Text style={{ color: colors.signal.steel, fontSize: 12, paddingVertical: 8 }}>No contacts yet. Use SPEAQ ID or QR code above.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 200 }}>
+                {contactsService.getContacts().map((c) => (
+                  <TouchableOpacity key={c.id} style={st.shareContactRow} onPress={() => handleSendToContact(c.id, c.name)}>
+                    <View style={st.shareContactAvatar}><Text style={st.shareContactInit}>{c.name.charAt(0)}</Text></View>
+                    <Text style={st.shareContactName}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             )}
 
             <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowSharePicker(false); setShareFile(null); setShareManualId(""); }}>
