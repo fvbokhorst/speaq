@@ -2,11 +2,35 @@
  * SPEAQ Relay Service
  * Manages WebSocket connection to the SPEAQ relay server
  * PRD Section 4.4: WebSocket events (AUTH, SEND, RECEIVE, ACK, TYPING)
+ *
+ * Anti-traffic analysis:
+ * - All outgoing messages are padded to fixed block sizes
+ * - Random delays between messages prevent timing correlation
+ * - Obfuscated transport used when direct connection fails
  */
 
 import { config } from "./config";
+import { obfuscatePayload, deobfuscatePayload, checkDirectConnection } from "./transport";
 
 type MessageHandler = (msg: any) => void;
+
+/** Pad message to fixed block size to prevent traffic analysis */
+function padMessage(data: string): string {
+  const blockSize = 4096;
+  const padLength = blockSize - (data.length % blockSize);
+  return data + "\0".repeat(padLength);
+}
+
+/** Remove padding from received message */
+function unpadMessage(data: string): string {
+  return data.replace(/\0+$/, "");
+}
+
+/** Random delay between 50-300ms to prevent timing correlation */
+function randomDelay(): Promise<void> {
+  const delay = 50 + Math.floor(Math.random() * 250);
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
 
 class RelayService {
   private ws: WebSocket | null = null;
@@ -14,9 +38,15 @@ class RelayService {
   private handlers: Map<string, MessageHandler[]> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connected: boolean = false;
+  private useObfuscation: boolean = false;
 
-  connect(speaqId: string): void {
+  async connect(speaqId: string): Promise<void> {
     this.speaqId = speaqId;
+
+    // Check if direct connection works; if not, enable obfuscation
+    const directOk = await checkDirectConnection();
+    this.useObfuscation = !directOk;
+
     this.ws = new WebSocket(config.relay.url);
 
     this.ws.onopen = () => {
@@ -58,21 +88,32 @@ class RelayService {
     this.connected = false;
   }
 
-  send(to: string, blob: string): void {
+  async send(to: string, blob: string): Promise<void> {
     if (!this.ws || !this.connected) {
       console.error("Not connected to relay");
       return;
     }
-    this.ws.send(JSON.stringify({
+
+    // Anti-traffic analysis: random delay before sending
+    await randomDelay();
+
+    // Pad the blob to fixed block size (prevents message length analysis)
+    const paddedBlob = padMessage(blob);
+
+    const payload = JSON.stringify({
       type: "SEND",
       to,
-      blob,
+      blob: this.useObfuscation ? obfuscatePayload(paddedBlob) : paddedBlob,
       id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-    }));
+    });
+
+    this.ws.send(payload);
   }
 
-  sendTyping(to: string): void {
+  async sendTyping(to: string): Promise<void> {
     if (!this.ws || !this.connected) return;
+    // Random delay for typing indicators too (anti-timing)
+    await randomDelay();
     this.ws.send(JSON.stringify({ type: "TYPING", to }));
   }
 

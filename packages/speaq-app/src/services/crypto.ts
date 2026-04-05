@@ -507,23 +507,72 @@ export function ratchetDecrypt(state: RatchetState, message: RatchetMessage): st
 }
 
 // ============================================================
-// SECTION 4: Ratchet State Persistence
+// SECTION 4: Keystore Encryption (PIN-based)
+// ============================================================
+//
+// All crypto keys are encrypted at rest using a key derived from the
+// user's PIN. If the phone is seized, keys are unreadable without PIN.
+//
+
+let keystoreDerivedKey: string | null = null;
+
+/**
+ * Derive an encryption key from the user's PIN.
+ * Must be called after PIN verification, before any key load/save.
+ */
+export function setKeystorePin(pin: string): void {
+  keystoreDerivedKey = CryptoJS.SHA256("speaq-keystore:" + pin).toString(CryptoJS.enc.Hex);
+}
+
+/** Encrypt data for storage using the PIN-derived key */
+function keystoreEncrypt(data: string): string {
+  if (!keystoreDerivedKey) {
+    throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
+  }
+  return CryptoJS.AES.encrypt(data, keystoreDerivedKey).toString();
+}
+
+/** Decrypt data from storage using the PIN-derived key */
+function keystoreDecrypt(data: string): string {
+  if (!keystoreDerivedKey) {
+    throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
+  }
+  const bytes = CryptoJS.AES.decrypt(data, keystoreDerivedKey);
+  const result = bytes.toString(CryptoJS.enc.Utf8);
+  if (!result) {
+    throw new Error("[Crypto] Keystore decryption failed -- wrong PIN or corrupted data");
+  }
+  return result;
+}
+
+// ============================================================
+// SECTION 5: Ratchet State Persistence
 // ============================================================
 
-/** Save ratchet state for a contact to AsyncStorage */
+/** Save ratchet state for a contact to AsyncStorage (encrypted with PIN) */
 export async function saveRatchetState(contactId: string, state: RatchetState): Promise<void> {
   try {
-    await AsyncStorage.setItem(RATCHET_PREFIX + contactId, JSON.stringify(state));
+    const plaintext = JSON.stringify(state);
+    const encrypted = keystoreEncrypt(plaintext);
+    await AsyncStorage.setItem(RATCHET_PREFIX + contactId, encrypted);
   } catch (e) {
     console.error("[Crypto] Failed to save ratchet state:", e);
   }
 }
 
-/** Load ratchet state for a contact from AsyncStorage */
+/** Load ratchet state for a contact from AsyncStorage (decrypted with PIN) */
 export async function loadRatchetState(contactId: string): Promise<RatchetState | null> {
   try {
     const data = await AsyncStorage.getItem(RATCHET_PREFIX + contactId);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    // Try encrypted format first, fall back to plaintext (migration)
+    try {
+      const decrypted = keystoreDecrypt(data);
+      return JSON.parse(decrypted);
+    } catch {
+      // Legacy plaintext data -- parse directly, will be re-encrypted on next save
+      return JSON.parse(data);
+    }
   } catch (e) {
     console.error("[Crypto] Failed to load ratchet state:", e);
     return null;
@@ -531,28 +580,38 @@ export async function loadRatchetState(contactId: string): Promise<RatchetState 
 }
 
 // ============================================================
-// SECTION 5: Keypair Persistence
+// SECTION 6: Keypair Persistence
 // ============================================================
 
 const KEYPAIR_KEY = "speaq_kyber_keypair";
 
-/** Store Kyber keypair in AsyncStorage */
+/** Store Kyber keypair in AsyncStorage (encrypted with PIN) */
 export async function saveKyberKeyPair(kp: KyberKeyPair): Promise<void> {
-  await AsyncStorage.setItem(KEYPAIR_KEY, JSON.stringify(kp));
+  const plaintext = JSON.stringify(kp);
+  const encrypted = keystoreEncrypt(plaintext);
+  await AsyncStorage.setItem(KEYPAIR_KEY, encrypted);
 }
 
-/** Load Kyber keypair from AsyncStorage */
+/** Load Kyber keypair from AsyncStorage (decrypted with PIN) */
 export async function loadKyberKeyPair(): Promise<KyberKeyPair | null> {
   try {
     const data = await AsyncStorage.getItem(KEYPAIR_KEY);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    // Try encrypted format first, fall back to plaintext (migration)
+    try {
+      const decrypted = keystoreDecrypt(data);
+      return JSON.parse(decrypted);
+    } catch {
+      // Legacy plaintext data -- parse directly, will be re-encrypted on next save
+      return JSON.parse(data);
+    }
   } catch (e) {
     return null;
   }
 }
 
 // ============================================================
-// SECTION 6: High-Level API (used by speaq.ts and ChatScreen)
+// SECTION 7: High-Level API (used by speaq.ts and ChatScreen)
 // ============================================================
 
 /**
@@ -618,7 +677,7 @@ export async function initRatchetFromKeyExchange(
 }
 
 // ============================================================
-// SECTION 7: Legacy API (backwards compatibility)
+// SECTION 8: Legacy API (backwards compatibility)
 // ============================================================
 //
 // These functions maintain the old interface for code that hasn't

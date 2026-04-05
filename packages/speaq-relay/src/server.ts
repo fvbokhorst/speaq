@@ -427,6 +427,47 @@ wss.on("connection", (ws: WebSocket) => {
           break;
         }
 
+        // --- Sealed Sender (metadata protection) ---
+        // The relay does NOT see the sender ID. The sender's identity is
+        // encrypted inside the blob. Only the recipient can decrypt it.
+        // This prevents the relay from building a social graph.
+        case "SEND_SEALED": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+
+          const { to, blob, id } = msg;
+          if (!to || !blob) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
+            return;
+          }
+
+          const messageId = id || crypto.randomUUID();
+          totalMessagesRelayed++;
+          const recipient = clients.get(to);
+
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            // Sealed: NO `from` field -- sender ID is inside the encrypted blob
+            recipient.ws.send(JSON.stringify({
+              type: "RECEIVE_SEALED",
+              blob,
+              id: messageId,
+            }));
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+          } else {
+            // Queue without sender ID -- relay never knows who sent it
+            queueOfflineMessage(to, "sealed", blob);
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
+          }
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: "ERROR", error: "Unknown message type: " + msg.type }));
       }

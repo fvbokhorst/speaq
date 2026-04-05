@@ -8,6 +8,12 @@
  * 2. Create invoices (receive BTC)
  * 3. Pay invoices (send BTC)
  * 4. Convert between QC and satoshis via gold price
+ *
+ * PRIVACY NOTES:
+ * - SPEAQ ID is NEVER sent to the LSP. The LSP sees only Lightning invoices.
+ * - Invoice memos NEVER contain identifying information (no SPEAQ IDs, no usernames).
+ * - A random alias is used when connecting to the LSP (not the user's real name or ID).
+ * - The LSP can see payment amounts and timing, but NOT who is paying whom in SPEAQ.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -90,12 +96,24 @@ export function getExchangeRate(): { satsPerQC: number; qcPerSat: number } {
   };
 }
 
+// --- Random Alias (privacy: never reveal SPEAQ identity to LSP) ---
+
+function generateRandomAlias(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let alias = "";
+  for (let i = 0; i < 12; i++) {
+    alias += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return alias;
+}
+
 // --- LSP Connection ---
 
 export async function connectToLSP(url: string): Promise<boolean> {
   try {
-    // LNURL service discovery
-    const response = await fetch(`${url}/.well-known/lnurlp/speaq`);
+    // LNURL service discovery -- use random alias, NEVER real SPEAQ ID
+    const alias = generateRandomAlias();
+    const response = await fetch(`${url}/.well-known/lnurlp/${alias}`);
     if (response.ok) {
       config.lspUrl = url;
       config.connected = true;
@@ -134,12 +152,15 @@ export function getConfig(): LightningConfig {
 // --- Invoice Management ---
 
 export async function createInvoice(amountSats: number, memo: string = ""): Promise<LightningInvoice> {
+  // PRIVACY: Never include SPEAQ ID or username in invoice memo sent to LSP.
+  // Use generic memo for the bolt11 invoice (visible to LSP), store user memo locally only.
+  const safeMemo = "payment"; // Generic memo for the Lightning network -- no identifying info
   const invoice: LightningInvoice = {
     id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-    bolt11: generateBolt11(amountSats, memo),
+    bolt11: generateBolt11(amountSats, safeMemo),
     amountSats,
     amountQC: satsToQC(amountSats),
-    memo: memo || "SPEAQ Payment",
+    memo: memo || "Lightning Payment", // Local-only memo (never sent to LSP)
     status: "pending",
     direction: "incoming",
     createdAt: Date.now(),

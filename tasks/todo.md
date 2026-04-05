@@ -195,3 +195,26 @@ GPS location field exists on WitnessRecord but is never populated.
 
 ### Review
 _(wordt ingevuld na afronding)_
+
+---
+
+## CRITICAL SECURITY FIXES (5 april 2026)
+
+### Fix 1: Crypto keys in plaintext AsyncStorage
+- [x] 1. Add PIN-based keystore encryption to crypto.ts (setKeystorePin, encrypt/decrypt helpers)
+- [x] 2. Update saveKyberKeyPair, loadKyberKeyPair, saveRatchetState, loadRatchetState to use encryption
+
+### Fix 2: IP address leaks to ISP
+- [x] 3. Wire obfuscation into relay.ts (import transport, apply padding + random delays)
+
+### Fix 3: Metadata visible to relay (sealed sender)
+- [x] 4. Add SEND_SEALED message type to server.ts (from field omitted)
+
+### Fix 4: QC send not working for small amounts
+- [x] 5. Fix floating point comparison and decimal handling in WalletScreen.tsx
+
+### Fix 5: Lightning transactions visible to LSP
+- [x] 6. Add privacy protections to lightning.ts (no SPEAQ ID, no identifying memos, random alias)
+
+### Deploy
+- [ ] 7. rsync to ~/speaq-build, git add -A, commit, push

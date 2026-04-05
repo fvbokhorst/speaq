@@ -55,12 +55,13 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
   const identity = getIdentity();
 
   function handleProceedToConfirm() {
-    const amount = parseFloat(sendAmount);
+    const amount = parseFloat(parseFloat(sendAmount).toFixed(8));
     if (!sendTo.trim() || isNaN(amount) || amount <= 0) {
       Alert.alert(t("invalid"), t("invalidRecipientAmount"));
       return;
     }
-    if (amount > balance) {
+    // Use epsilon tolerance for floating point comparison
+    if (amount > balance + 0.0001) {
       Alert.alert(t("insufficient"), t("youHaveQC").replace("%s", balance.toFixed(2)));
       return;
     }
