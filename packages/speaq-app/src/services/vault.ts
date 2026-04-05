@@ -93,11 +93,26 @@ export async function setupHiddenPin(pin: string): Promise<void> {
   await AsyncStorage.setItem(HIDDEN_PIN_KEY, hiddenPinHash);
 }
 
+/** Legacy hash for backwards compatibility with old PINs */
+function legacyHashPin(pin: string): string {
+  let hash = 0;
+  for (let i = 0; i < pin.length; i++) {
+    const chr = pin.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return "h" + Math.abs(hash).toString(36);
+}
+
 export function unlockHidden(pin: string): boolean {
   if (!hiddenPinHash) return false;
-  if (hashPin(pin) === hiddenPinHash) {
+  // Try new SHA-256 hash first, then legacy hash for backwards compatibility
+  if (hashPin(pin) === hiddenPinHash || legacyHashPin(pin) === hiddenPinHash) {
     hiddenEncKey = deriveKey(pin);
     currentLayer = "hidden";
+    // Migrate to new hash format
+    hiddenPinHash = hashPin(pin);
+    AsyncStorage.setItem(HIDDEN_PIN_KEY, hiddenPinHash);
     return true;
   }
   return false;
