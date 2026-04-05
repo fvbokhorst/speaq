@@ -8,7 +8,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Ima
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
-import { getProfilePhoto, pickProfilePhoto, loadProfile } from "../services/profile";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { pickProfilePhoto } from "../services/profile";
 
 interface Props {
   onLogout: () => void;
@@ -22,8 +23,8 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
   const identity = getIdentity();
 
   useEffect(() => {
-    loadProfile().then(() => {
-      setPhotoUri(getProfilePhoto());
+    AsyncStorage.getItem("speaq_profile_photo").then((uri) => {
+      if (uri) setPhotoUri(uri);
     });
   }, []);
 
