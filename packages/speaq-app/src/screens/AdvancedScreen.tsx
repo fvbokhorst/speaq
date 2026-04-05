@@ -6,8 +6,9 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Dimensions,
 } from "react-native";
+import { CameraScreen } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { advancedService, GhostGroup, WitnessRecord, DeadManSwitch } from "../services/advanced";
 import { contactsService, Contact } from "../services/contacts";
@@ -30,6 +31,7 @@ export default function AdvancedScreen({ onBack }: Props) {
   const [dmsMessage, setDmsMessage] = useState("");
   const [dmsRecipient, setDmsRecipient] = useState("");
   const [showContactPicker, setShowContactPicker] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
 
@@ -57,6 +59,10 @@ export default function AdvancedScreen({ onBack }: Props) {
         setAllContacts(contactsService.getContacts());
         setPickerGroupId(group.id);
         setShowContactPicker(true);
+      }},
+      { text: "Scan QR Code", onPress: () => {
+        setPickerGroupId(group.id);
+        setShowQRScanner(true);
       }},
       { text: "Send Message", onPress: () => {
         Alert.prompt("Ghost Message", "Message to all members:", [
@@ -107,6 +113,19 @@ export default function AdvancedScreen({ onBack }: Props) {
   async function handleDisableDms() {
     await advancedService.disableDeadManSwitch();
     setDms(advancedService.getDeadManSwitch());
+  }
+
+  function handleQRScan(event: any) {
+    const value = event.nativeEvent?.codeStringValue || "";
+    // Parse speaq:// URI to get SPEAQ ID
+    const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+    if (speaqId && pickerGroupId) {
+      advancedService.addMemberToGhost(pickerGroupId, speaqId);
+      setGhostGroups(advancedService.getGhostGroups());
+      setShowQRScanner(false);
+      setPickerGroupId(null);
+      Alert.alert("Member Added", `${speaqId} added to ghost group via QR scan.`);
+    }
   }
 
   function handlePickContact(contact: Contact) {
@@ -267,6 +286,25 @@ export default function AdvancedScreen({ onBack }: Props) {
         </View>
       </Modal>
 
+      {/* QR Scanner Modal */}
+      <Modal visible={showQRScanner} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: colors.depth.void }}>
+          <View style={st.scannerHeader}>
+            <Text style={st.scannerTitle}>Scan SPEAQ QR Code</Text>
+            <TouchableOpacity onPress={() => setShowQRScanner(false)}>
+              <Text style={st.scannerClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <CameraScreen
+            scanBarcode
+            onReadCode={handleQRScan}
+            showFrame
+            frameColor={colors.voice.gold}
+            laserColor={colors.quantum.teal}
+          />
+        </View>
+      </Modal>
+
       {/* Contact Picker Modal */}
       <Modal visible={showContactPicker} transparent animationType="fade">
         <View style={st.modalOverlay}>
@@ -380,6 +418,9 @@ const st = StyleSheet.create({
   cancelText: { color: colors.signal.steel, fontSize: 14 },
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
   confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  scannerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: colors.depth.void },
+  scannerTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  scannerClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
   contactPickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
   contactPickAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
   contactPickInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
