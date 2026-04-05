@@ -4,7 +4,7 @@
  */
 
 import { config } from "./config";
-import crypto from "crypto";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // State
 let identity: {
@@ -39,9 +39,28 @@ export function createIdentity(displayName: string): typeof identity {
     createdAt: Date.now(),
   };
 
+  // Persist identity
+  AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
+
   // Connect to relay
   connectRelay();
 
+  return identity;
+}
+
+/**
+ * Load identity from storage and reconnect
+ */
+export async function loadIdentity(): Promise<typeof identity> {
+  try {
+    const data = await AsyncStorage.getItem("speaq_identity");
+    if (data) {
+      identity = JSON.parse(data);
+      connectRelay();
+    }
+  } catch (e) {
+    console.error("Load identity error:", e);
+  }
   return identity;
 }
 

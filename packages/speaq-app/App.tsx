@@ -18,7 +18,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import AdvancedScreen from "./src/screens/AdvancedScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
-import { createIdentity, getIdentity } from "./src/services/speaq";
+import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
 import { contactsService } from "./src/services/contacts";
@@ -43,6 +43,7 @@ function App() {
     walletService.load().then(() => walletService.addWelcomeBonus());
     contactsService.load();
     advancedService.load();
+    loadIdentity();
     AsyncStorage.getItem("speaq_pin").then((storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
