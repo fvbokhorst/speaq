@@ -120,14 +120,14 @@ export function createVerifiableCredential(
   const now = Date.now();
   const id = sha256(JSON.stringify(claim) + now.toString() + Math.random().toString());
 
-  const credential: Omit<VerifiableCredential, "signature"> = {
+  const credential: VerifiableCredential = {
     id,
     type,
     issuer: issuerDID,
     claim,
     issuedAt: now,
     expiresAt: now + expiresInMs,
-    signature: "", // placeholder
+    signature: "",
   };
 
   // Sign the credential data (excluding signature field)
