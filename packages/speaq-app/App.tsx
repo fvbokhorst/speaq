@@ -4,6 +4,7 @@
  * Next time: PIN enter -> Main
  */
 
+import "react-native-get-random-values"; // Must be first - crypto polyfill
 import React, { useState, useEffect } from "react";
 import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
