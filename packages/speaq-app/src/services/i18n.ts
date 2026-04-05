@@ -5,7 +5,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type Language = "en" | "nl" | "lg" | "sw" | "fr" | "es" | "ru";
+export type Language = "en" | "nl" | "lg" | "sw" | "fr" | "es" | "ru" | "de";
 
 const STORAGE_KEY = "speaq_language";
 
@@ -37,6 +37,7 @@ export const LANGUAGES: { key: Language; label: string; native: string }[] = [
   { key: "fr", label: "French", native: "Francais" },
   { key: "es", label: "Spanish", native: "Espanol" },
   { key: "ru", label: "Russian", native: "Russkij" },
+  { key: "de", label: "German", native: "Deutsch" },
   { key: "lg", label: "Luganda", native: "Oluganda" },
   { key: "sw", label: "Swahili", native: "Kiswahili" },
 ];
@@ -186,6 +187,35 @@ const translations: Record<Language, Record<string, string>> = {
     deleteAllData: "Udalit vse dannye",
     version: "Versiya",
     about: "O prilozhenii",
+  },
+  de: {
+    chats: "Chats",
+    contacts: "Kontakte",
+    wallet: "Geldborse",
+    settings: "Einstellungen",
+    groups: "Gruppen",
+    send: "Senden",
+    receive: "Empfangen",
+    request: "Anfordern",
+    cancel: "Abbrechen",
+    delete: "Loschen",
+    save: "Speichern",
+    close: "Schliessen",
+    search: "Suchen",
+    noChats: "Noch keine Unterhaltungen",
+    noContacts: "Noch keine Kontakte",
+    noGroups: "Noch keine Gruppen",
+    addContact: "Kontakt hinzufugen",
+    newGroup: "Neue Gruppe",
+    quantumSecured: "Quantengesichert",
+    speaqFreely: "SPEAQ Frei...",
+    qCredits: "Q-Credits Guthaben",
+    language: "Sprache",
+    encryption: "Verschlusselung",
+    privacyPolicy: "Datenschutzrichtlinie",
+    deleteAllData: "Alle Daten loschen",
+    version: "Version",
+    about: "Uber",
   },
   lg: {
     chats: "Emboozi",
