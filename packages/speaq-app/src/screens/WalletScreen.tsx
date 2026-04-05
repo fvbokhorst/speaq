@@ -12,6 +12,7 @@ import QRCode from "react-native-qrcode-svg";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
+import { contactsService, Contact } from "../services/contacts";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -25,11 +26,16 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
   const [linkedWallets, setLinkedWallets] = useState<LinkedWallet[]>(walletService.getLinkedWallets());
   const [showSend, setShowSend] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showLinkWallet, setShowLinkWallet] = useState(false);
+  const [showContactPicker, setShowContactPicker] = useState(false);
   const [sendTo, setSendTo] = useState("");
+  const [sendToName, setSendToName] = useState("");
   const [sendAmount, setSendAmount] = useState("");
   const [sendNote, setSendNote] = useState("");
+  const [receiveAmount, setReceiveAmount] = useState("");
   const [projectName, setProjectName] = useState("");
   const [projectDesc, setProjectDesc] = useState("");
   const [walletType, setWalletType] = useState<LinkedWallet["type"]>("monero");
@@ -37,25 +43,37 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
   const [walletLabel, setWalletLabel] = useState("");
   const identity = getIdentity();
 
-  function handleSend() {
+  function handleProceedToConfirm() {
     const amount = parseFloat(sendAmount);
     if (!sendTo.trim() || isNaN(amount) || amount <= 0) {
-      Alert.alert("Invalid", "Enter a valid SPEAQ ID and amount.");
+      Alert.alert("Invalid", "Enter a valid recipient and amount.");
       return;
     }
     if (amount > balance) {
-      Alert.alert("Insufficient", "Not enough Q-Credits.");
+      Alert.alert("Insufficient", `You have ${balance.toFixed(2)} QC.`);
       return;
     }
+    setShowSend(false);
+    setShowConfirm(true);
+  }
 
+  function handleConfirmSend() {
+    const amount = parseFloat(sendAmount);
     walletService.send(sendTo.trim(), amount, sendNote.trim());
     setBalance(walletService.getBalance());
     setTransactions(walletService.getTransactions());
-    setShowSend(false);
+    setShowConfirm(false);
     setSendTo("");
+    setSendToName("");
     setSendAmount("");
     setSendNote("");
-    Alert.alert("Sent", `${amount.toFixed(2)} QC sent.`);
+    Alert.alert("Sent", `${amount.toFixed(2)} QC sent successfully.`);
+  }
+
+  function handlePickContactForSend(contact: Contact) {
+    setSendTo(contact.id);
+    setSendToName(contact.name);
+    setShowContactPicker(false);
   }
 
   function handleCreateProject() {
@@ -172,6 +190,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
               <Text style={st.actionIcon}>R</Text>
               <Text style={st.actionLabel}>Receive</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={st.actionBtn} onPress={() => setShowRequest(true)}>
+              <Text style={st.actionIcon}>?</Text>
+              <Text style={st.actionLabel}>Request</Text>
+            </TouchableOpacity>
           </View>
         </View>
         {/* Projects */}
@@ -260,20 +282,110 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>Send Q-Credits</Text>
-            <TextInput style={st.modalInput} value={sendTo} onChangeText={setSendTo}
-              placeholder="Recipient SPEAQ ID" placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+            <TouchableOpacity style={st.contactPickBtn} onPress={() => setShowContactPicker(true)}>
+              <Text style={st.contactPickText}>{sendToName || "Choose contact..."}</Text>
+              <Text style={st.contactPickArrow}>{">"}</Text>
+            </TouchableOpacity>
+            {!sendToName && (
+              <TextInput style={st.modalInput} value={sendTo} onChangeText={setSendTo}
+                placeholder="Or enter SPEAQ ID" placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+            )}
             <TextInput style={st.modalInput} value={sendAmount} onChangeText={setSendAmount}
               placeholder="Amount (QC)" placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
             <TextInput style={st.modalInput} value={sendNote} onChangeText={setSendNote}
               placeholder="Note (optional)" placeholderTextColor={colors.signal.steel} />
+            <Text style={st.balanceHint}>Available: {balance.toFixed(2)} QC</Text>
             <View style={st.modalBtns}>
-              <TouchableOpacity style={st.cancelBtn} onPress={() => setShowSend(false)}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowSend(false); setSendTo(""); setSendToName(""); setSendAmount(""); setSendNote(""); }}>
                 <Text style={st.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={st.confirmBtn} onPress={handleSend}>
-                <Text style={st.confirmText}>Send</Text>
+              <TouchableOpacity style={st.confirmBtn} onPress={handleProceedToConfirm}>
+                <Text style={st.confirmText}>Next</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm Send Modal */}
+      <Modal visible={showConfirm} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Confirm Payment</Text>
+            <View style={st.confirmCard}>
+              <Text style={st.confirmAmount}>{parseFloat(sendAmount || "0").toFixed(2)}</Text>
+              <Text style={st.confirmQC}>Q-Credits</Text>
+              <View style={st.confirmDivider} />
+              <Text style={st.confirmLabel}>To</Text>
+              <Text style={st.confirmValue}>{sendToName || sendTo}</Text>
+              {sendNote ? <>
+                <Text style={st.confirmLabel}>Note</Text>
+                <Text style={st.confirmValue}>{sendNote}</Text>
+              </> : null}
+              <Text style={st.confirmLabel}>Remaining</Text>
+              <Text style={st.confirmValue}>{(balance - parseFloat(sendAmount || "0")).toFixed(2)} QC</Text>
+            </View>
+            <View style={st.modalBtns}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowConfirm(false); setShowSend(true); }}>
+                <Text style={st.cancelText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.confirmBtnGold} onPress={handleConfirmSend}>
+                <Text style={st.confirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Contact Picker for Send */}
+      <Modal visible={showContactPicker} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Select Contact</Text>
+            {contactsService.getContacts().length === 0 ? (
+              <Text style={st.emptySub}>No contacts yet. Add contacts first.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 300 }}>
+                {contactsService.getContacts().map((c) => (
+                  <TouchableOpacity key={c.id} style={st.contactRow} onPress={() => handlePickContactForSend(c)}>
+                    <View style={st.contactAvatar}><Text style={st.contactInit}>{c.name.charAt(0)}</Text></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.contactName}>{c.name}</Text>
+                      <Text style={st.contactId}>{c.id}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => setShowContactPicker(false)}>
+              <Text style={st.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Request Payment Modal */}
+      <Modal visible={showRequest} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Request Payment</Text>
+            <Text style={st.modalSub}>Generate a QR code with a specific amount</Text>
+            <TextInput style={st.modalInput} value={receiveAmount} onChangeText={setReceiveAmount}
+              placeholder="Amount (QC)" placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
+            {receiveAmount && parseFloat(receiveAmount) > 0 && (
+              <View style={st.qrBox}>
+                <QRCode
+                  value={`speaq-pay://${identity?.speaqId || "unknown"}?amount=${receiveAmount}`}
+                  size={160}
+                  backgroundColor={colors.depth.card}
+                  color={colors.voice.gold}
+                />
+                <Text style={st.qrAmountText}>{parseFloat(receiveAmount).toFixed(2)} QC</Text>
+              </View>
+            )}
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowRequest(false); setReceiveAmount(""); }}>
+              <Text style={st.cancelText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -420,7 +532,25 @@ const st = StyleSheet.create({
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
   confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
 
-  qrBox: { padding: 16, backgroundColor: colors.depth.elevated, borderRadius: 16, marginBottom: 16 },
+  contactPickBtn: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 12 },
+  contactPickText: { color: colors.signal.white, fontSize: 15 },
+  contactPickArrow: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  balanceHint: { color: colors.signal.steel, fontSize: 11, marginBottom: 8, alignSelf: "flex-start" },
+  confirmCard: { width: "100%", backgroundColor: colors.depth.elevated, borderRadius: 12, padding: 20, marginBottom: 16, alignItems: "center" },
+  confirmAmount: { color: colors.voice.gold, fontSize: 40, fontWeight: "700", fontFamily: "Georgia" },
+  confirmQC: { color: colors.voice.gold, fontSize: 14, letterSpacing: 1, marginTop: 2 },
+  confirmDivider: { width: "100%", height: 1, backgroundColor: colors.border.subtle, marginVertical: 16 },
+  confirmLabel: { color: colors.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8 },
+  confirmValue: { color: colors.signal.white, fontSize: 15, fontWeight: "500", marginTop: 2 },
+  confirmBtnGold: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
+  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
+  contactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
+  contactId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  modalSub: { color: colors.signal.steel, fontSize: 11, marginBottom: 16 },
+  qrAmountText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 12 },
+  qrBox: { padding: 16, backgroundColor: colors.depth.elevated, borderRadius: 16, marginBottom: 16, alignItems: "center" },
   qrId: { color: colors.voice.gold, fontSize: 14, fontFamily: "Courier", marginBottom: 8 },
   qrHint: { color: colors.signal.steel, fontSize: 11, textAlign: "center", marginBottom: 16 },
 });
