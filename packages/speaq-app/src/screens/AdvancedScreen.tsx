@@ -81,9 +81,9 @@ export default function AdvancedScreen({ onBack }: Props) {
   }
 
   // --- Witness Mode ---
-  async function handleCreateWitness() {
+  function handleCreateWitness() {
     if (!witnessText.trim()) return;
-    await advancedService.createWitness("text", witnessText.trim());
+    advancedService.createWitness("text", witnessText.trim());
     setWitnesses(advancedService.getWitnessRecords());
     setWitnessText("");
     setShowWitness(false);
@@ -198,6 +198,7 @@ export default function AdvancedScreen({ onBack }: Props) {
                   <Text style={st.itemName} numberOfLines={1}>{w.content}</Text>
                   <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
                   <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
+                  {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
                 </View>
               </View>
             ))

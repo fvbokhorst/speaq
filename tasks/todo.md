@@ -123,13 +123,35 @@ Vault files are stored UNENCRYPTED on disk. They must be AES-256 encrypted.
 PIN hash uses a simple JS hash function instead of CryptoJS.SHA256.
 
 ### Plan
-- [ ] 1. Replace `hashPin()` with CryptoJS.SHA256
-- [ ] 2. Add encryption key derivation from PIN (normal layer = speaq_pin, hidden layer = hidden PIN)
-- [ ] 3. Encrypt files on `addToVault()`: read as base64, AES-256 encrypt, write encrypted
-- [ ] 4. Encrypt notes on `addToVault()` and `addDecoyNote()`
-- [ ] 5. Add `readVaultFile()` export that decrypts before returning content
-- [ ] 6. Update VaultScreen to use decrypted reads for notes, photos, and sharing
+- [x] 1. Replace `hashPin()` with CryptoJS.SHA256
+- [x] 2. Add encryption key derivation from PIN (normal layer = speaq_pin, hidden layer = hidden PIN)
+- [x] 3. Encrypt files on `addToVault()`: read as base64, AES-256 encrypt, write encrypted
+- [x] 4. Encrypt notes on `addToVault()` and `addDecoyNote()`
+- [x] 5. Add `readVaultFile()` export that decrypts before returning content
+- [x] 6. Update VaultScreen to use decrypted reads for notes, photos, and sharing
 - [ ] 7. rsync to ~/speaq-build, git add, commit, push
+
+### Review
+- **vault.ts**: `hashPin()` now uses `CryptoJS.SHA256` instead of simple JS hash. New `deriveKey()` derives AES key from PIN via SHA256 with salt prefix. `addToVault()` encrypts all files (notes as text, photos/docs as base64) with `CryptoJS.AES.encrypt`. New `readVaultFile()` export decrypts on read with fallback for legacy unencrypted files. `addDecoyNote()` also encrypts. New `setNormalPin()` export for App.tsx to set encryption key after PIN auth. All vault files now use `.enc` extension.
+- **VaultScreen.tsx**: All file reads (notes, photos, sharing) now go through `readVaultFile()` for decryption. Photo thumbnails decrypted on `loadFiles()` into data URIs. Note editing re-encrypts via remove+add pattern. Removed direct RNFS usage.
+- **App.tsx**: Imports `setNormalPin` from vault. Calls it on both PIN setup and PIN enter success paths, so vault encryption key is available before any vault operations.
+
+---
+
+## Fix #6: Witness Mode - CryptoJS.SHA256 + GPS
+
+### Problem
+`createWitness()` uses `crypto.subtle.digest("SHA-256", data)` which doesn't exist in React Native.
+GPS location field exists on WitnessRecord but is never populated.
+
+### Plan
+- [x] 1. Replace `crypto.subtle.digest` with `CryptoJS.SHA256` in `advanced.ts`
+- [x] 2. Hash includes: content + timestamp + random nonce
+- [x] 3. Store hash as hex string
+- [x] 4. Add GPS capture via `navigator.geolocation` with try/catch (null if unavailable)
+- [x] 5. Remove `async` from `createWitness` (no longer needs await)
+- [x] 6. Update AdvancedScreen.tsx to work with updated signature
+- [ ] 7. rsync to ~/speaq-build, git add -A, commit, push
 
 ### Review
 _(wordt ingevuld na afronding)_

@@ -5,6 +5,7 @@
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import CryptoJS from "crypto-js";
 import { relay } from "./relay";
 
 // --- Ghost Groups ---
@@ -58,6 +59,7 @@ class AdvancedService {
   private witnessRecords: WitnessRecord[] = [];
   private deadManSwitch: DeadManSwitch | null = null;
   private loaded = false;
+  private _checkInterval: ReturnType<typeof setInterval> | null = null;
 
   async load(): Promise<void> {
     if (this.loaded) return;
@@ -71,6 +73,15 @@ class AdvancedService {
       if (wr) this.witnessRecords = JSON.parse(wr);
       if (dms) this.deadManSwitch = JSON.parse(dms);
       this.loaded = true;
+
+      // Check immediately if Dead Man's Switch is overdue
+      if (this.isOverdue()) {
+        this.triggerDeadManSwitch();
+        await this.disableDeadManSwitch();
+      }
+
+      // Start background check every 60 seconds
+      this.startCheckInterval();
     } catch (e) {
       console.error("Advanced load error:", e);
     }
@@ -133,25 +144,50 @@ class AdvancedService {
     return [...this.witnessRecords].reverse();
   }
 
-  async createWitness(type: WitnessRecord["type"], content: string): Promise<WitnessRecord> {
-    // Generate SHA-256 hash of content
-    const encoder = new TextEncoder();
-    const data = encoder.encode(content + Date.now().toString());
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  createWitness(type: WitnessRecord["type"], content: string): WitnessRecord {
+    // Generate SHA-256 hash of content + timestamp + nonce (RN-compatible)
+    const timestamp = Date.now();
+    const nonce = Math.random().toString(36).substring(2, 10);
+    const contentHash = CryptoJS.SHA256(content + timestamp.toString() + nonce).toString();
+
+    // Try to capture GPS location
+    let location: { lat: number; lng: number } | undefined;
+    try {
+      if (navigator && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            // Update the record with location once available
+            const idx = this.witnessRecords.findIndex((r) => r.id === record.id);
+            if (idx !== -1) {
+              this.witnessRecords[idx].location = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
+            }
+          },
+          () => {
+            // GPS unavailable (simulator, permissions denied) - location stays undefined
+          },
+          { timeout: 5000, enableHighAccuracy: false }
+        );
+      }
+    } catch {
+      // navigator.geolocation not available in this environment
+    }
 
     const record: WitnessRecord = {
       id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-      timestamp: Date.now(),
+      timestamp,
       contentHash,
       type,
       content,
+      location,
       shared: false,
     };
 
     this.witnessRecords.push(record);
-    await AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
+    AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
     return record;
   }
 
@@ -180,6 +216,7 @@ class AdvancedService {
       message,
     };
     await AsyncStorage.setItem(STORAGE_KEYS.deadManSwitch, JSON.stringify(this.deadManSwitch));
+    this.startCheckInterval();
     return this.deadManSwitch;
   }
 
@@ -193,6 +230,24 @@ class AdvancedService {
     if (!this.deadManSwitch) return;
     this.deadManSwitch.enabled = false;
     await AsyncStorage.setItem(STORAGE_KEYS.deadManSwitch, JSON.stringify(this.deadManSwitch));
+    this.stopCheckInterval();
+  }
+
+  private startCheckInterval(): void {
+    this.stopCheckInterval();
+    this._checkInterval = setInterval(async () => {
+      if (this.isOverdue()) {
+        this.triggerDeadManSwitch();
+        await this.disableDeadManSwitch();
+      }
+    }, 60_000);
+  }
+
+  private stopCheckInterval(): void {
+    if (this._checkInterval) {
+      clearInterval(this._checkInterval);
+      this._checkInterval = null;
+    }
   }
 
   isOverdue(): boolean {

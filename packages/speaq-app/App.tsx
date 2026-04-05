@@ -35,6 +35,7 @@ import { loadGroups } from "./src/services/groups";
 import { loadMining } from "./src/services/mining";
 import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
+import { setNormalPin } from "./src/services/vault";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -58,7 +59,7 @@ function App() {
       loadMining(); // Mining must start AFTER wallet is loaded
     });
     contactsService.load();
-    advancedService.load();
+    advancedService.load(); // awaited internally - checks Dead Man's Switch on startup
     loadIdentity();
     loadBlocked();
     loadProfile();
@@ -113,6 +114,7 @@ function App() {
       } else {
         if (pin === tempPin) {
           setSavedPin(pin);
+          setNormalPin(pin);
           AsyncStorage.setItem("speaq_pin", pin);
           setPin("");
           setPhase("main");
@@ -125,6 +127,7 @@ function App() {
       }
     } else if (phase === "pin-enter") {
       if (pin === savedPin) {
+        setNormalPin(pin);
         setPin("");
         setPhase("main");
       } else {
