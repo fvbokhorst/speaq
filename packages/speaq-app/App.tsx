@@ -38,6 +38,7 @@ import { loadMining } from "./src/services/mining";
 import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
 import { setNormalPin } from "./src/services/vault";
+import { setKeystorePin } from "./src/services/crypto";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -118,6 +119,7 @@ function App() {
         if (pin === tempPin) {
           setSavedPin(pin);
           setNormalPin(pin);
+          setKeystorePin(pin);
           AsyncStorage.setItem("speaq_pin", pin);
           setPin("");
           setPhase("main");
@@ -131,6 +133,7 @@ function App() {
     } else if (phase === "pin-enter") {
       if (pin === savedPin) {
         setNormalPin(pin);
+        setKeystorePin(pin);
         setPin("");
         setPhase("main");
       } else {

@@ -217,4 +217,11 @@ _(wordt ingevuld na afronding)_
 - [x] 6. Add privacy protections to lightning.ts (no SPEAQ ID, no identifying memos, random alias)
 
 ### Deploy
-- [ ] 7. rsync to ~/speaq-build, git add -A, commit, push
+- [x] 7. rsync to ~/speaq-build, git add -A, commit, push (commit 0f90317)
+
+### Review
+- **crypto.ts**: New section 4 (Keystore Encryption) with `setKeystorePin()`, `keystoreEncrypt()`, `keystoreDecrypt()`. All 4 persistence functions (saveKyberKeyPair, loadKyberKeyPair, saveRatchetState, loadRatchetState) encrypt before write and decrypt on read. Legacy plaintext data auto-migrates on first load.
+- **relay.ts**: Imports transport functions. New `padMessage()` (4096-byte blocks), `unpadMessage()`, `randomDelay()` (50-300ms). `connect()` checks direct connection first, enables obfuscation as fallback. `send()` and `sendTyping()` apply padding + random delay.
+- **server.ts**: New `SEND_SEALED` message type -- relay delivers without `from` field. Recipient gets `RECEIVE_SEALED` with blob only. Offline queue stores "sealed" as sender. Relay cannot build social graph.
+- **WalletScreen.tsx**: Balance check uses `amount > balance + 0.0001` for float tolerance. Amount parsing uses `parseFloat(parseFloat(sendAmount).toFixed(8))` for decimal precision.
+- **lightning.ts**: Privacy header added. `generateRandomAlias()` for LNURL discovery. `createInvoice()` sends generic "payment" memo to LSP, stores user memo locally only. SPEAQ ID never touches LSP.
