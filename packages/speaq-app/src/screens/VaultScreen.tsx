@@ -119,7 +119,9 @@ export default function VaultScreen({ onBack }: Props) {
   const [noteText, setNoteText] = useState("");
   const [editingNoteFile, setEditingNoteFile] = useState<VaultFile | null>(null);
   const [showSharePicker, setShowSharePicker] = useState(false);
+  const [showShareQR, setShowShareQR] = useState(false);
   const [shareFile, setShareFile] = useState<VaultFile | null>(null);
+  const [shareManualId, setShareManualId] = useState("");
 
   async function handleTapFile(file: VaultFile) {
     if (file.type === "photo") {
@@ -363,24 +365,77 @@ export default function VaultScreen({ onBack }: Props) {
       <Modal visible={showSharePicker} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Send to Contact</Text>
+            <Text style={st.modalTitle}>Send to</Text>
             <Text style={st.modalSub}>{shareFile?.name}</Text>
-            {contactsService.getContacts().length === 0 ? (
-              <Text style={{ color: colors.signal.steel, fontSize: 12, paddingVertical: 20 }}>No contacts yet.</Text>
-            ) : (
-              <ScrollView style={{ maxHeight: 300 }}>
-                {contactsService.getContacts().map((c) => (
-                  <TouchableOpacity key={c.id} style={st.shareContactRow} onPress={() => handleSendToContact(c.id, c.name)}>
-                    <View style={st.shareContactAvatar}><Text style={st.shareContactInit}>{c.name.charAt(0)}</Text></View>
-                    <Text style={st.shareContactName}>{c.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+
+            {/* Manual ID input */}
+            <View style={st.shareIdRow}>
+              <TextInput
+                style={st.shareIdInput}
+                value={shareManualId}
+                onChangeText={setShareManualId}
+                placeholder="Enter SPEAQ ID"
+                placeholderTextColor={colors.signal.steel}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                style={[st.shareIdSend, !shareManualId.trim() && { opacity: 0.3 }]}
+                disabled={!shareManualId.trim()}
+                onPress={() => { handleSendToContact(shareManualId.trim(), shareManualId.trim()); setShareManualId(""); }}>
+                <Text style={st.shareIdSendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Scan QR */}
+            <TouchableOpacity style={st.shareScanBtn} onPress={() => { setShowSharePicker(false); setShowShareQR(true); }}>
+              <Text style={st.shareScanText}>Scan QR Code</Text>
+            </TouchableOpacity>
+
+            {/* Contact list */}
+            {contactsService.getContacts().length > 0 && (
+              <>
+                <Text style={st.shareContactsLabel}>Your Contacts</Text>
+                <ScrollView style={{ maxHeight: 200 }}>
+                  {contactsService.getContacts().map((c) => (
+                    <TouchableOpacity key={c.id} style={st.shareContactRow} onPress={() => handleSendToContact(c.id, c.name)}>
+                      <View style={st.shareContactAvatar}><Text style={st.shareContactInit}>{c.name.charAt(0)}</Text></View>
+                      <Text style={st.shareContactName}>{c.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
             )}
-            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowSharePicker(false); setShareFile(null); }}>
+
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowSharePicker(false); setShareFile(null); setShareManualId(""); }}>
               <Text style={st.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* Share QR Scanner */}
+      <Modal visible={showShareQR} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: colors.depth.void }}>
+          <View style={st.scanHeader}>
+            <Text style={st.scanTitle}>Scan SPEAQ ID</Text>
+            <TouchableOpacity onPress={() => { setShowShareQR(false); setShowSharePicker(true); }}>
+              <Text style={st.scanClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <CameraScreen
+            scanBarcode
+            onReadCode={(event: any) => {
+              const value = event.nativeEvent?.codeStringValue || "";
+              const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+              if (speaqId) {
+                setShowShareQR(false);
+                handleSendToContact(speaqId, speaqId);
+              }
+            }}
+            showFrame
+            frameColor={colors.voice.gold}
+            laserColor={colors.quantum.teal}
+          />
         </View>
       </Modal>
 
@@ -492,6 +547,16 @@ const st = StyleSheet.create({
   noteDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red, alignItems: "center" },
   noteDeleteText: { color: colors.signal.red, fontSize: 14 },
 
+  shareIdRow: { flexDirection: "row", gap: 8, marginBottom: 12, width: "100%" },
+  shareIdInput: { flex: 1, backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 14 },
+  shareIdSend: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, justifyContent: "center" },
+  shareIdSendText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  shareScanBtn: { width: "100%", paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.quantum.teal, alignItems: "center", marginBottom: 16 },
+  shareScanText: { color: colors.quantum.teal, fontSize: 14, fontWeight: "500" },
+  shareContactsLabel: { color: colors.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, alignSelf: "flex-start" },
+  scanHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: colors.depth.void },
+  scanTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  scanClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
   shareContactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
   shareContactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
   shareContactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
