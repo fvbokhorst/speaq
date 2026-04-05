@@ -12,8 +12,10 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { colors, fonts, spacing, radius } from "../theme/brand";
+import { getIdentity } from "../services/speaq";
 
 interface Chat {
   id: string;
@@ -50,7 +52,9 @@ const DEMO_CHATS: Chat[] = [
 
 export default function ChatListScreen() {
   const renderChat = ({ item }: { item: Chat }) => (
-    <TouchableOpacity style={styles.chatItem} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.chatItem} activeOpacity={0.7} onPress={() => {
+      Alert.alert(item.name, "Quantum-encrypted chat coming soon.\n\nThis will open a real encrypted conversation via the SPEAQ relay server.");
+    }}>
       {/* Avatar */}
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>
@@ -99,7 +103,14 @@ export default function ChatListScreen() {
       />
 
       {/* New Chat FAB */}
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => {
+        const id = getIdentity();
+        Alert.alert(
+          "New Chat",
+          `Your SPEAQ ID:\n${id?.speaqId || "not created"}\n\nShare this ID with someone to start a quantum-encrypted chat. Or scan their QR code.`,
+          [{ text: "OK" }]
+        );
+      }}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
     </View>
