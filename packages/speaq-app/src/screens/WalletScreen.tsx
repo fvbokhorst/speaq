@@ -173,7 +173,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
       {/* Header */}
       <View style={st.header}>
         <Text style={st.title}>{t("wallet")}</Text>
-        <Text style={st.headerSub}>Quantum Pay</Text>
+        <Text style={st.headerSub}>{t("quantumPay")}</Text>
       </View>
 
       <ScrollView style={st.scrollArea} contentContainerStyle={st.scrollContent}>
@@ -185,23 +185,23 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
           <View style={st.balanceActions}>
             <TouchableOpacity style={st.actionBtn} onPress={() => setShowSend(true)}>
               <Text style={st.actionIcon}>S</Text>
-              <Text style={st.actionLabel}>Send</Text>
+              <Text style={st.actionLabel}>{t("send")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={st.actionBtn} onPress={() => setShowReceive(true)}>
               <Text style={st.actionIcon}>R</Text>
-              <Text style={st.actionLabel}>Receive</Text>
+              <Text style={st.actionLabel}>{t("receive")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={st.actionBtn} onPress={() => setShowRequest(true)}>
               <Text style={st.actionIcon}>?</Text>
-              <Text style={st.actionLabel}>Request</Text>
+              <Text style={st.actionLabel}>{t("request")}</Text>
             </TouchableOpacity>
           </View>
         </View>
         {/* Projects */}
         <View style={st.sectionRow}>
-          <Text style={st.sectionTitle}>Projects</Text>
+          <Text style={st.sectionTitle}>{t("projects")}</Text>
           <TouchableOpacity onPress={() => setShowNewProject(true)}>
-            <Text style={st.sectionAdd}>+ New</Text>
+            <Text style={st.sectionAdd}>{t("new")}</Text>
           </TouchableOpacity>
         </View>
         {projects.length === 0 ? (
@@ -222,14 +222,14 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
 
         {/* Linked Wallets */}
         <View style={st.sectionRow}>
-          <Text style={st.sectionTitle}>Linked Wallets</Text>
+          <Text style={st.sectionTitle}>{t("linkedWallets")}</Text>
           <TouchableOpacity onPress={() => setShowLinkWallet(true)}>
-            <Text style={st.sectionAdd}>+ Link</Text>
+            <Text style={st.sectionAdd}>{t("link")}</Text>
           </TouchableOpacity>
         </View>
         {linkedWallets.length === 0 ? (
           <View style={st.emptySmall}>
-            <Text style={st.emptySub}>Link a Monero, Bitcoin, or Ethereum wallet to convert Q-Credits.</Text>
+            <Text style={st.emptySub}>{t("linkWalletHint")}</Text>
           </View>
         ) : (
           linkedWallets.map((w) => (
@@ -248,14 +248,14 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) 
 
         {/* Recent Transactions */}
         <View style={st.sectionRow}>
-          <Text style={st.sectionTitle}>Recent</Text>
+          <Text style={st.sectionTitle}>{t("recent")}</Text>
           <TouchableOpacity onPress={onOpenTransactions}>
-            <Text style={st.sectionAdd}>View All</Text>
+            <Text style={st.sectionAdd}>{t("viewAll")}</Text>
           </TouchableOpacity>
         </View>
         {transactions.length === 0 ? (
           <View style={st.emptySmall}>
-            <Text style={st.emptySub}>No transactions yet</Text>
+            <Text style={st.emptySub}>{t("noTransactions")}</Text>
           </View>
         ) : (
           transactions.slice(0, 3).map((item) => (

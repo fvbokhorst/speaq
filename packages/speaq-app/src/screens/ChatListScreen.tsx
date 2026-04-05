@@ -112,7 +112,7 @@ export default function ChatListScreen({ onOpenChat }: Props) {
     <View style={st.container}>
       <View style={st.header}>
         <Text style={st.logo}><Text style={st.logoS}>SPEA</Text><Text style={st.logoQ}>Q</Text></Text>
-        <Text style={st.headerSub}>Quantum Encrypted</Text>
+        <Text style={st.headerSub}>{t("quantumEncrypted")}</Text>
       </View>
       {chats.length === 0 ? (
         <View style={st.empty}>
