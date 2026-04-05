@@ -52,7 +52,10 @@ function App() {
 
   // Check if user is registered on startup + load wallet
   useEffect(() => {
-    walletService.load().then(() => walletService.addWelcomeBonus());
+    walletService.load().then(() => {
+      walletService.addWelcomeBonus();
+      loadMining(); // Mining must start AFTER wallet is loaded
+    });
     contactsService.load();
     advancedService.load();
     loadIdentity();
@@ -60,7 +63,6 @@ function App() {
     loadProfile();
     loadGroups();
     loadLanguage();
-    loadMining();
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);

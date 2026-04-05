@@ -4,7 +4,7 @@
  * Phase 5: Quantum Pay
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert,
 } from "react-native";
@@ -23,6 +23,15 @@ interface Props {
 export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
+
+  // Live refresh balance every 5 seconds (for mining rewards)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBalance(walletService.getBalance());
+      setTransactions(walletService.getTransactions());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
   const [projects, setProjects] = useState<Project[]>(walletService.getProjects());
   const [linkedWallets, setLinkedWallets] = useState<LinkedWallet[]>(walletService.getLinkedWallets());
   const [showSend, setShowSend] = useState(false);
