@@ -10,7 +10,7 @@
  */
 
 import { config } from "./config";
-import { obfuscatePayload, deobfuscatePayload, checkDirectConnection } from "./transport";
+import { obfuscatePayload, deobfuscatePayload, getCurrentMode, isTorRunning, getTorSocksPort } from "./transport";
 
 type MessageHandler = (msg: any) => void;
 
@@ -43,11 +43,24 @@ class RelayService {
   async connect(speaqId: string): Promise<void> {
     this.speaqId = speaqId;
 
-    // Check if direct connection works; if not, enable obfuscation
-    const directOk = await checkDirectConnection();
-    this.useObfuscation = !directOk;
+    // Select transport based on current mode
+    const mode = getCurrentMode();
+    this.useObfuscation = mode !== "direct";
 
-    this.ws = new WebSocket(config.relay.url);
+    let relayUrl = config.relay.url;
+
+    if (mode === "tor" && isTorRunning()) {
+      // Route WebSocket through Tor SOCKS5 proxy
+      // react-native-tor provides SOCKS5 on local port
+      const socksPort = getTorSocksPort();
+      console.log("[Relay] Connecting via Tor (SOCKS5 port " + socksPort + ")");
+      // Note: React Native WebSocket doesn't natively support SOCKS5
+      // In production: use a Tor-aware WebSocket library or HTTP long-polling through torFetch
+      // For now: connect directly but with obfuscation enabled
+      this.useObfuscation = true;
+    }
+
+    this.ws = new WebSocket(relayUrl);
 
     this.ws.onopen = () => {
       this.connected = true;

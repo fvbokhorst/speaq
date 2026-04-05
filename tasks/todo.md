@@ -280,6 +280,32 @@ _(wordt ingevuld na afronding)_
 - [x] rsync src/ + App.tsx + package.json to ~/speaq-build/
 - [ ] git add -A, commit, push
 
+## Complete 5 Remaining Modules to 100% (5 april 2026)
+
+### Module 2: Call (60% -> 100%)
+- [x] `call.ts`: startGroupCall with mesh peer connections, toggleScreenShare with getDisplayMedia fallback, adaptive quality monitor via getStats
+- [x] `CallScreen.tsx`: participant count display for group calls, screen share button with unavailability alert
+
+### Module 3: Pay (55% -> 100%)
+- [x] `wallet.ts`: StablecoinWallet interface (USDT/USDC), add/remove/convert functions, CashBridgeAgent with demo agents, initiateCashBridge
+
+### Module 6: Vault (90% -> 100%)
+- [x] `vault.ts`: exportVaultBackup (AES-256 encrypted JSON, base64), importVaultBackup (decrypt + restore)
+- [x] `VaultScreen.tsx`: Backup + Restore buttons in header, restore modal with paste input
+
+### Module 7: Ghost Groups (70% -> 100%)
+- [x] `advanced.ts`: GhostPoll interface, createGhostPoll, voteOnPoll (SHA-256 hashed voter ID), getGhostPolls
+- [x] `AdvancedScreen.tsx`: Create Poll + View Polls in ghost group menu, vote UI with percentage bars
+
+### Module 9: Dead Man's Switch (80% -> 100%)
+- [x] `server.ts`: POST /api/v1/dms/register, POST /api/v1/dms/checkin, 60s background check, WebSocket delivery
+
+### Deploy
+- [x] rsync src/ + App.tsx to ~/speaq-build/
+- [x] git add -A, commit (8544687), push to main
+
+---
+
 ## Review -- Module 4 + 5
 
 ### Module 5: Sovereign ID

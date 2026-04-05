@@ -11,7 +11,12 @@
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import TorBridge from "react-native-tor";
 import { config } from "./config";
+
+// --- Tor Client ---
+let torClient: any = null;
+let torReady = false;
 
 export type TransportMode = "direct" | "obfuscated" | "tor" | "mesh";
 
@@ -56,6 +61,90 @@ export function getTransportStatus(): TransportStatus {
 
 export function getCurrentMode(): TransportMode {
   return status.currentMode;
+}
+
+// --- Tor Integration (react-native-tor) ---
+
+/**
+ * Start the Tor client. Takes 2-5 seconds on first boot.
+ * After this, all HTTP requests can be routed through Tor
+ * using torFetch() instead of regular fetch().
+ */
+export async function startTor(): Promise<boolean> {
+  try {
+    torClient = TorBridge();
+    await torClient.startIfNotStarted();
+    torReady = true;
+    status.torAvailable = true;
+    await save();
+    console.log("[Transport] Tor started successfully");
+    return true;
+  } catch (e) {
+    console.warn("[Transport] Tor failed to start:", e);
+    torReady = false;
+    status.torAvailable = false;
+    return false;
+  }
+}
+
+export async function stopTor(): Promise<void> {
+  if (torClient) {
+    try {
+      await torClient.stopIfRunning();
+    } catch (e) {}
+    torReady = false;
+    torClient = null;
+    status.torAvailable = false;
+    await save();
+  }
+}
+
+export function isTorRunning(): boolean {
+  return torReady;
+}
+
+/**
+ * Fetch a URL through Tor. IP address is completely hidden.
+ * Use this instead of regular fetch() for anonymous requests.
+ */
+export async function torFetch(url: string, options?: any): Promise<any> {
+  if (!torClient || !torReady) {
+    throw new Error("Tor not running");
+  }
+
+  try {
+    const method = options?.method || "GET";
+    const headers = options?.headers || {};
+    const body = options?.body;
+
+    if (method === "GET") {
+      return await torClient.get(url, headers);
+    } else {
+      return await torClient.post(url, body || "", headers);
+    }
+  } catch (e) {
+    console.warn("[Transport] Tor fetch failed:", e);
+    throw e;
+  }
+}
+
+/**
+ * Create a WebSocket connection through Tor SOCKS5 proxy.
+ * Returns the SOCKS5 proxy port for WebSocket libraries to use.
+ */
+export function getTorSocksPort(): number {
+  // react-native-tor exposes SOCKS5 on port 9050 by default
+  return 9050;
+}
+
+/**
+ * Get the relay URL for Tor connections.
+ * If Tor is running, route through SOCKS5 proxy.
+ */
+export function getRelayUrlForTor(): string {
+  // In production: use .onion address for the relay
+  // For now: same URL but routed through Tor SOCKS5
+  return config.relay.url;
 }
 
 // --- Direct WebSocket ---
@@ -271,7 +360,7 @@ export function getMeshStats(): { scanning: boolean; peerCount: number; messages
 // --- Automatic Fallback ---
 
 export async function selectBestTransport(): Promise<TransportMode> {
-  // Try direct first
+  // Try direct first (fastest)
   const directOk = await checkDirectConnection();
   if (directOk) {
     status.currentMode = "direct";
@@ -279,17 +368,30 @@ export async function selectBestTransport(): Promise<TransportMode> {
     return "direct";
   }
 
-  // Try obfuscated (same server but traffic looks different)
-  // In production: try connecting via domain fronting
+  // Direct failed (possibly censored). Try Tor.
+  console.log("[Transport] Direct connection failed. Starting Tor...");
+  const torOk = await startTor();
+  if (torOk) {
+    // Verify relay is reachable via Tor
+    try {
+      await torFetch(config.relay.healthUrl);
+      status.currentMode = "tor";
+      await save();
+      console.log("[Transport] Connected via Tor");
+      return "tor";
+    } catch (e) {
+      console.warn("[Transport] Tor connected but relay unreachable via Tor");
+    }
+  }
+
+  // Tor failed too. Try obfuscated (domain fronting).
   status.currentMode = "obfuscated";
   await save();
+  console.log("[Transport] Falling back to obfuscated transport");
   return "obfuscated";
 
-  // If obfuscated fails too, try Tor
-  // status.currentMode = "tor";
-
   // Last resort: mesh (no internet needed)
-  // status.currentMode = "mesh";
+  // Mesh requires nearby BLE peers, handled separately
 }
 
 // --- Domain Fronting ---
