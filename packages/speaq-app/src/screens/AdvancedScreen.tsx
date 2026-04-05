@@ -4,7 +4,7 @@
  * Accessible from Settings
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Dimensions,
 } from "react-native";
@@ -295,6 +295,7 @@ export default function AdvancedScreen({ onBack }: Props) {
               <Text style={st.scannerClose}>Close</Text>
             </TouchableOpacity>
           </View>
+          <Suspense fallback={<View style={{ flex: 1 }}><Text style={{ color: colors.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
           <Camera
             scanBarcode
             onReadCode={handleQRScan}
@@ -302,6 +303,7 @@ export default function AdvancedScreen({ onBack }: Props) {
             frameColor={colors.voice.gold}
             laserColor={colors.quantum.teal}
           />
+          </Suspense>
         </View>
       </Modal>
 

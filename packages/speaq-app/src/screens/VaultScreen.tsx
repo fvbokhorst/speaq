@@ -4,13 +4,14 @@
  * Two layers: normal (visible) + hidden (secret PIN)
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Image, Dimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
+import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { contactsService } from "../services/contacts";
 import { sendMessage } from "../services/speaq";
@@ -422,6 +423,7 @@ export default function VaultScreen({ onBack }: Props) {
               <Text style={st.scanClose}>Close</Text>
             </TouchableOpacity>
           </View>
+          <Suspense fallback={<View style={{ flex: 1, backgroundColor: colors.depth.void }}><Text style={{ color: colors.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
           <Camera
             scanBarcode
             onReadCode={(event: any) => {
@@ -436,6 +438,7 @@ export default function VaultScreen({ onBack }: Props) {
             frameColor={colors.voice.gold}
             laserColor={colors.quantum.teal}
           />
+          </Suspense>
         </View>
       </Modal>
 
