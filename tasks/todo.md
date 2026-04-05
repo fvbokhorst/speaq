@@ -318,3 +318,47 @@ _(wordt ingevuld na afronding)_
 - **package.json**: Added `react-native-webview ^14.0.0`.
 - **App.tsx**: BrowserScreen imported, routed as "browser" tab. Accessible from Settings > Advanced > Freedom Browse.
 - **SettingsScreen.tsx**: New `onOpenBrowser` prop, "Freedom Browse" button added in Advanced section.
+
+---
+
+## 5 Critical Security Fixes (5 april 2026)
+
+### Fix 1: Remove fake Tor claim
+- [x] `transport.ts`: startTor() only returns true if Orbot detected on port 9050
+- [x] Removed meek bridge fallback that falsely set torReady=true
+- [x] Log: "[Transport] Tor not available - install Orbot for Tor protection"
+
+### Fix 2: Wire Sealed Sender
+- [x] `speaq.ts`: sendMessage() uses SEND_SEALED instead of SEND
+- [x] Sender speaqId encrypted INSIDE blob, not exposed to relay
+- [x] Added senderId field to encrypted plaintext payload
+
+### Fix 3: Strengthen PIN with PBKDF2
+- [x] `crypto.ts`: setKeystorePin() uses CryptoJS.PBKDF2 with 100k iterations
+- [x] speaqId used as salt (unique per device)
+- [x] Function now async, App.tsx updated to await
+
+### Fix 4: Save ratchet state BEFORE advancing
+- [x] `crypto.ts`: ratchetEncrypt() saves state before returning
+- [x] `crypto.ts`: ratchetDecrypt() saves state before returning
+- [x] Both accept contactId param, both now async
+- [x] Callers updated: speaq.ts sendMessage, ChatScreen decrypt
+
+### Fix 5: Remove fake mesh from UI
+- [x] `transport.ts`: startMeshScan() sets meshAvailable=false, logs "BLE not implemented"
+- [x] Removed setTimeout that pretended to find peers
+- [x] getMeshStats() always returns peerCount: 0
+- [x] `config.ts`: meshNetwork feature flag set to false
+
+### Deploy
+- [x] rsync to ~/speaq-build/src/ + App.tsx
+- [x] git add -A, commit (e406cf8)
+- [ ] git push (no remote configured on ~/speaq-build)
+
+### Review
+- **transport.ts**: Two fake claims removed. Tor: only real Orbot detection remains. Mesh: no more simulated scanning or fake peer counts. Feature flag disabled.
+- **speaq.ts**: SEND_SEALED replaces SEND. Sender identity moved inside encrypted blob. saveRatchetState removed from import (handled internally by ratchetEncrypt now).
+- **crypto.ts**: PBKDF2 with 100k iterations replaces single SHA256 for PIN derivation. ratchetEncrypt/ratchetDecrypt are now async and save state before returning (crash-safe).
+- **config.ts**: meshNetwork: false.
+- **App.tsx**: handlePinSubmit made async, both setKeystorePin calls awaited.
+- **ChatScreen.tsx**: ratchetDecrypt call updated to await with contactId. Removed saveRatchetState import.

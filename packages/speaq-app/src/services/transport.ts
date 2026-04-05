@@ -72,7 +72,7 @@ export function getCurrentMode(): TransportMode {
  */
 export async function startTor(): Promise<boolean> {
   try {
-    // Strategy 1: Check if Orbot (Tor proxy app) is running on device
+    // Check if Orbot (Tor proxy app) is running on device
     // Orbot exposes SOCKS5 on port 9050
     const orbotCheck = await fetch("http://127.0.0.1:9050", { method: "HEAD" }).catch(() => null);
     if (orbotCheck) {
@@ -83,18 +83,17 @@ export async function startTor(): Promise<boolean> {
       return true;
     }
 
-    // Strategy 2: Use meek bridge (route through CDN)
-    // Meek makes traffic look like connections to a major CDN
-    // This works without installing any extra app
-    torReady = true; // Enable Tor mode with obfuscation as proxy
-    status.torAvailable = true;
+    // Orbot not found -- Tor is not available
+    torReady = false;
+    status.torAvailable = false;
     await save();
-    console.log("[Transport] Tor mode enabled via meek bridge");
-    return true;
+    console.log("[Transport] Tor not available - install Orbot for Tor protection");
+    return false;
   } catch (e) {
     console.warn("[Transport] Tor failed to start:", e);
     torReady = false;
     status.torAvailable = false;
+    await save();
     return false;
   }
 }
@@ -253,17 +252,13 @@ export function isMeshScanning(): boolean {
 }
 
 export async function startMeshScan(): Promise<void> {
+  // BLE mesh is not implemented yet
   // In production: use react-native-ble-plx for BLE scanning
-  // BleManager.startDeviceScan(null, null, (error, device) => { ... })
-  meshScanning = true;
-  status.meshAvailable = true;
-
-  // Simulate finding peers (for testing without BLE hardware)
-  setTimeout(() => {
-    meshPeers = []; // Real implementation would populate from BLE scan
-    status.meshPeers = meshPeers.length;
-    save();
-  }, 3000);
+  meshScanning = false;
+  status.meshAvailable = false;
+  status.meshPeers = 0;
+  await save();
+  console.log("[Mesh] BLE not implemented yet");
 }
 
 export function stopMeshScan(): void {
@@ -354,8 +349,8 @@ export function handleIncomingMeshMessage(raw: string, fromNodeId: string): void
 
 export function getMeshStats(): { scanning: boolean; peerCount: number; messagesRelayed: number } {
   return {
-    scanning: meshScanning,
-    peerCount: meshPeers.length,
+    scanning: false,
+    peerCount: 0,
     messagesRelayed,
   };
 }

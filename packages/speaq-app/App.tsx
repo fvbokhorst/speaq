@@ -109,7 +109,7 @@ function App() {
     setPin(pin.slice(0, -1));
   }
 
-  function handlePinSubmit() {
+  async function handlePinSubmit() {
     if (phase === "pin-setup") {
       if (pinStep === "create") {
         if (pin.length < 4) return;
@@ -120,7 +120,7 @@ function App() {
         if (pin === tempPin) {
           setSavedPin(pin);
           setNormalPin(pin);
-          setKeystorePin(pin);
+          await setKeystorePin(pin);
           AsyncStorage.setItem("speaq_pin", pin);
           setPin("");
           setPhase("main");
@@ -134,7 +134,7 @@ function App() {
     } else if (phase === "pin-enter") {
       if (pin === savedPin) {
         setNormalPin(pin);
-        setKeystorePin(pin);
+        await setKeystorePin(pin);
         setPin("");
         setPhase("main");
       } else {

@@ -16,7 +16,7 @@ import { colors } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
 import {
   decryptMessage, getContactKey,
-  getOrCreateRatchet, ratchetDecrypt, saveRatchetState,
+  getOrCreateRatchet, ratchetDecrypt,
   loadRatchetState, RatchetState,
 } from "../services/crypto";
 import {
@@ -86,8 +86,8 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               try {
                 const ratchetMsg = JSON.parse(msg.blob);
                 const { state } = await getOrCreateRatchet(myId, contactId);
-                const decrypted = ratchetDecrypt(state, ratchetMsg);
-                await saveRatchetState(contactId, state);
+                // State is saved inside ratchetDecrypt BEFORE returning (crash-safe)
+                const decrypted = await ratchetDecrypt(state, ratchetMsg, contactId);
                 data = JSON.parse(decrypted);
               } catch (ratchetErr) {
                 console.warn("[ChatScreen] Ratchet decrypt failed, trying legacy:", ratchetErr);

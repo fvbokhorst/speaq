@@ -43,7 +43,7 @@ export const config = {
     quantumPay: false,    // Phase 5
     freedomBrowse: false, // Phase 4
     witnessMode: true,    // Phase 5 - ACTIVE
-    meshNetwork: true,    // Phase 4 - ACTIVE (transport layer)
+    meshNetwork: false,   // Phase 4 - BLE not implemented yet
     torRouting: true,     // Phase 4 - ACTIVE (transport layer)
     lightning: true,      // Phase 8 - ACTIVE
     mining: true,         // Phase 6 - ACTIVE

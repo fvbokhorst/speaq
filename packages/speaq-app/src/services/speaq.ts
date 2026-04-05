@@ -14,7 +14,7 @@ import {
   encryptMessage, decryptMessage, getContactKey, generateSecureId,
   generateKyberKeyPair, saveKyberKeyPair, loadKyberKeyPair,
   getOrCreateRatchet, initRatchetFromKeyExchange,
-  ratchetEncrypt, saveRatchetState,
+  ratchetEncrypt,
   KyberKeyPair,
 } from "./crypto";
 import { generateDID, saveDID, loadDID } from "./identity-manager";
@@ -248,10 +248,13 @@ export function initiateKeyExchange(toSpeaqId: string): void {
 export async function sendMessage(toSpeaqId: string, text: string): Promise<void> {
   if (!ws || !connected || !identity) return;
 
+  // Include sender identity INSIDE the encrypted blob (sealed sender)
+  // The relay never sees who sent the message
   const plaintext = JSON.stringify({
     type: "message",
     text,
     from: identity.displayName,
+    senderId: identity.speaqId,
     timestamp: Date.now(),
   });
 
@@ -272,12 +275,13 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
   }
 
   // Encrypt with ratchet (forward secrecy)
-  const ratchetMsg = ratchetEncrypt(state, plaintext);
-  await saveRatchetState(toSpeaqId, state);
+  // State is saved inside ratchetEncrypt BEFORE returning (crash-safe)
+  const ratchetMsg = await ratchetEncrypt(state, plaintext, toSpeaqId);
 
-  // Send as ratchet-encrypted message
+  // Send as SEND_SEALED -- no sender ID exposed to relay
+  // Sender identity is encrypted inside the blob
   ws.send(JSON.stringify({
-    type: "SEND",
+    type: "SEND_SEALED",
     to: toSpeaqId,
     blob: JSON.stringify(ratchetMsg),
     encrypted: true,
