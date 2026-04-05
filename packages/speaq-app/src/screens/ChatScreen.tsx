@@ -27,9 +27,10 @@ interface Props {
   contactId: string;
   contactName: string;
   onBack: () => void;
+  onCall: (video: boolean) => void;
 }
 
-export default function ChatScreen({ contactId, contactName, onBack }: Props) {
+export default function ChatScreen({ contactId, contactName, onBack, onCall }: Props) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const flatListRef = useRef<FlatList>(null);
@@ -152,6 +153,12 @@ export default function ChatScreen({ contactId, contactName, onBack }: Props) {
           <Text style={st.headerName}>{contactName}</Text>
           <Text style={st.headerStatus}>Quantum Secured</Text>
         </View>
+        <TouchableOpacity style={st.callBtn} onPress={() => onCall(false)}>
+          <Text style={st.callBtnText}>P</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={st.callBtn} onPress={() => onCall(true)}>
+          <Text style={st.callBtnText}>V</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={st.encBanner}>
@@ -233,6 +240,8 @@ const st = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, color: colors.signal.white,
     fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.border.subtle,
   },
+  callBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginLeft: 8 },
+  callBtnText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
   attachBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle },
   attachIcon: { color: colors.voice.gold, fontSize: 22, fontWeight: "400" },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center" },

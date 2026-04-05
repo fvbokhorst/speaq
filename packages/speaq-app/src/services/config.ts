@@ -38,8 +38,8 @@ export const config = {
 
   // Feature flags
   features: {
-    voiceCalls: false,    // Phase 3
-    videoCalls: false,    // Phase 3
+    voiceCalls: true,     // Phase 3 - ACTIVE
+    videoCalls: true,     // Phase 3 - ACTIVE
     quantumPay: false,    // Phase 5
     freedomBrowse: false, // Phase 4
     witnessMode: false,   // Phase 5

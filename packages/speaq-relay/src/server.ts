@@ -249,6 +249,56 @@ wss.on("connection", (ws: WebSocket) => {
           break;
         }
 
+        // --- Call Signaling (Phase 3) ---
+        // All signaling is relayed as-is. Server sees nothing (zero knowledge).
+
+        case "CALL_OFFER": {
+          if (!clientId) return;
+          const recipient = clients.get(msg.to);
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({ type: "CALL_OFFER", from: clientId, sdp: msg.sdp, callId: msg.callId, video: msg.video }));
+          } else {
+            ws.send(JSON.stringify({ type: "CALL_UNAVAILABLE", to: msg.to, callId: msg.callId }));
+          }
+          break;
+        }
+
+        case "CALL_ANSWER": {
+          if (!clientId) return;
+          const recipient = clients.get(msg.to);
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({ type: "CALL_ANSWER", from: clientId, sdp: msg.sdp, callId: msg.callId }));
+          }
+          break;
+        }
+
+        case "ICE_CANDIDATE": {
+          if (!clientId) return;
+          const recipient = clients.get(msg.to);
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({ type: "ICE_CANDIDATE", from: clientId, candidate: msg.candidate, callId: msg.callId }));
+          }
+          break;
+        }
+
+        case "CALL_END": {
+          if (!clientId) return;
+          const recipient = clients.get(msg.to);
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({ type: "CALL_END", from: clientId, callId: msg.callId }));
+          }
+          break;
+        }
+
+        case "CALL_REJECT": {
+          if (!clientId) return;
+          const recipient = clients.get(msg.to);
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({ type: "CALL_REJECT", from: clientId, callId: msg.callId }));
+          }
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: "ERROR", error: "Unknown message type: " + msg.type }));
       }

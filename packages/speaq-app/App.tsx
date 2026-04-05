@@ -12,15 +12,21 @@ import WelcomeScreen from "./src/screens/WelcomeScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import ContactsScreen from "./src/screens/ContactsScreen";
+import CallScreen from "./src/screens/CallScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity } from "./src/services/speaq";
+import { callService } from "./src/services/call";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
   const [chatContactId, setChatContactId] = useState("");
   const [chatContactName, setChatContactName] = useState("");
+  const [inCall, setInCall] = useState(false);
+  const [callIsVideo, setCallIsVideo] = useState(false);
+  const [callIsIncoming, setCallIsIncoming] = useState(false);
+  const [callContactName, setCallContactName] = useState("");
   const [pin, setPin] = useState("");
   const [savedPin, setSavedPin] = useState("");
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
@@ -37,6 +43,26 @@ function App() {
       }
     });
   }, []);
+
+  // Listen for incoming calls
+  useEffect(() => {
+    const onIncoming = (data: any) => {
+      setCallContactName(data.from);
+      setCallIsVideo(data.video || false);
+      setCallIsIncoming(true);
+      setInCall(true);
+    };
+    callService.on("incomingCall", onIncoming);
+    return () => callService.off("incomingCall", onIncoming);
+  }, []);
+
+  function handleStartCall(video: boolean) {
+    callService.startCall(chatContactId, video);
+    setCallContactName(chatContactName);
+    setCallIsVideo(video);
+    setCallIsIncoming(false);
+    setInCall(true);
+  }
 
   function handlePinDigit(d: string) {
     if (pin.length < 6) setPin(pin + d);
@@ -156,7 +182,8 @@ function App() {
           setChatContactName(name);
           setActiveTab("chat");
         }} />}
-        {activeTab === "chat" && <ChatScreen contactId={chatContactId} contactName={chatContactName} onBack={() => setActiveTab("chats")} />}
+        {activeTab === "chat" && !inCall && <ChatScreen contactId={chatContactId} contactName={chatContactName} onBack={() => setActiveTab("chats")} onCall={handleStartCall} />}
+        {inCall && <CallScreen contactName={callContactName} isVideo={callIsVideo} isIncoming={callIsIncoming} onEnd={() => setInCall(false)} />}
         {activeTab === "contacts" && <ContactsScreen onOpenChat={(id: string, name: string) => {
           setChatContactId(id);
           setChatContactName(name);
