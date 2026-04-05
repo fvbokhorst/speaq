@@ -339,7 +339,6 @@ class CallService {
     this.iceCandidateBuffer = [];
     this.setState("idle");
   }
-}
 
   // --- Group Calls (stub - requires SFU server for production) ---
 
