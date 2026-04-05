@@ -23,6 +23,7 @@ import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
 import { contactsService } from "./src/services/contacts";
 import { advancedService } from "./src/services/advanced";
+import { loadBlocked } from "./src/services/blocked";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -44,6 +45,7 @@ function App() {
     contactsService.load();
     advancedService.load();
     loadIdentity();
+    loadBlocked();
     AsyncStorage.getItem("speaq_pin").then((storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);

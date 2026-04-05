@@ -1,27 +1,22 @@
 /**
  * SPEAQ - Chat Screen
  * Real messaging via relay server
+ * Features: persistence, typing indicator, in-chat payments,
+ * message deletion, date separators, haptic feedback
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  View, Text, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, Image,
+  View, Text, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, Vibration,
 } from "react-native";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
-import { colors, spacing, radius } from "../theme/brand";
+import { colors } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
-
-interface Message {
-  id: string;
-  text: string;
-  sent: boolean;
-  timestamp: string;
-  type: "text" | "image" | "file";
-  fileName?: string;
-  fileUri?: string;
-}
+import { loadMessages, saveMessages, StoredMessage } from "../services/messages";
+import { walletService } from "../services/wallet";
+import { isBlocked, blockUser } from "../services/blocked";
 
 interface Props {
   contactId: string;
@@ -32,49 +27,109 @@ interface Props {
 
 export default function ChatScreen({ contactId, contactName, onBack, onCall }: Props) {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<StoredMessage[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load persisted messages
+  useEffect(() => {
+    loadMessages(contactId).then((stored) => {
+      if (stored.length > 0) setMessages(stored);
+    });
+  }, [contactId]);
+
+  // Save messages when they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveMessages(contactId, messages);
+    }
+  }, [messages, contactId]);
+
+  // Listen for incoming messages + typing
   useEffect(() => {
     const unsubscribe = onMessage((msg: any) => {
-      if (msg.type === "RECEIVE" && msg.from === contactId) {
-        try {
-          const data = JSON.parse(atob(msg.blob));
-          if (data.type === "message") {
-            setMessages((prev) => [...prev, {
-              id: Date.now().toString(),
-              text: data.text,
-              sent: false,
-              timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            }]);
-          }
-        } catch (e) {}
+      if (msg.from === contactId) {
+        if (msg.type === "TYPING") {
+          setIsTyping(true);
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+          return;
+        }
+        if (msg.type === "RECEIVE") {
+          if (isBlocked(contactId)) return;
+          try {
+            const data = JSON.parse(atob(msg.blob));
+            if (data.type === "message") {
+              Vibration.vibrate(100);
+              const newMsg: StoredMessage = {
+                id: Date.now().toString(),
+                text: data.text,
+                sent: false,
+                type: data.paymentAmount ? "payment" : "text",
+                amount: data.paymentAmount,
+                timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+              };
+              setMessages((prev) => [...prev, newMsg]);
+            }
+            if (data.type === "delete") {
+              setMessages((prev) => prev.map((m) =>
+                m.id === data.messageId ? { ...m, deleted: true, text: "This message was deleted" } : m
+              ));
+            }
+          } catch (e) {}
+        }
       }
     });
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
   }, [contactId]);
+
+  const now = useCallback(() =>
+    new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }), []);
 
   function handleSend() {
     if (!message.trim()) return;
     const text = message.trim();
-
-    setMessages((prev) => [...prev, {
-      id: Date.now().toString(),
-      text,
-      sent: true,
-      type: "text",
-      timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-    }]);
-
+    setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now() }]);
     sendMessage(contactId, text);
     setMessage("");
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }
+
+  function handleSendPayment() {
+    Alert.prompt("Send Q-Credits", `Send QC to ${contactName}:`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Send", onPress: (val) => {
+        const amount = parseFloat(val || "0");
+        if (amount <= 0) return;
+        if (amount > walletService.getBalance()) {
+          Alert.alert("Insufficient", "Not enough Q-Credits.");
+          return;
+        }
+        walletService.send(contactId, amount, `Payment to ${contactName}`);
+        const payMsg: StoredMessage = {
+          id: Date.now().toString(),
+          text: `${amount.toFixed(2)} QC`,
+          sent: true,
+          type: "payment",
+          amount,
+          timestamp: now(),
+        };
+        setMessages((prev) => [...prev, payMsg]);
+        sendMessage(contactId, JSON.stringify({ type: "message", text: `${amount.toFixed(2)} QC`, paymentAmount: amount }));
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }},
+    ], "plain-text", "", "decimal-pad");
   }
 
   function handleAttach() {
     Alert.alert("Share", "What would you like to share?", [
       { text: "Photo / Video", onPress: handlePickImage },
       { text: "Document / File", onPress: handlePickFile },
+      { text: "Send Q-Credits", onPress: handleSendPayment },
       { text: "Cancel", style: "cancel" },
     ]);
   }
@@ -86,13 +141,8 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         const asset = result.assets[0];
         const name = asset.fileName || "photo";
         setMessages((prev) => [...prev, {
-          id: Date.now().toString(),
-          text: name,
-          sent: true,
-          type: "image",
-          fileName: name,
-          fileUri: asset.uri,
-          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+          id: Date.now().toString(), text: name, sent: true, type: "image",
+          fileName: name, fileUri: asset.uri, timestamp: now(),
         }]);
         sendMessage(contactId, `[File: ${name}]`);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -107,13 +157,8 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         const file = result[0];
         const name = file.name || "document";
         setMessages((prev) => [...prev, {
-          id: Date.now().toString(),
-          text: name,
-          sent: true,
-          type: "file",
-          fileName: name,
-          fileUri: file.uri,
-          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+          id: Date.now().toString(), text: name, sent: true, type: "file",
+          fileName: name, fileUri: file.uri, timestamp: now(),
         }]);
         sendMessage(contactId, `[File: ${name}]`);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -123,43 +168,115 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
     }
   }
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[st.bubble, item.sent ? st.sent : st.received]}>
-      {item.type === "image" && item.fileUri ? (
-        <Image source={{ uri: item.fileUri }} style={st.msgImage} resizeMode="cover" />
-      ) : item.type === "file" ? (
-        <View style={st.fileRow}>
-          <View style={st.fileIcon}><Text style={st.fileIconText}>F</Text></View>
-          <Text style={[st.fileName, item.sent ? st.sentText : st.receivedText]} numberOfLines={1}>{item.fileName || item.text}</Text>
-        </View>
-      ) : null}
-      {item.type === "text" && (
-        <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
-      )}
-      <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
-    </View>
-  );
+  function handleLongPress(item: StoredMessage) {
+    if (item.deleted) return;
+    const options: any[] = [
+      { text: "Delete for Me", onPress: () => {
+        setMessages((prev) => prev.map((m) =>
+          m.id === item.id ? { ...m, deleted: true, text: "You deleted this message" } : m
+        ));
+      }},
+    ];
+    if (item.sent) {
+      options.push({ text: "Delete for Everyone", style: "destructive", onPress: () => {
+        setMessages((prev) => prev.map((m) =>
+          m.id === item.id ? { ...m, deleted: true, text: "This message was deleted" } : m
+        ));
+        sendMessage(contactId, JSON.stringify({ type: "delete", messageId: item.id }));
+      }});
+    }
+    options.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Message", item.text.substring(0, 50), options);
+  }
+
+  function handleBlockUser() {
+    Alert.alert("Block User", `Block ${contactName}? You will no longer receive messages from them.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Block", style: "destructive", onPress: () => {
+        blockUser(contactId);
+        Alert.alert("Blocked", `${contactName} has been blocked.`);
+      }},
+    ]);
+  }
+
+  function handleHeaderLongPress() {
+    Alert.alert(contactName, contactId, [
+      { text: "Block User", style: "destructive", onPress: handleBlockUser },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  // Date separator logic
+  function getDateLabel(index: number): string | null {
+    if (index === 0) return "Today";
+    return null;
+  }
+
+  const renderMessage = ({ item, index }: { item: StoredMessage; index: number }) => {
+    const dateLabel = getDateLabel(index);
+    return (
+      <>
+        {dateLabel && (
+          <View style={st.dateSep}>
+            <View style={st.dateLine} />
+            <Text style={st.dateText}>{dateLabel}</Text>
+            <View style={st.dateLine} />
+          </View>
+        )}
+        <TouchableWithoutFeedback onLongPress={() => handleLongPress(item)}>
+          <View style={[st.bubble, item.sent ? st.sent : st.received, item.deleted && st.deletedBubble]}>
+            {item.deleted ? (
+              <Text style={st.deletedText}>{item.text}</Text>
+            ) : item.type === "payment" ? (
+              <View style={st.paymentBubble}>
+                <Text style={st.paymentIcon}>Q</Text>
+                <Text style={st.paymentAmount}>{item.amount?.toFixed(2)} QC</Text>
+                <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+              </View>
+            ) : (
+              <>
+                {item.type === "image" && item.fileUri ? (
+                  <Image source={{ uri: item.fileUri }} style={st.msgImage} resizeMode="cover" />
+                ) : item.type === "file" ? (
+                  <View style={st.fileRow}>
+                    <View style={st.fileIcon}><Text style={st.fileIconText}>F</Text></View>
+                    <Text style={[st.fileName, item.sent ? st.sentText : st.receivedText]} numberOfLines={1}>{item.fileName || item.text}</Text>
+                  </View>
+                ) : null}
+                {item.type === "text" && (
+                  <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
+                )}
+                <Text style={[st.bubbleTime, item.sent ? st.sentTime : st.receivedTime]}>{item.timestamp}</Text>
+              </>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      </>
+    );
+  };
 
   return (
     <KeyboardAvoidingView style={st.container} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={0}>
-      <View style={st.header}>
-        <TouchableOpacity onPress={onBack} style={st.backBtn}>
-          <Text style={st.backText}>{"<"}</Text>
-        </TouchableOpacity>
-        <View style={st.headerAvatar}>
-          <Text style={st.headerAvatarText}>{contactName.charAt(0)}</Text>
+      <TouchableWithoutFeedback onLongPress={handleHeaderLongPress}>
+        <View style={st.header}>
+          <TouchableOpacity onPress={onBack} style={st.backBtn}>
+            <Text style={st.backText}>{"<"}</Text>
+          </TouchableOpacity>
+          <View style={st.headerAvatar}>
+            <Text style={st.headerAvatarText}>{contactName.charAt(0)}</Text>
+          </View>
+          <View style={st.headerInfo}>
+            <Text style={st.headerName}>{contactName}</Text>
+            <Text style={st.headerStatus}>{isTyping ? "typing..." : "Quantum Secured"}</Text>
+          </View>
+          <TouchableOpacity style={st.callBtn} onPress={() => onCall(false)}>
+            <Text style={st.callBtnText}>P</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={st.callBtn} onPress={() => onCall(true)}>
+            <Text style={st.callBtnText}>V</Text>
+          </TouchableOpacity>
         </View>
-        <View style={st.headerInfo}>
-          <Text style={st.headerName}>{contactName}</Text>
-          <Text style={st.headerStatus}>Quantum Secured</Text>
-        </View>
-        <TouchableOpacity style={st.callBtn} onPress={() => onCall(false)}>
-          <Text style={st.callBtnText}>P</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={st.callBtn} onPress={() => onCall(true)}>
-          <Text style={st.callBtnText}>V</Text>
-        </TouchableOpacity>
-      </View>
+      </TouchableWithoutFeedback>
 
       <View style={st.encBanner}>
         <Text style={st.encText}>Kyber-768 + AES-256-GCM + Double Ratchet</Text>
@@ -222,15 +339,31 @@ const st = StyleSheet.create({
   encText: { color: colors.signal.steel, fontSize: 9, letterSpacing: 0.5 },
   list: { flex: 1 },
   listContent: { padding: 16, gap: 8 },
+
+  // Date separator
+  dateSep: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
+  dateLine: { flex: 1, height: 1, backgroundColor: colors.border.subtle },
+  dateText: { color: colors.signal.steel, fontSize: 11, marginHorizontal: 12 },
+
+  // Bubbles
   bubble: { maxWidth: "80%", padding: 12, borderRadius: 16 },
   sent: { alignSelf: "flex-end", backgroundColor: colors.voice.deep, borderBottomRightRadius: 4 },
   received: { alignSelf: "flex-start", backgroundColor: colors.depth.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border.subtle },
+  deletedBubble: { opacity: 0.5 },
+  deletedText: { color: colors.signal.steel, fontSize: 13, fontStyle: "italic" },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   sentText: { color: colors.voice.light },
   receivedText: { color: colors.signal.white },
   bubbleTime: { fontSize: 9, marginTop: 4, alignSelf: "flex-end" },
   sentTime: { color: colors.voice.warm },
   receivedTime: { color: colors.signal.steel },
+
+  // Payment bubble
+  paymentBubble: { alignItems: "center", paddingVertical: 4 },
+  paymentIcon: { color: colors.voice.gold, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
+  paymentAmount: { color: colors.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 4 },
+
+  // Input
   inputRow: {
     flexDirection: "row", alignItems: "flex-end", padding: 12, paddingBottom: 28,
     backgroundColor: colors.depth.void, borderTopWidth: 1, borderTopColor: colors.border.subtle, gap: 8,
