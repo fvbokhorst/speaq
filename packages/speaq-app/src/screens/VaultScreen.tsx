@@ -12,6 +12,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
+import { contactsService } from "../services/contacts";
+import { sendMessage } from "../services/speaq";
 import RNFS from "react-native-fs";
 import {
   initVault, getVaultFiles, addToVault, removeFromVault,
@@ -64,16 +66,43 @@ export default function VaultScreen({ onBack }: Props) {
     }
   }
 
-  async function handleAddNote() {
-    Alert.prompt("Add Note", "Write a secure note:", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Save", onPress: async (text) => {
-        if (text && text.trim()) {
-          await addToVault("note.txt", "", "note", text.trim());
-          loadFiles();
-        }
-      }},
-    ], "plain-text");
+  function handleAddNote() {
+    setEditingNoteFile(null);
+    setNoteText("");
+    setShowNoteEditor(true);
+  }
+
+  async function handleSaveNote() {
+    if (!noteText.trim()) return;
+    if (editingNoteFile) {
+      // Update existing note
+      await RNFS.writeFile(editingNoteFile.uri.replace("file://", ""), noteText.trim(), "utf8");
+    } else {
+      // Create new note
+      await addToVault("note.txt", "", "note", noteText.trim());
+    }
+    setShowNoteEditor(false);
+    setNoteText("");
+    setEditingNoteFile(null);
+    loadFiles();
+  }
+
+  function handleShareFile(file: VaultFile) {
+    setShareFile(file);
+    setShowSharePicker(true);
+  }
+
+  async function handleSendToContact(contactId: string, contactName: string) {
+    if (!shareFile) return;
+    if (shareFile.type === "note" && shareFile.uri) {
+      const content = await RNFS.readFile(shareFile.uri.replace("file://", ""), "utf8");
+      sendMessage(contactId, `[Vault Note] ${content}`);
+    } else {
+      sendMessage(contactId, `[Vault File: ${shareFile.name}]`);
+    }
+    setShowSharePicker(false);
+    setShareFile(null);
+    Alert.alert("Sent", `${shareFile.name} shared with ${contactName}`);
   }
 
   function handleAdd() {
@@ -86,6 +115,11 @@ export default function VaultScreen({ onBack }: Props) {
   }
 
   const [viewFile, setViewFile] = useState<VaultFile | null>(null);
+  const [showNoteEditor, setShowNoteEditor] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [editingNoteFile, setEditingNoteFile] = useState<VaultFile | null>(null);
+  const [showSharePicker, setShowSharePicker] = useState(false);
+  const [shareFile, setShareFile] = useState<VaultFile | null>(null);
 
   async function handleTapFile(file: VaultFile) {
     if (file.type === "photo") {
@@ -93,24 +127,9 @@ export default function VaultScreen({ onBack }: Props) {
     } else if (file.type === "note" && file.uri) {
       try {
         const content = await RNFS.readFile(file.uri.replace("file://", ""), "utf8");
-        Alert.alert(file.name, content, [
-          { text: "Edit", onPress: () => {
-            Alert.prompt("Edit Note", "Update your note:", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Save", onPress: async (newText) => {
-                if (newText) {
-                  await RNFS.writeFile(file.uri.replace("file://", ""), newText, "utf8");
-                  Alert.alert("Saved");
-                }
-              }},
-            ], "plain-text", content);
-          }},
-          { text: "Delete", style: "destructive", onPress: async () => {
-            await removeFromVault(file.id);
-            loadFiles();
-          }},
-          { text: "Close", style: "cancel" },
-        ]);
+        setEditingNoteFile(file);
+        setNoteText(content);
+        setShowNoteEditor(true);
       } catch (e) {
         handleFileActions(file);
       }
@@ -121,6 +140,7 @@ export default function VaultScreen({ onBack }: Props) {
 
   function handleFileActions(file: VaultFile) {
     Alert.alert(file.name, `${file.type} -- ${formatSize(file.size)}`, [
+      { text: "Send to Contact", onPress: () => handleShareFile(file) },
       { text: "Rename", onPress: () => {
         Alert.prompt("Rename", "New name:", [
           { text: "Cancel", style: "cancel" },
@@ -298,6 +318,72 @@ export default function VaultScreen({ onBack }: Props) {
         </View>
       </Modal>
 
+      {/* Note Editor - Full Screen */}
+      <Modal visible={showNoteEditor} animationType="slide">
+        <View style={st.noteEditorContainer}>
+          <View style={st.noteEditorHeader}>
+            <TouchableOpacity onPress={() => { setShowNoteEditor(false); setNoteText(""); setEditingNoteFile(null); }}>
+              <Text style={st.noteEditorCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={st.noteEditorTitle}>{editingNoteFile ? "Edit Note" : "New Note"}</Text>
+            <TouchableOpacity onPress={handleSaveNote}>
+              <Text style={st.noteEditorSave}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={st.noteEditorInput}
+            value={noteText}
+            onChangeText={setNoteText}
+            placeholder="Write your secure note here..."
+            placeholderTextColor={colors.signal.steel}
+            multiline
+            autoFocus
+            textAlignVertical="top"
+          />
+          {editingNoteFile && (
+            <View style={st.noteEditorActions}>
+              <TouchableOpacity style={st.noteShareBtn} onPress={() => { setShowNoteEditor(false); handleShareFile(editingNoteFile); }}>
+                <Text style={st.noteShareText}>Send to Contact</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.noteDeleteBtn} onPress={async () => {
+                await removeFromVault(editingNoteFile.id);
+                setShowNoteEditor(false);
+                setEditingNoteFile(null);
+                setNoteText("");
+                loadFiles();
+              }}>
+                <Text style={st.noteDeleteText}>Delete Note</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* Share / Send to Contact Picker */}
+      <Modal visible={showSharePicker} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Send to Contact</Text>
+            <Text style={st.modalSub}>{shareFile?.name}</Text>
+            {contactsService.getContacts().length === 0 ? (
+              <Text style={{ color: colors.signal.steel, fontSize: 12, paddingVertical: 20 }}>No contacts yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 300 }}>
+                {contactsService.getContacts().map((c) => (
+                  <TouchableOpacity key={c.id} style={st.shareContactRow} onPress={() => handleSendToContact(c.id, c.name)}>
+                    <View style={st.shareContactAvatar}><Text style={st.shareContactInit}>{c.name.charAt(0)}</Text></View>
+                    <Text style={st.shareContactName}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowSharePicker(false); setShareFile(null); }}>
+              <Text style={st.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* File Viewer Modal */}
       <Modal visible={!!viewFile} transparent animationType="fade">
         <View style={st.viewerOverlay}>
@@ -393,6 +479,23 @@ const st = StyleSheet.create({
   cancelText: { color: colors.signal.steel, fontSize: 14 },
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
   confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+
+  noteEditorContainer: { flex: 1, backgroundColor: colors.depth.void },
+  noteEditorHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  noteEditorCancel: { color: colors.signal.steel, fontSize: 16 },
+  noteEditorTitle: { color: colors.signal.white, fontSize: 17, fontWeight: "600" },
+  noteEditorSave: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  noteEditorInput: { flex: 1, paddingHorizontal: 20, paddingTop: 20, color: colors.signal.white, fontSize: 16, lineHeight: 24 },
+  noteEditorActions: { flexDirection: "row", gap: 12, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle },
+  noteShareBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center" },
+  noteShareText: { color: colors.voice.gold, fontSize: 14, fontWeight: "500" },
+  noteDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red, alignItems: "center" },
+  noteDeleteText: { color: colors.signal.red, fontSize: 14 },
+
+  shareContactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  shareContactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
+  shareContactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  shareContactName: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
 
   viewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
   viewerClose: { position: "absolute", top: 60, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", zIndex: 10 },
