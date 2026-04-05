@@ -16,6 +16,7 @@ import CallScreen from "./src/screens/CallScreen";
 import WalletScreen from "./src/screens/WalletScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import AdvancedScreen from "./src/screens/AdvancedScreen";
+import TransactionsScreen from "./src/screens/TransactionsScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
@@ -205,7 +206,8 @@ function App() {
           setChatContactId(id);
           setChatContactName(name);
           setActiveTab("chat");
-        }} />}
+        }} onOpenTransactions={() => setActiveTab("transactions")} />}
+        {activeTab === "transactions" && <TransactionsScreen onBack={() => setActiveTab("wallet")} />}
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");

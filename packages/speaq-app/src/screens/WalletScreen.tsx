@@ -15,13 +15,12 @@ import { walletService, Transaction, Project, LinkedWallet } from "../services/w
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
+  onOpenTransactions: () => void;
 }
 
-export default function WalletScreen({ onOpenChat }: Props) {
+export default function WalletScreen({ onOpenChat, onOpenTransactions }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
   const [projects, setProjects] = useState<Project[]>(walletService.getProjects());
   const [linkedWallets, setLinkedWallets] = useState<LinkedWallet[]>(walletService.getLinkedWallets());
   const [showSend, setShowSend] = useState(false);
@@ -224,39 +223,19 @@ export default function WalletScreen({ onOpenChat }: Props) {
           ))
         )}
 
-        {/* Transactions */}
+        {/* Recent Transactions */}
         <View style={st.sectionRow}>
-          <Text style={st.sectionTitle}>Transactions</Text>
-          <TouchableOpacity onPress={() => setShowSearch(!showSearch)}>
-            <Text style={st.sectionAdd}>{showSearch ? "Close" : "Search"}</Text>
+          <Text style={st.sectionTitle}>Recent</Text>
+          <TouchableOpacity onPress={onOpenTransactions}>
+            <Text style={st.sectionAdd}>View All</Text>
           </TouchableOpacity>
         </View>
-        {showSearch && (
-          <View style={st.searchRow}>
-            <TextInput
-              style={st.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search transactions..."
-              placeholderTextColor={colors.signal.steel}
-              autoFocus
-            />
+        {transactions.length === 0 ? (
+          <View style={st.emptySmall}>
+            <Text style={st.emptySub}>No transactions yet</Text>
           </View>
-        )}
-        {(() => {
-          const filtered = searchQuery.trim()
-            ? transactions.filter((t) =>
-                t.peer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                t.note.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                t.amount.toFixed(2).includes(searchQuery)
-              )
-            : transactions;
-          if (filtered.length === 0) return (
-            <View style={st.emptySmall}>
-              <Text style={st.emptySub}>{searchQuery ? "No results" : "No transactions yet"}</Text>
-            </View>
-          );
-          return filtered.map((item) => (
+        ) : (
+          transactions.slice(0, 3).map((item) => (
             <View key={item.id} style={st.txRow}>
               <View style={[st.txIcon, item.type === "receive" ? st.txIn : st.txOut]}>
                 <Text style={st.txIconText}>{item.type === "receive" ? "+" : "-"}</Text>
@@ -272,8 +251,8 @@ export default function WalletScreen({ onOpenChat }: Props) {
                 <Text style={st.txTime}>{formatDate(item.timestamp)}</Text>
               </View>
             </View>
-          ));
-        })()}
+          ))
+        )}
       </ScrollView>
 
       {/* Send Modal */}
@@ -399,8 +378,6 @@ const st = StyleSheet.create({
   sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   sectionAdd: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
 
-  searchRow: { paddingHorizontal: 16, marginBottom: 8 },
-  searchInput: { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: colors.signal.white, fontSize: 14 },
   emptySmall: { paddingHorizontal: 24, paddingVertical: 12 },
   emptySub: { color: colors.signal.steel, fontSize: 12 },
 
