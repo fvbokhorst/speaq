@@ -7,6 +7,7 @@
 import React, { useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions } from "react-native";
 import { colors } from "../theme/brand";
+import { t } from "../services/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -14,37 +15,20 @@ interface Props {
   onDone: () => void;
 }
 
-const SLIDES = [
-  {
-    icon: "Q",
-    title: "Quantum Encrypted",
-    subtitle: "Every message, call, and payment is protected by post-quantum cryptography. No government, no corporation, no one can read your data.",
-  },
-  {
-    icon: "C",
-    title: "Chat & Call Freely",
-    subtitle: "Text, voice, and video calls with end-to-end encryption. Share files, photos, and documents without surveillance.",
-  },
-  {
-    icon: "$",
-    title: "Pay Without Banks",
-    subtitle: "Send and receive Q-Credits instantly. No bank account needed. No borders. No fees between users.",
-  },
-  {
-    icon: "G",
-    title: "Ghost Groups & Witness",
-    subtitle: "Invisible groups where members don't see each other. One-tap evidence recording with tamper-proof timestamps.",
-  },
-  {
-    icon: "M",
-    title: "Mine by Contributing",
-    subtitle: "Earn Q-Credits by helping the network grow. Relay messages, translate the app, onboard new users. Every phone is a miner.",
-  },
-];
+function getSlides() {
+  return [
+    { icon: "Q", title: t("onb1Title"), subtitle: t("onb1Sub") },
+    { icon: "C", title: t("onb2Title"), subtitle: t("onb2Sub") },
+    { icon: "$", title: t("onb3Title"), subtitle: t("onb3Sub") },
+    { icon: "G", title: t("onb4Title"), subtitle: t("onb4Sub") },
+    { icon: "M", title: t("onb5Title"), subtitle: t("onb5Sub") },
+  ];
+}
 
 export default function OnboardingScreen({ onDone }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const SLIDES = getSlides();
 
   function handleNext() {
     if (currentIndex < SLIDES.length - 1) {
@@ -68,7 +52,7 @@ export default function OnboardingScreen({ onDone }: Props) {
   return (
     <View style={st.container}>
       <TouchableOpacity style={st.skipBtn} onPress={onDone}>
-        <Text style={st.skipText}>Skip</Text>
+        <Text style={st.skipText}>{t("skip")}</Text>
       </TouchableOpacity>
 
       <FlatList
@@ -95,7 +79,7 @@ export default function OnboardingScreen({ onDone }: Props) {
       {/* Next / Get Started */}
       <TouchableOpacity style={st.nextBtn} onPress={handleNext}>
         <Text style={st.nextText}>
-          {currentIndex === SLIDES.length - 1 ? "Get Started" : "Next"}
+          {currentIndex === SLIDES.length - 1 ? t("getStarted") : t("next")}
         </Text>
       </TouchableOpacity>
 
