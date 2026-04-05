@@ -22,7 +22,6 @@
     "react-native-image-picker": "^7.2.3",
     "react-native-quick-crypto": "^1.0.18",
     "react-native-safe-area-context": "^5.5.2",
-    "react-native-tor": "^0.1.8",
     "react-native-webrtc": "^124.0.7",
     "react-native-webview": "^13.16.1"
   },
