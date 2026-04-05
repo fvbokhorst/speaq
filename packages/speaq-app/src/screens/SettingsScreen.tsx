@@ -15,10 +15,11 @@ interface Props {
   onLogout: () => void;
   onOpenAdvanced: () => void;
   onOpenVault: () => void;
+  onOpenMining: () => void;
   onLanguageChange: () => void;
 }
 
-export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onLanguageChange }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -139,6 +140,10 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         {/* Advanced Features */}
         <Text style={st.sectionLabel}>{t("advanced")}</Text>
         <View style={st.card}>
+          <TouchableOpacity style={st.row} onPress={onOpenMining}>
+            <Text style={st.rowLabel}>Mining</Text>
+            <Text style={st.rowAction}>{t("open")}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={onOpenVault}>
             <Text style={st.rowLabel}>{t("quantumVault")}</Text>
             <Text style={st.rowAction}>{t("open")}</Text>

@@ -44,6 +44,6 @@ export const config = {
     freedomBrowse: false, // Phase 4
     witnessMode: false,   // Phase 5
     meshNetwork: false,   // Phase 4
-    mining: false,        // Phase 6
+    mining: true,         // Phase 6 - ACTIVE
   },
 };
