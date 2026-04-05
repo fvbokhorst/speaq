@@ -6,8 +6,9 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Image,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Image, Dimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
@@ -87,13 +88,37 @@ export default function VaultScreen({ onBack }: Props) {
     ]);
   }
 
-  function handleDelete(file: VaultFile) {
-    Alert.alert("Delete", `Remove "${file.name}" from vault?`, [
-      { text: "Cancel", style: "cancel" },
+  const [viewFile, setViewFile] = useState<VaultFile | null>(null);
+
+  function handleTapFile(file: VaultFile) {
+    if (file.type === "photo") {
+      setViewFile(file);
+    } else {
+      handleFileActions(file);
+    }
+  }
+
+  function handleFileActions(file: VaultFile) {
+    Alert.alert(file.name, `${file.type} -- ${formatSize(file.size)}`, [
+      { text: "Rename", onPress: () => {
+        Alert.prompt("Rename", "New name:", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Save", onPress: async (newName) => {
+            if (newName && newName.trim()) {
+              const files = await getVaultFiles();
+              const updated = files.map((f) => f.id === file.id ? { ...f, name: newName.trim() } : f);
+              const key = getCurrentLayer() === "hidden" ? "speaq_sys_cache_idx" : "speaq_vault_files";
+              await AsyncStorage.setItem(key, JSON.stringify(updated));
+              loadFiles();
+            }
+          }},
+        ], "plain-text", file.name);
+      }},
       { text: "Delete", style: "destructive", onPress: async () => {
         await removeFromVault(file.id);
         loadFiles();
       }},
+      { text: "Cancel", style: "cancel" },
     ]);
   }
 
@@ -203,7 +228,7 @@ export default function VaultScreen({ onBack }: Props) {
           </View>
         ) : (
           files.map((file) => (
-            <TouchableOpacity key={file.id} style={st.fileRow} onLongPress={() => handleDelete(file)}>
+            <TouchableOpacity key={file.id} style={st.fileRow} onPress={() => handleTapFile(file)} onLongPress={() => handleFileActions(file)}>
               {file.type === "photo" && file.uri ? (
                 <Image source={{ uri: file.uri }} style={st.fileThumb} />
               ) : (
@@ -248,6 +273,30 @@ export default function VaultScreen({ onBack }: Props) {
                 <Text style={st.confirmText}>{pinStep === "create" ? "Next" : "Activate"}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* File Viewer Modal */}
+      <Modal visible={!!viewFile} transparent animationType="fade">
+        <View style={st.viewerOverlay}>
+          <TouchableOpacity style={st.viewerClose} onPress={() => setViewFile(null)}>
+            <Text style={st.viewerCloseText}>X</Text>
+          </TouchableOpacity>
+          {viewFile?.type === "photo" && viewFile.uri && (
+            <Image source={{ uri: viewFile.uri }} style={st.viewerImage} resizeMode="contain" />
+          )}
+          <View style={st.viewerInfo}>
+            <Text style={st.viewerName}>{viewFile?.name}</Text>
+            <Text style={st.viewerMeta}>{viewFile ? formatSize(viewFile.size) : ""} -- {viewFile ? formatDate(viewFile.addedAt) : ""}</Text>
+          </View>
+          <View style={st.viewerActions}>
+            <TouchableOpacity style={st.viewerBtn} onPress={() => { if (viewFile) handleFileActions(viewFile); setViewFile(null); }}>
+              <Text style={st.viewerBtnText}>Rename</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.viewerBtnRed} onPress={async () => { if (viewFile) { await removeFromVault(viewFile.id); loadFiles(); setViewFile(null); } }}>
+              <Text style={st.viewerBtnText}>Delete</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -323,4 +372,16 @@ const st = StyleSheet.create({
   cancelText: { color: colors.signal.steel, fontSize: 14 },
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
   confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+
+  viewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
+  viewerClose: { position: "absolute", top: 60, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", zIndex: 10 },
+  viewerCloseText: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  viewerImage: { width: Dimensions.get("window").width - 32, height: Dimensions.get("window").height * 0.5 },
+  viewerInfo: { alignItems: "center", marginTop: 20 },
+  viewerName: { color: colors.signal.white, fontSize: 16, fontWeight: "500" },
+  viewerMeta: { color: colors.signal.steel, fontSize: 12, marginTop: 4 },
+  viewerActions: { flexDirection: "row", gap: 16, marginTop: 24 },
+  viewerBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle },
+  viewerBtnRed: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red },
+  viewerBtnText: { color: colors.signal.white, fontSize: 14 },
 });
