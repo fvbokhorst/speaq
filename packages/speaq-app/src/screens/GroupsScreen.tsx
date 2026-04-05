@@ -145,19 +145,24 @@ export default function GroupsScreen({ onOpenGroupChat }: Props) {
           </View>
         ) : (
           groups.map((g) => (
-            <TouchableOpacity key={g.id} style={st.groupRow} onPress={() => onOpenGroupChat(g.id, g.name)} onLongPress={() => handleGroupActions(g)}>
-              {groupPhotos[g.id] ? (
-                <Image source={{ uri: groupPhotos[g.id] }} style={st.groupPhoto} />
-              ) : (
-                <View style={st.groupIcon}>
-                  <Text style={st.groupIconText}>{g.name.charAt(0)}</Text>
+            <View key={g.id} style={st.groupRow}>
+              <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", flex: 1 }} onPress={() => onOpenGroupChat(g.id, g.name)}>
+                {groupPhotos[g.id] ? (
+                  <Image source={{ uri: groupPhotos[g.id] }} style={st.groupPhoto} />
+                ) : (
+                  <View style={st.groupIcon}>
+                    <Text style={st.groupIconText}>{g.name.charAt(0)}</Text>
+                  </View>
+                )}
+                <View style={st.groupInfo}>
+                  <Text style={st.groupName}>{g.name}</Text>
+                  <Text style={st.groupMembers}>{g.members.length} members</Text>
                 </View>
-              )}
-              <View style={st.groupInfo}>
-                <Text style={st.groupName}>{g.name}</Text>
-                <Text style={st.groupMembers}>{g.members.length} members</Text>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.groupActionBtn} onPress={() => handleGroupActions(g)}>
+                <Text style={st.groupActionDots}>...</Text>
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -243,6 +248,8 @@ const st = StyleSheet.create({
   groupInfo: { flex: 1 },
   groupName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   groupMembers: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
+  groupActionBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  groupActionDots: { color: colors.signal.steel, fontSize: 20, fontWeight: "700" },
 
   createContainer: { flex: 1, backgroundColor: colors.depth.void },
   createHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
