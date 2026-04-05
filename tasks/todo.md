@@ -53,11 +53,51 @@ Voice eerst, simpel, werkend. Video daarna. Geen group calls, geen screen sharin
 - [ ] 11. Dead Man's Switch: heartbeat + auto-send configuratie
 
 ### Settings + GDPR
-- [ ] 12. SettingsScreen.tsx: profiel, privacy policy, data deletion, about
-- [ ] 13. Privacy Policy tekst (in-app, geen cookies want native app)
+- [x] 12. SettingsScreen.tsx: profiel, privacy policy, data deletion, about
+- [x] 13. Privacy Policy tekst (in-app, geen cookies want native app)
 
-## Review
-_(wordt ingevuld na afronding)_
+## Review -- Sessie 5 april
+Alles DONE behalve Lightning Network. Quantum crypto actief. Vault encrypted. Relay compleet.
+
+---
+
+## VOLGENDE SESSIE PLAN (alles vandaag afkrijgen)
+
+### Stap 0: DOQENT m/s fix (5 min)
+- `doqent/src/lib/export/latex-to-text.ts` regel 56
+- Toevoegen: `result = result.replace(/\\text\{([^}]+)\}/g, "$1");`
+- Commit, push, deploy
+
+### Stap 1: Lightning Network (2-3 uur)
+**Aanpak: LNURL protocol (pure HTTP, geen native modules)**
+
+Nieuw bestand `src/services/lightning.ts`:
+- connectToLSP(url) -- verbind met Lightning Service Provider
+- createInvoice(amountSats, memo) -- genereer invoice
+- payInvoice(bolt11) -- betaal invoice
+- getBalance() -- Lightning saldo
+- convertQCtoSats(qc) -- via goudprijs
+- convertSatsToQC(sats) -- via goudprijs
+
+Update `src/screens/WalletScreen.tsx`:
+- Lightning sectie naast Q-Credits
+- Invoice genereren (QR code)
+- Invoice scannen en betalen
+- QC <-> sats conversie
+
+Nieuw `src/screens/LightningScreen.tsx`:
+- Invoice history, channel/node info
+
+### Stap 2: Tor + Mesh basis (1-2 uur)
+- Tor: pure JS SOCKS5 proxy of react-native-tor
+- Mesh: react-native-ble-plx activeren (al geinstalleerd)
+- Transport fallback: direct -> Tor -> mesh
+
+### Stap 3: Test + Deploy (30 min)
+- Alle schermen testen, relay auto-deploy checken
+
+### Stap 4: Documentatie (30 min)
+- PRD v2.1 updaten met actuele staat
 
 ---
 
