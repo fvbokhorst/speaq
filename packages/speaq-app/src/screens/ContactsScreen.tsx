@@ -3,9 +3,10 @@
  * Show your QR code + scan others to pair
  */
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Share } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import { Camera } from "react-native-camera-kit";
 import { colors, spacing, radius } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { contactsService, Contact } from "../services/contacts";
@@ -22,6 +23,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [showQRModal, setShowQRModal] = useState(false);
   const [newContactId, setNewContactId] = useState("");
   const [newContactName, setNewContactName] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
   const identity = getIdentity();
   const qrData = `speaq://${identity?.speaqId || "unknown"}`;
 
@@ -47,6 +49,9 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity onPress={onOpenGroups} style={[st.addBtn, { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.voice.gold }]}>
             <Text style={[st.addBtnText, { color: colors.voice.gold }]}>Groups</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowScanner(true)} style={[st.addBtn, { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.quantum.teal }]}>
+            <Text style={[st.addBtnText, { color: colors.quantum.teal }]}>Scan</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowAddModal(true)} style={st.addBtn}>
             <Text style={st.addBtnText}>+ Add</Text>
@@ -108,6 +113,35 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* QR Scanner Modal */}
+      <Modal visible={showScanner} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: colors.depth.void }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 }}>
+            <Text style={{ color: colors.signal.white, fontSize: 18, fontWeight: "600" }}>Scan SPEAQ QR Code</Text>
+            <TouchableOpacity onPress={() => setShowScanner(false)}>
+              <Text style={{ color: colors.voice.gold, fontSize: 16 }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <Suspense fallback={<View style={{ flex: 1 }}><Text style={{ color: colors.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
+            <Camera
+              scanBarcode
+              onReadCode={(event: any) => {
+                const value = event.nativeEvent?.codeStringValue || "";
+                const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+                if (speaqId) {
+                  setShowScanner(false);
+                  setNewContactId(speaqId);
+                  setShowAddModal(true);
+                }
+              }}
+              showFrame
+              frameColor={colors.voice.gold}
+              laserColor={colors.quantum.teal}
+            />
+          </Suspense>
         </View>
       </Modal>
 

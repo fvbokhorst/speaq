@@ -150,14 +150,26 @@ class AdvancedService {
     const nonce = Math.random().toString(36).substring(2, 10);
     const contentHash = CryptoJS.SHA256(content + timestamp.toString() + nonce).toString();
 
-    // Try to capture GPS location
-    let location: { lat: number; lng: number } | undefined;
+    const recordId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+
+    const record: WitnessRecord = {
+      id: recordId,
+      timestamp,
+      contentHash,
+      type,
+      content,
+      shared: false,
+    };
+
+    this.witnessRecords.push(record);
+    AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
+
+    // Try to capture GPS location (async - updates record when available)
     try {
-      if (navigator && navigator.geolocation) {
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            // Update the record with location once available
-            const idx = this.witnessRecords.findIndex((r) => r.id === record.id);
+            const idx = this.witnessRecords.findIndex((r) => r.id === recordId);
             if (idx !== -1) {
               this.witnessRecords[idx].location = {
                 lat: pos.coords.latitude,
@@ -176,18 +188,6 @@ class AdvancedService {
       // navigator.geolocation not available in this environment
     }
 
-    const record: WitnessRecord = {
-      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-      timestamp,
-      contentHash,
-      type,
-      content,
-      location,
-      shared: false,
-    };
-
-    this.witnessRecords.push(record);
-    AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
     return record;
   }
 
