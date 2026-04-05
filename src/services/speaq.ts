@@ -14,14 +14,16 @@ import {
   encryptMessage, decryptMessage, getContactKey, generateSecureId,
   generateKyberKeyPair, saveKyberKeyPair, loadKyberKeyPair,
   getOrCreateRatchet, initRatchetFromKeyExchange,
-  ratchetEncrypt, saveRatchetState,
+  ratchetEncrypt,
   KyberKeyPair,
 } from "./crypto";
+import { generateDID, saveDID, loadDID } from "./identity-manager";
 
 // State
 let identity: {
   speaqId: string;
   displayName: string;
+  did?: string;
   createdAt: number;
 } | null = null;
 
@@ -64,17 +66,22 @@ function generateSpeaqId(): string {
  * NOW: also generates a Kyber keypair for quantum key exchange
  */
 export async function createIdentity(displayName: string): Promise<typeof identity> {
-  identity = {
-    speaqId: generateSpeaqId(),
-    displayName,
-    createdAt: Date.now(),
-  };
-
   // Generate Kyber keypair for quantum key exchange
   kyberKeys = generateKyberKeyPair();
   await saveKyberKeyPair(kyberKeys);
 
-  // Persist identity
+  // Generate DID from Kyber public key
+  const did = generateDID(kyberKeys.publicKey);
+  await saveDID(did);
+
+  identity = {
+    speaqId: generateSpeaqId(),
+    displayName,
+    did,
+    createdAt: Date.now(),
+  };
+
+  // Persist identity (includes DID)
   await AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
 
   // Connect to relay
@@ -98,6 +105,18 @@ export async function loadIdentity(): Promise<typeof identity> {
         // Migration: existing identity without Kyber keys -- generate now
         kyberKeys = generateKyberKeyPair();
         await saveKyberKeyPair(kyberKeys);
+      }
+
+      // Migration: existing identity without DID -- generate now
+      if (identity && !identity.did && kyberKeys) {
+        const did = generateDID(kyberKeys.publicKey);
+        await saveDID(did);
+        identity.did = did;
+        await AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
+      } else if (identity && !identity.did) {
+        // Load DID from separate storage
+        const storedDid = await loadDID();
+        if (storedDid) identity.did = storedDid;
       }
 
       connectRelay();
@@ -229,10 +248,13 @@ export function initiateKeyExchange(toSpeaqId: string): void {
 export async function sendMessage(toSpeaqId: string, text: string): Promise<void> {
   if (!ws || !connected || !identity) return;
 
+  // Include sender identity INSIDE the encrypted blob (sealed sender)
+  // The relay never sees who sent the message
   const plaintext = JSON.stringify({
     type: "message",
     text,
     from: identity.displayName,
+    senderId: identity.speaqId,
     timestamp: Date.now(),
   });
 
@@ -253,12 +275,13 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
   }
 
   // Encrypt with ratchet (forward secrecy)
-  const ratchetMsg = ratchetEncrypt(state, plaintext);
-  await saveRatchetState(toSpeaqId, state);
+  // State is saved inside ratchetEncrypt BEFORE returning (crash-safe)
+  const ratchetMsg = await ratchetEncrypt(state, plaintext, toSpeaqId);
 
-  // Send as ratchet-encrypted message
+  // Send as SEND_SEALED -- no sender ID exposed to relay
+  // Sender identity is encrypted inside the blob
   ws.send(JSON.stringify({
-    type: "SEND",
+    type: "SEND_SEALED",
     to: toSpeaqId,
     blob: JSON.stringify(ratchetMsg),
     encrypted: true,

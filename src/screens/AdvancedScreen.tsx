@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
-import { advancedService, GhostGroup, WitnessRecord, DeadManSwitch } from "../services/advanced";
+import { advancedService, GhostGroup, GhostPoll, WitnessRecord, DeadManSwitch } from "../services/advanced";
 import { contactsService, Contact } from "../services/contacts";
 
 interface Props {
@@ -34,6 +34,12 @@ export default function AdvancedScreen({ onBack }: Props) {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [pickerGroupId, setPickerGroupId] = useState<string | null>(null);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
+  const [showPollCreate, setShowPollCreate] = useState(false);
+  const [showPollView, setShowPollView] = useState(false);
+  const [pollGroupId, setPollGroupId] = useState<string | null>(null);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [currentPolls, setCurrentPolls] = useState<GhostPoll[]>([]);
 
   useEffect(() => {
     advancedService.load().then(() => {
@@ -55,6 +61,17 @@ export default function AdvancedScreen({ onBack }: Props) {
 
   function handleGhostAction(group: GhostGroup) {
     Alert.alert(group.name, `${group.members.length} members`, [
+      { text: "Create Poll", onPress: () => {
+        setPollGroupId(group.id);
+        setPollQuestion("");
+        setPollOptions(["", ""]);
+        setShowPollCreate(true);
+      }},
+      { text: "View Polls", onPress: () => {
+        setPollGroupId(group.id);
+        setCurrentPolls(advancedService.getGhostPolls(group.id));
+        setShowPollView(true);
+      }},
       { text: "Add from Contacts", onPress: () => {
         setAllContacts(contactsService.getContacts());
         setPickerGroupId(group.id);
@@ -80,6 +97,30 @@ export default function AdvancedScreen({ onBack }: Props) {
     ]);
   }
 
+  function handleCreatePoll() {
+    if (!pollGroupId || !pollQuestion.trim()) return;
+    const validOptions = pollOptions.filter((o) => o.trim());
+    if (validOptions.length < 2) {
+      Alert.alert("Need Options", "Add at least 2 poll options.");
+      return;
+    }
+    advancedService.createGhostPoll(pollGroupId, pollQuestion.trim(), validOptions.map((o) => o.trim()));
+    setShowPollCreate(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    Alert.alert("Poll Created", "Anonymous poll is live in the ghost group.");
+  }
+
+  function handleVote(poll: GhostPoll, optionIndex: number) {
+    if (!pollGroupId) return;
+    const success = advancedService.voteOnPoll(pollGroupId, poll.id, optionIndex);
+    if (success) {
+      setCurrentPolls(advancedService.getGhostPolls(pollGroupId));
+    } else {
+      Alert.alert("Already Voted", "You can only vote once per poll.");
+    }
+  }
+
   // --- Witness Mode ---
   function handleCreateWitness() {
     if (!witnessText.trim()) return;
@@ -87,7 +128,21 @@ export default function AdvancedScreen({ onBack }: Props) {
     setWitnesses(advancedService.getWitnessRecords());
     setWitnessText("");
     setShowWitness(false);
-    Alert.alert("Witness Created", "Timestamped and hashed. This record is tamper-proof.");
+    Alert.alert("Witness Created", "Timestamped, hashed, and signed. This record is tamper-proof.");
+  }
+
+  function handleVerifyWitness(record: WitnessRecord) {
+    const valid = advancedService.verifyWitness(record);
+    if (valid) {
+      Alert.alert("Verified", "Signature is valid. This record has not been tampered with.");
+    } else {
+      Alert.alert("INVALID", "Signature does NOT match. This record may have been tampered with.");
+    }
+  }
+
+  function handleShareProof(record: WitnessRecord) {
+    const proof = advancedService.exportWitness(record);
+    Alert.alert("Shareable Proof", JSON.stringify(proof, null, 2));
   }
 
   // --- Dead Man's Switch ---
@@ -191,17 +246,33 @@ export default function AdvancedScreen({ onBack }: Props) {
           {witnesses.length === 0 ? (
             <Text style={st.emptyText}>No witness records. Tap "Record" to create tamper-proof evidence.</Text>
           ) : (
-            witnesses.slice(0, 5).map((w) => (
-              <View key={w.id} style={st.itemCard}>
-                <View style={st.witnessIcon}><Text style={st.witnessIconText}>W</Text></View>
-                <View style={st.itemInfo}>
-                  <Text style={st.itemName} numberOfLines={1}>{w.content}</Text>
-                  <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
-                  <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
-                  {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
+            witnesses.slice(0, 5).map((w) => {
+              const isValid = advancedService.verifyWitness(w);
+              return (
+                <View key={w.id} style={st.itemCard}>
+                  <View style={st.witnessIcon}>
+                    <Text style={st.witnessIconText}>{isValid ? "V" : "!"}</Text>
+                  </View>
+                  <View style={st.itemInfo}>
+                    <Text style={st.itemName} numberOfLines={1}>{w.content}</Text>
+                    <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
+                    <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
+                    {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
+                    <Text style={[st.hashText, { color: isValid ? "#22C55E" : colors.signal.red }]}>
+                      {isValid ? "Signature valid" : "SIGNATURE INVALID"}
+                    </Text>
+                    <View style={st.witnessActions}>
+                      <TouchableOpacity onPress={() => handleVerifyWitness(w)}>
+                        <Text style={st.witnessActionBtn}>Verify</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleShareProof(w)}>
+                        <Text style={st.witnessActionBtn}>Share Proof</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -364,6 +435,68 @@ export default function AdvancedScreen({ onBack }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* Create Poll Modal */}
+      <Modal visible={showPollCreate} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Create Anonymous Poll</Text>
+            <Text style={st.modalSub}>No voter identity is recorded. Results are anonymous.</Text>
+            <TextInput style={st.input} value={pollQuestion} onChangeText={setPollQuestion}
+              placeholder="Question" placeholderTextColor={colors.signal.steel} autoFocus />
+            {pollOptions.map((opt, i) => (
+              <TextInput key={i} style={st.input} value={opt}
+                onChangeText={(val) => { const updated = [...pollOptions]; updated[i] = val; setPollOptions(updated); }}
+                placeholder={`Option ${i + 1}`} placeholderTextColor={colors.signal.steel} />
+            ))}
+            <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ""])}>
+              <Text style={st.addBtn}>+ Add Option</Text>
+            </TouchableOpacity>
+            <View style={[st.modalBtns, { marginTop: 12 }]}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => setShowPollCreate(false)}>
+                <Text style={st.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.confirmBtn} onPress={handleCreatePoll}>
+                <Text style={st.confirmText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* View Polls Modal */}
+      <Modal visible={showPollView} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Polls</Text>
+            {currentPolls.length === 0 ? (
+              <Text style={st.emptyText}>No polls yet. Create one from the group menu.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }}>
+                {currentPolls.map((poll) => (
+                  <View key={poll.id} style={st.pollCard}>
+                    <Text style={st.pollQuestion}>{poll.question}</Text>
+                    <Text style={st.pollMeta}>{poll.totalVoters} vote{poll.totalVoters !== 1 ? "s" : ""} -- {formatDate(poll.createdAt)}</Text>
+                    {poll.options.map((opt, i) => {
+                      const pct = poll.totalVoters > 0 ? Math.round((poll.votes[i] / poll.totalVoters) * 100) : 0;
+                      return (
+                        <TouchableOpacity key={i} style={st.pollOption} onPress={() => handleVote(poll, i)}>
+                          <View style={[st.pollBar, { width: `${pct}%` }]} />
+                          <Text style={st.pollOptText}>{opt}</Text>
+                          <Text style={st.pollOptCount}>{poll.votes[i]} ({pct}%)</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => setShowPollView(false)}>
+              <Text style={st.cancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -429,4 +562,13 @@ const st = StyleSheet.create({
   contactPickInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
   contactPickName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
   contactPickId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  witnessActions: { flexDirection: "row", gap: 12, marginTop: 6 },
+  witnessActionBtn: { color: colors.voice.gold, fontSize: 11, fontWeight: "600" },
+  pollCard: { padding: 12, backgroundColor: colors.depth.elevated, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  pollQuestion: { color: colors.signal.white, fontSize: 14, fontWeight: "600", marginBottom: 4 },
+  pollMeta: { color: colors.signal.steel, fontSize: 10, marginBottom: 8 },
+  pollOption: { position: "relative", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, marginBottom: 4, overflow: "hidden" },
+  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "rgba(212,168,83,0.15)", borderRadius: 8 } as any,
+  pollOptText: { color: colors.signal.white, fontSize: 13, zIndex: 1 },
+  pollOptCount: { color: colors.signal.steel, fontSize: 11, zIndex: 1 },
 });

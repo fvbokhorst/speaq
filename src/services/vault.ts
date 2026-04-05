@@ -93,11 +93,26 @@ export async function setupHiddenPin(pin: string): Promise<void> {
   await AsyncStorage.setItem(HIDDEN_PIN_KEY, hiddenPinHash);
 }
 
+/** Legacy hash for backwards compatibility with old PINs */
+function legacyHashPin(pin: string): string {
+  let hash = 0;
+  for (let i = 0; i < pin.length; i++) {
+    const chr = pin.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return "h" + Math.abs(hash).toString(36);
+}
+
 export function unlockHidden(pin: string): boolean {
   if (!hiddenPinHash) return false;
-  if (hashPin(pin) === hiddenPinHash) {
+  // Try new SHA-256 hash first, then legacy hash for backwards compatibility
+  if (hashPin(pin) === hiddenPinHash || legacyHashPin(pin) === hiddenPinHash) {
     hiddenEncKey = deriveKey(pin);
     currentLayer = "hidden";
+    // Migrate to new hash format
+    hiddenPinHash = hashPin(pin);
+    AsyncStorage.setItem(HIDDEN_PIN_KEY, hiddenPinHash);
     return true;
   }
   return false;
@@ -222,6 +237,87 @@ export async function removeFromVault(fileId: string): Promise<void> {
 // --- Decoy Content ---
 // Pre-populate the normal vault with innocent files
 // so it doesn't look empty/suspicious
+
+// --- Backup & Restore ---
+
+/**
+ * Export an encrypted backup of all vault files (current layer).
+ * The backup is AES-256 encrypted with the current layer's PIN-derived key.
+ * Returns a base64-encoded encrypted JSON string.
+ */
+export async function exportVaultBackup(): Promise<string> {
+  const key = getEncKey();
+  if (!key) throw new Error("Vault not unlocked -- no encryption key available");
+
+  const files = await getVaultFiles();
+  const dir = getVaultDir();
+  const backupData: { files: VaultFile[]; contents: Record<string, string> } = {
+    files,
+    contents: {},
+  };
+
+  // Read all encrypted file contents
+  for (const file of files) {
+    try {
+      const filePath = file.uri.replace("file://", "");
+      const exists = await RNFS.exists(filePath);
+      if (exists) {
+        const raw = await RNFS.readFile(filePath, "utf8");
+        backupData.contents[file.id] = raw; // Already encrypted on disk
+      }
+    } catch (e) {
+      // Skip files that can't be read
+    }
+  }
+
+  // Double-encrypt the entire backup JSON with the vault key
+  const jsonStr = JSON.stringify(backupData);
+  const encrypted = vaultEncrypt(jsonStr, key);
+  // Base64 encode for safe transport
+  return CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(encrypted));
+}
+
+/**
+ * Import and restore a vault backup.
+ * Decrypts the backup using the current layer's PIN-derived key.
+ * Overwrites current layer files.
+ */
+export async function importVaultBackup(encryptedBase64: string): Promise<number> {
+  const key = getEncKey();
+  if (!key) throw new Error("Vault not unlocked -- no encryption key available");
+
+  // Decode base64
+  const encrypted = CryptoJS.enc.Base64.parse(encryptedBase64).toString(CryptoJS.enc.Utf8);
+
+  // Decrypt the backup
+  const jsonStr = vaultDecrypt(encrypted, key);
+  if (!jsonStr) throw new Error("Failed to decrypt backup -- wrong PIN or corrupted data");
+
+  const backupData = JSON.parse(jsonStr);
+  if (!backupData.files || !backupData.contents) {
+    throw new Error("Invalid backup format");
+  }
+
+  const dir = getVaultDir();
+  const dirExists = await RNFS.exists(dir);
+  if (!dirExists) await RNFS.mkdir(dir);
+
+  // Restore file contents
+  let restoredCount = 0;
+  for (const file of backupData.files as VaultFile[]) {
+    const content = backupData.contents[file.id];
+    if (content) {
+      const destPath = `${dir}/${file.id}.enc`;
+      await RNFS.writeFile(destPath, content, "utf8");
+      file.uri = `file://${destPath}`;
+      restoredCount++;
+    }
+  }
+
+  // Save file index
+  await AsyncStorage.setItem(getStorageKey(), JSON.stringify(backupData.files));
+  return restoredCount;
+}
 
 export async function addDecoyNote(text: string): Promise<void> {
   const dirExists = await RNFS.exists(VAULT_DIR);

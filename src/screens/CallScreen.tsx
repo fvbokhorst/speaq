@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
 import { RTCView } from "react-native-webrtc";
 import { colors } from "../theme/brand";
 import { callService, CallState } from "../services/call";
@@ -24,6 +24,8 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
   const [elapsed, setElapsed] = useState(0);
   const [localStreamURL, setLocalStreamURL] = useState<string | null>(null);
   const [remoteStreamURL, setRemoteStreamURL] = useState<string | null>(null);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [participantCount, setParticipantCount] = useState(1);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -46,9 +48,19 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
       setRemoteStreamURL(stream?.toURL() || null);
     };
 
+    const onScreenShareChanged = (sharing: boolean) => {
+      setScreenSharing(sharing);
+    };
+
+    const onScreenShareUnavailable = () => {
+      Alert.alert("Not Available", "Screen sharing is not available on this device.");
+    };
+
     callService.on("stateChange", onStateChange);
     callService.on("localStream", onLocalStream);
     callService.on("remoteStream", onRemoteStream);
+    callService.on("screenShareChanged", onScreenShareChanged);
+    callService.on("screenShareUnavailable", onScreenShareUnavailable);
 
     // If already connected, get streams
     const ls = callService.getLocalStream();
@@ -56,10 +68,17 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
     if (ls) setLocalStreamURL((ls as any).toURL());
     if (rs) setRemoteStreamURL((rs as any).toURL());
 
+    // Track participant count for group calls
+    if (callService.isGroupCall()) {
+      setParticipantCount(callService.getGroupPeerCount() + 1); // +1 for self
+    }
+
     return () => {
       callService.off("stateChange", onStateChange);
       callService.off("localStream", onLocalStream);
       callService.off("remoteStream", onRemoteStream);
+      callService.off("screenShareChanged", onScreenShareChanged);
+      callService.off("screenShareUnavailable", onScreenShareUnavailable);
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [onEnd]);
@@ -82,6 +101,10 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
 
   function handleFlip() {
     callService.switchCamera();
+  }
+
+  function handleScreenShare() {
+    callService.toggleScreenShare();
   }
 
   function handleEnd() {
@@ -127,6 +150,9 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
             </View>
           )}
           <Text style={st.contactName}>{contactName}</Text>
+          {callService.isGroupCall() && callState === "connected" && (
+            <Text style={st.participantCount}>{participantCount} participants</Text>
+          )}
           <Text style={st.status}>{statusText}</Text>
         </View>
 
@@ -163,6 +189,11 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
                 </>
               )}
 
+              <TouchableOpacity style={[st.ctrlBtn, screenSharing && st.ctrlActive]} onPress={handleScreenShare}>
+                <Text style={st.ctrlIcon}>S</Text>
+                <Text style={st.ctrlLabel}>{screenSharing ? "Stop Share" : "Share"}</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={st.endBtn} onPress={handleEnd}>
                 <Text style={st.endIcon}>X</Text>
                 <Text style={st.ctrlLabel}>End</Text>
@@ -187,6 +218,7 @@ const st = StyleSheet.create({
   avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.voice.gold, marginBottom: 16 },
   avatarText: { color: colors.voice.gold, fontSize: 40, fontWeight: "600" },
   contactName: { color: colors.signal.white, fontSize: 24, fontWeight: "600" },
+  participantCount: { color: colors.quantum.teal, fontSize: 12, marginTop: 4, letterSpacing: 0.5 },
   status: { color: colors.signal.steel, fontSize: 14, marginTop: 8 },
   controls: { paddingBottom: 60, paddingHorizontal: 24 },
   incomingRow: { flexDirection: "row", justifyContent: "space-around" },

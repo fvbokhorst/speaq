@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Image } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Image, Modal, TextInput, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
@@ -28,6 +28,9 @@ interface Props {
 
 export default function ChatListScreen({ onOpenChat }: Props) {
   const [chats, setChats] = useState<ChatPreview[]>([]);
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatId, setNewChatId] = useState("");
+  const [newChatName, setNewChatName] = useState("");
 
   const loadChats = useCallback(async () => {
     try {
@@ -122,12 +125,90 @@ export default function ChatListScreen({ onOpenChat }: Props) {
       ) : (
         <FlatList data={chats} renderItem={renderChat} keyExtractor={(i) => i.id} style={st.list} contentContainerStyle={st.listPad} />
       )}
-      <TouchableOpacity style={st.fab} activeOpacity={0.8} onPress={() => {
-        const id = getIdentity();
-        Alert.alert("New Chat", `Your SPEAQ ID:\n${id?.speaqId || "not created"}\n\nShare this to start a quantum-encrypted chat.`);
-      }}>
+      <TouchableOpacity style={st.fab} activeOpacity={0.8} onPress={() => setShowNewChat(true)}>
         <Text style={st.fabText}>+</Text>
       </TouchableOpacity>
+
+      {/* New Chat Modal */}
+      <Modal visible={showNewChat} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>New Chat</Text>
+
+            {/* Enter SPEAQ ID */}
+            <View style={st.newChatRow}>
+              <TextInput
+                style={st.newChatInput}
+                value={newChatId}
+                onChangeText={setNewChatId}
+                placeholder="Enter SPEAQ ID"
+                placeholderTextColor={colors.signal.steel}
+                autoCapitalize="none"
+              />
+            </View>
+            <TextInput
+              style={st.newChatInput}
+              value={newChatName}
+              onChangeText={setNewChatName}
+              placeholder="Name (optional)"
+              placeholderTextColor={colors.signal.steel}
+            />
+            <TouchableOpacity
+              style={[st.startBtn, (!newChatId.trim()) && { opacity: 0.3 }]}
+              disabled={!newChatId.trim()}
+              onPress={() => {
+                const name = newChatName.trim() || newChatId.trim().substring(0, 8);
+                contactsService.addContact(newChatId.trim(), name);
+                setShowNewChat(false);
+                setNewChatId("");
+                setNewChatName("");
+                onOpenChat(newChatId.trim(), name);
+              }}
+            >
+              <Text style={st.startBtnText}>Start Chat</Text>
+            </TouchableOpacity>
+
+            {/* Or select from contacts */}
+            {contactsService.getContacts().length > 0 && (
+              <>
+                <Text style={st.orText}>Or select a contact</Text>
+                <ScrollView style={{ maxHeight: 200 }}>
+                  {contactsService.getContacts().map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={st.contactRow}
+                      onPress={() => {
+                        setShowNewChat(false);
+                        setNewChatId("");
+                        setNewChatName("");
+                        onOpenChat(c.id, c.name);
+                      }}
+                    >
+                      <View style={st.contactAvatar}>
+                        <Text style={st.contactInit}>{c.name.charAt(0)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={st.contactName}>{c.name}</Text>
+                        <Text style={st.contactId}>{c.id}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {/* Your SPEAQ ID */}
+            <View style={st.yourId}>
+              <Text style={st.yourIdLabel}>Your SPEAQ ID</Text>
+              <Text style={st.yourIdValue}>{getIdentity()?.speaqId || "none"}</Text>
+            </View>
+
+            <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowNewChat(false); setNewChatId(""); setNewChatName(""); }}>
+              <Text style={st.cancelText}>{t("cancel")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -161,4 +242,22 @@ const st = StyleSheet.create({
   emptySub: { color: colors.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
   fab: { position: "absolute", bottom: 32, right: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.voice.gold, alignItems: "center", justifyContent: "center", shadowColor: colors.voice.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
   fabText: { color: colors.depth.void, fontSize: 28, fontWeight: "300", marginTop: -2 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
+  modalBox: { width: 320, backgroundColor: colors.depth.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: colors.border.subtle },
+  modalTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", fontFamily: "Georgia", marginBottom: 16 },
+  newChatRow: { marginBottom: 10 },
+  newChatInput: { backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 15, marginBottom: 10 },
+  startBtn: { backgroundColor: colors.voice.gold, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginBottom: 16 },
+  startBtnText: { color: colors.depth.void, fontSize: 15, fontWeight: "600" },
+  orText: { color: colors.signal.steel, fontSize: 12, textAlign: "center", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
+  contactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
+  contactId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  yourId: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle, alignItems: "center" },
+  yourIdLabel: { color: colors.signal.steel, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  yourIdValue: { color: colors.voice.gold, fontSize: 13, fontFamily: "Courier", marginTop: 4 },
+  cancelBtn: { marginTop: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
+  cancelText: { color: colors.signal.steel, fontSize: 14 },
 });

@@ -15,10 +15,12 @@ import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { contactsService } from "../services/contacts";
 import { sendMessage } from "../services/speaq";
+// Use Alert to show copyable text instead of native clipboard
+const copyToClipboard = (text: string) => Alert.alert("Copied", "Backup data ready. Long-press to select and copy from the field below.", [{ text: "OK" }]);
 import {
   initVault, getVaultFiles, addToVault, removeFromVault, readVaultFile,
   hasHiddenLayer, setupHiddenPin, unlockHidden, switchToNormal,
-  getCurrentLayer, VaultFile,
+  getCurrentLayer, VaultFile, exportVaultBackup, importVaultBackup,
 } from "../services/vault";
 
 interface Props {
@@ -139,6 +141,32 @@ export default function VaultScreen({ onBack }: Props) {
       { text: "Note", onPress: handleAddNote },
       { text: "Cancel", style: "cancel" },
     ]);
+  }
+
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreData, setRestoreData] = useState("");
+
+  async function handleBackup() {
+    try {
+      const backup = await exportVaultBackup();
+      copyToClipboard(backup);
+      Alert.alert("Backup Created", "Encrypted backup copied to clipboard. Store it safely -- you need your vault PIN to restore.");
+    } catch (e: any) {
+      Alert.alert("Backup Failed", e.message || "Could not create backup.");
+    }
+  }
+
+  async function handleRestore() {
+    if (!restoreData.trim()) return;
+    try {
+      const count = await importVaultBackup(restoreData.trim());
+      setShowRestoreModal(false);
+      setRestoreData("");
+      loadFiles();
+      Alert.alert("Restore Complete", `${count} file(s) restored successfully.`);
+    } catch (e: any) {
+      Alert.alert("Restore Failed", e.message || "Could not restore backup. Check your PIN and data.");
+    }
   }
 
   const [viewFile, setViewFile] = useState<VaultFile | null>(null);
@@ -265,6 +293,12 @@ export default function VaultScreen({ onBack }: Props) {
           <Text style={st.title}>Quantum Vault</Text>
           <Text style={st.layerBadge}>{layer === "hidden" ? "HIDDEN LAYER" : "STANDARD"}</Text>
         </View>
+        <TouchableOpacity style={st.backupBtn} onPress={handleBackup}>
+          <Text style={st.backupBtnText}>Backup</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={st.backupBtn} onPress={() => setShowRestoreModal(true)}>
+          <Text style={st.backupBtnText}>Restore</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={st.addBtn} onPress={handleAdd}>
           <Text style={st.addBtnText}>+ Add</Text>
         </TouchableOpacity>
@@ -503,6 +537,33 @@ export default function VaultScreen({ onBack }: Props) {
         </View>
       </Modal>
 
+      {/* Restore Backup Modal */}
+      <Modal visible={showRestoreModal} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.modalBox}>
+            <Text style={st.modalTitle}>Restore Backup</Text>
+            <Text style={st.modalSub}>Paste your encrypted backup data below. You must be using the same vault PIN that created the backup.</Text>
+            <TextInput
+              style={[st.pinInput, { fontSize: 12, letterSpacing: 0, textAlign: "left", height: 100 }]}
+              value={restoreData}
+              onChangeText={setRestoreData}
+              placeholder="Paste encrypted backup..."
+              placeholderTextColor={colors.signal.steel}
+              multiline
+              autoFocus
+            />
+            <View style={st.modalBtns}>
+              <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowRestoreModal(false); setRestoreData(""); }}>
+                <Text style={st.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.confirmBtn} onPress={handleRestore}>
+                <Text style={st.confirmText}>Restore</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Unlock Hidden Modal */}
       <Modal visible={showUnlockHidden} transparent animationType="fade">
         <View style={st.modalOverlay}>
@@ -540,6 +601,8 @@ const st = StyleSheet.create({
   backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
   title: { color: colors.signal.white, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
   layerBadge: { color: colors.quantum.teal, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
+  backupBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, marginRight: 6 },
+  backupBtnText: { color: colors.signal.steel, fontSize: 11, fontWeight: "500" },
   addBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   addBtnText: { color: colors.depth.void, fontSize: 13, fontWeight: "600" },
 

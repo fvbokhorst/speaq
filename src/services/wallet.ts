@@ -50,6 +50,8 @@ class WalletService {
         this.transactions = parsed.transactions || [];
         this.projects = parsed.projects || [];
         this.linkedWallets = parsed.linkedWallets || [];
+        this.stablecoinWallets = parsed.stablecoinWallets || [];
+        this.cashBridgeTransactions = parsed.cashBridgeTransactions || [];
       }
       this.loaded = true;
     } catch (e) {
@@ -64,6 +66,8 @@ class WalletService {
         transactions: this.transactions,
         projects: this.projects,
         linkedWallets: this.linkedWallets,
+        stablecoinWallets: this.stablecoinWallets,
+        cashBridgeTransactions: this.cashBridgeTransactions,
       }));
     } catch (e) {
       console.error("Wallet save error:", e);
@@ -209,6 +213,148 @@ class WalletService {
     this.linkedWallets = this.linkedWallets.filter((w) => w.id !== walletId);
     this.save();
   }
+
+  // --- Stablecoin Wallets ---
+
+  private stablecoinWallets: StablecoinWallet[] = [];
+
+  getStablecoinWallets(): StablecoinWallet[] {
+    return [...this.stablecoinWallets];
+  }
+
+  addStablecoinWallet(type: StablecoinWallet["type"], address: string): StablecoinWallet {
+    const wallet: StablecoinWallet = {
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      type,
+      address,
+      balance: 0,
+    };
+    this.stablecoinWallets.push(wallet);
+    this.save();
+    return wallet;
+  }
+
+  removeStablecoinWallet(id: string): void {
+    this.stablecoinWallets = this.stablecoinWallets.filter((w) => w.id !== id);
+    this.save();
+  }
+
+  /**
+   * Convert Q-Credits to stablecoin.
+   * Rate: 1 QC = 1 USD equivalent (pegged to gold-backed value).
+   * In production, this would call a DEX or liquidity pool.
+   */
+  convertQCtoStablecoin(amount: number, type: StablecoinWallet["type"]): boolean {
+    if (amount <= 0 || amount > this.balance) return false;
+    const wallet = this.stablecoinWallets.find((w) => w.type === type);
+    if (!wallet) return false;
+
+    this.balance -= amount;
+    wallet.balance += amount; // 1:1 rate for now
+    this.transactions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      type: "send",
+      amount,
+      peer: `Stablecoin: ${type.toUpperCase()}`,
+      note: `Convert to ${type.toUpperCase()}`,
+      timestamp: Date.now(),
+    });
+    this.save();
+    return true;
+  }
+
+  /**
+   * Convert stablecoin back to Q-Credits.
+   */
+  convertStablecoinToQC(amount: number, type: StablecoinWallet["type"]): boolean {
+    const wallet = this.stablecoinWallets.find((w) => w.type === type);
+    if (!wallet || amount <= 0 || amount > wallet.balance) return false;
+
+    wallet.balance -= amount;
+    this.balance += amount; // 1:1 rate for now
+    this.transactions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      type: "receive",
+      amount,
+      peer: `Stablecoin: ${type.toUpperCase()}`,
+      note: `Convert from ${type.toUpperCase()}`,
+      timestamp: Date.now(),
+    });
+    this.save();
+    return true;
+  }
+
+  // --- Cash Bridge ---
+
+  private cashBridgeTransactions: CashBridgeTransaction[] = [];
+
+  /**
+   * Find nearby cash bridge agents.
+   * In production: GPS + backend query. For now: demo agents.
+   */
+  findNearbyAgents(): CashBridgeAgent[] {
+    return [
+      { id: "agent_1", name: "Amsterdam Central", location: "Amsterdam, NL", rating: 4.8, transactionCount: 342 },
+      { id: "agent_2", name: "Rotterdam Hub", location: "Rotterdam, NL", rating: 4.6, transactionCount: 218 },
+      { id: "agent_3", name: "Utrecht Station", location: "Utrecht, NL", rating: 4.9, transactionCount: 156 },
+      { id: "agent_4", name: "Den Haag Center", location: "The Hague, NL", rating: 4.7, transactionCount: 89 },
+      { id: "agent_5", name: "Kampala Central", location: "Kampala, UG", rating: 4.5, transactionCount: 67 },
+    ];
+  }
+
+  /**
+   * Initiate a cash bridge transaction with an agent.
+   * Buy: give cash, receive QC.
+   * Sell: give QC, receive cash.
+   */
+  initiateCashBridge(agentId: string, amount: number, direction: "buy" | "sell"): CashBridgeTransaction {
+    const agent = this.findNearbyAgents().find((a) => a.id === agentId);
+    const tx: CashBridgeTransaction = {
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      agentId,
+      agentName: agent?.name || "Unknown Agent",
+      amount,
+      direction,
+      status: "pending",
+      createdAt: Date.now(),
+    };
+    this.cashBridgeTransactions.push(tx);
+    this.save();
+    return tx;
+  }
+
+  getCashBridgeTransactions(): CashBridgeTransaction[] {
+    return [...this.cashBridgeTransactions].reverse();
+  }
+}
+
+// --- Stablecoin Types ---
+
+export interface StablecoinWallet {
+  id: string;
+  type: "usdt" | "usdc";
+  address: string;
+  balance: number;
+}
+
+// --- Cash Bridge Types ---
+
+export interface CashBridgeAgent {
+  id: string;
+  name: string;
+  location: string;
+  rating: number;
+  transactionCount: number;
+}
+
+export interface CashBridgeTransaction {
+  id: string;
+  agentId: string;
+  agentName: string;
+  amount: number;
+  direction: "buy" | "sell";
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  createdAt: number;
 }
 
 export const walletService = new WalletService();

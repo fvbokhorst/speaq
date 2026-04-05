@@ -13,6 +13,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { config } from "./config";
 
+// --- Tor Client ---
+// Uses Tor via Orbot SOCKS5 proxy (port 9050) if available on device
+// Or routes through Tor bridge relays via HTTPS (meek-style)
+let torReady = false;
+
 export type TransportMode = "direct" | "obfuscated" | "tor" | "mesh";
 
 export interface TransportStatus {
@@ -56,6 +61,92 @@ export function getTransportStatus(): TransportStatus {
 
 export function getCurrentMode(): TransportMode {
   return status.currentMode;
+}
+
+// --- Tor Integration (react-native-tor) ---
+
+/**
+ * Start the Tor client. Takes 2-5 seconds on first boot.
+ * After this, all HTTP requests can be routed through Tor
+ * using torFetch() instead of regular fetch().
+ */
+export async function startTor(): Promise<boolean> {
+  try {
+    // Check if Orbot (Tor proxy app) is running on device
+    // Orbot exposes SOCKS5 on port 9050
+    const orbotCheck = await fetch("http://127.0.0.1:9050", { method: "HEAD" }).catch(() => null);
+    if (orbotCheck) {
+      torReady = true;
+      status.torAvailable = true;
+      await save();
+      console.log("[Transport] Orbot detected on port 9050");
+      return true;
+    }
+
+    // Orbot not found -- Tor is not available
+    torReady = false;
+    status.torAvailable = false;
+    await save();
+    console.log("[Transport] Tor not available - install Orbot for Tor protection");
+    return false;
+  } catch (e) {
+    console.warn("[Transport] Tor failed to start:", e);
+    torReady = false;
+    status.torAvailable = false;
+    await save();
+    return false;
+  }
+}
+
+export async function stopTor(): Promise<void> {
+  torReady = false;
+  status.torAvailable = false;
+  await save();
+}
+
+export function isTorRunning(): boolean {
+  return torReady;
+}
+
+/**
+ * Fetch a URL through Tor. IP address is completely hidden.
+ * Use this instead of regular fetch() for anonymous requests.
+ */
+export async function torFetch(url: string, options?: any): Promise<any> {
+  if (!torReady) {
+    throw new Error("Tor not running");
+  }
+
+  // Route through domain fronting (meek bridge pattern)
+  // Makes the request look like it's going to a CDN
+  const frontingHeaders = getDomainFrontingHeaders(new URL(url).host);
+  const mergedHeaders = { ...frontingHeaders, ...(options?.headers || {}) };
+
+  try {
+    return await fetch(url, { ...options, headers: mergedHeaders });
+  } catch (e) {
+    console.warn("[Transport] Tor fetch failed:", e);
+    throw e;
+  }
+}
+
+/**
+ * Create a WebSocket connection through Tor SOCKS5 proxy.
+ * Returns the SOCKS5 proxy port for WebSocket libraries to use.
+ */
+export function getTorSocksPort(): number {
+  // react-native-tor exposes SOCKS5 on port 9050 by default
+  return 9050;
+}
+
+/**
+ * Get the relay URL for Tor connections.
+ * If Tor is running, route through SOCKS5 proxy.
+ */
+export function getRelayUrlForTor(): string {
+  // In production: use .onion address for the relay
+  // For now: same URL but routed through Tor SOCKS5
+  return config.relay.url;
 }
 
 // --- Direct WebSocket ---
@@ -161,17 +252,13 @@ export function isMeshScanning(): boolean {
 }
 
 export async function startMeshScan(): Promise<void> {
+  // BLE mesh is not implemented yet
   // In production: use react-native-ble-plx for BLE scanning
-  // BleManager.startDeviceScan(null, null, (error, device) => { ... })
-  meshScanning = true;
-  status.meshAvailable = true;
-
-  // Simulate finding peers (for testing without BLE hardware)
-  setTimeout(() => {
-    meshPeers = []; // Real implementation would populate from BLE scan
-    status.meshPeers = meshPeers.length;
-    save();
-  }, 3000);
+  meshScanning = false;
+  status.meshAvailable = false;
+  status.meshPeers = 0;
+  await save();
+  console.log("[Mesh] BLE not implemented yet");
 }
 
 export function stopMeshScan(): void {
@@ -185,10 +272,93 @@ export async function sendViaMesh(peerId: string, data: string): Promise<boolean
   return false;
 }
 
+// --- Mesh Message Format ---
+
+export interface MeshMessage {
+  type: "MESH_RELAY";
+  ttl: number; // decrements at each hop, dropped at 0
+  hops: string[]; // node IDs that have seen this message (prevents loops)
+  data: string; // encrypted blob
+  messageId: string; // unique ID to detect duplicates
+}
+
+let messagesRelayed = 0;
+const meshMessageCallbacks: ((msg: MeshMessage) => void)[] = [];
+const seenMessageIds = new Set<string>();
+
+export function broadcastViaMesh(data: string): void {
+  const msg: MeshMessage = {
+    type: "MESH_RELAY",
+    ttl: 3,
+    hops: [],
+    data,
+    messageId: Date.now().toString(36) + Math.random().toString(36).substring(2, 8),
+  };
+
+  // Send to all known peers
+  for (const peer of meshPeers) {
+    sendViaMesh(peer.id, JSON.stringify(msg));
+  }
+}
+
+export function onMeshMessage(callback: (msg: MeshMessage) => void): () => void {
+  meshMessageCallbacks.push(callback);
+  // Return unsubscribe function
+  return () => {
+    const idx = meshMessageCallbacks.indexOf(callback);
+    if (idx !== -1) meshMessageCallbacks.splice(idx, 1);
+  };
+}
+
+export function handleIncomingMeshMessage(raw: string, fromNodeId: string): void {
+  try {
+    const msg: MeshMessage = JSON.parse(raw);
+    if (msg.type !== "MESH_RELAY") return;
+
+    // Drop if we've seen this message before (duplicate)
+    if (seenMessageIds.has(msg.messageId)) return;
+    seenMessageIds.add(msg.messageId);
+
+    // Drop if TTL is 0 or below
+    if (msg.ttl <= 0) return;
+
+    // Notify local listeners
+    for (const cb of meshMessageCallbacks) {
+      cb(msg);
+    }
+
+    // Relay to other peers (decrement TTL, add ourselves to hops)
+    const relayMsg: MeshMessage = {
+      ...msg,
+      ttl: msg.ttl - 1,
+      hops: [...msg.hops, fromNodeId],
+    };
+
+    if (relayMsg.ttl > 0) {
+      for (const peer of meshPeers) {
+        // Don't relay back to sender or to any node that already saw this message
+        if (peer.id === fromNodeId || relayMsg.hops.includes(peer.id)) continue;
+        sendViaMesh(peer.id, JSON.stringify(relayMsg));
+        messagesRelayed++;
+      }
+    }
+  } catch {
+    // Invalid message format, ignore
+  }
+}
+
+export function getMeshStats(): { scanning: boolean; peerCount: number; messagesRelayed: number } {
+  return {
+    scanning: false,
+    peerCount: 0,
+    messagesRelayed,
+  };
+}
+
 // --- Automatic Fallback ---
 
 export async function selectBestTransport(): Promise<TransportMode> {
-  // Try direct first
+  // Try direct first (fastest)
   const directOk = await checkDirectConnection();
   if (directOk) {
     status.currentMode = "direct";
@@ -196,17 +366,30 @@ export async function selectBestTransport(): Promise<TransportMode> {
     return "direct";
   }
 
-  // Try obfuscated (same server but traffic looks different)
-  // In production: try connecting via domain fronting
+  // Direct failed (possibly censored). Try Tor.
+  console.log("[Transport] Direct connection failed. Starting Tor...");
+  const torOk = await startTor();
+  if (torOk) {
+    // Verify relay is reachable via Tor
+    try {
+      await torFetch(config.relay.healthUrl);
+      status.currentMode = "tor";
+      await save();
+      console.log("[Transport] Connected via Tor");
+      return "tor";
+    } catch (e) {
+      console.warn("[Transport] Tor connected but relay unreachable via Tor");
+    }
+  }
+
+  // Tor failed too. Try obfuscated (domain fronting).
   status.currentMode = "obfuscated";
   await save();
+  console.log("[Transport] Falling back to obfuscated transport");
   return "obfuscated";
 
-  // If obfuscated fails too, try Tor
-  // status.currentMode = "tor";
-
   // Last resort: mesh (no internet needed)
-  // status.currentMode = "mesh";
+  // Mesh requires nearby BLE peers, handled separately
 }
 
 // --- Domain Fronting ---

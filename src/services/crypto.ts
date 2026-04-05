@@ -447,12 +447,14 @@ function advanceChain(chainKey: string): { nextChainKey: string; messageKey: str
 /**
  * Encrypt a message using the sending ratchet chain.
  * Advances the chain -- the key is used once and never stored.
+ * Saves ratchet state BEFORE returning to prevent key loss on crash.
  *
  * @param state - ratchet state (MUTATED: chain advances)
  * @param plaintext - message to encrypt
+ * @param contactId - contact ID for persisting state
  * @returns encrypted message with sequence number
  */
-export function ratchetEncrypt(state: RatchetState, plaintext: string): RatchetMessage {
+export async function ratchetEncrypt(state: RatchetState, plaintext: string, contactId?: string): Promise<RatchetMessage> {
   const { nextChainKey, messageKey } = advanceChain(state.chainKeySend);
 
   // Encrypt with AES-256 using the one-time message key
@@ -467,18 +469,25 @@ export function ratchetEncrypt(state: RatchetState, plaintext: string): RatchetM
   state.chainKeySend = nextChainKey;
   state.sendCount++;
 
+  // Save ratchet state BEFORE returning -- prevents key loss if app crashes
+  if (contactId) {
+    await saveRatchetState(contactId, state);
+  }
+
   return msg;
 }
 
 /**
  * Decrypt a message using the receiving ratchet chain.
  * Handles out-of-order messages by advancing the chain to the right position.
+ * Saves ratchet state BEFORE returning to prevent key loss on crash.
  *
  * @param state - ratchet state (MUTATED: chain advances)
  * @param message - encrypted message
+ * @param contactId - contact ID for persisting state
  * @returns decrypted plaintext
  */
-export function ratchetDecrypt(state: RatchetState, message: RatchetMessage): string {
+export async function ratchetDecrypt(state: RatchetState, message: RatchetMessage, contactId?: string): Promise<string> {
   // Advance chain to the correct position for this message
   let chainKey = state.chainKeyRecv;
 
@@ -503,6 +512,11 @@ export function ratchetDecrypt(state: RatchetState, message: RatchetMessage): st
   state.chainKeyRecv = nextChainKey;
   state.recvCount = message.messageNumber + 1;
 
+  // Save ratchet state BEFORE returning -- prevents key loss if app crashes
+  if (contactId) {
+    await saveRatchetState(contactId, state);
+  }
+
   return plaintext;
 }
 
@@ -517,11 +531,28 @@ export function ratchetDecrypt(state: RatchetState, message: RatchetMessage): st
 let keystoreDerivedKey: string | null = null;
 
 /**
- * Derive an encryption key from the user's PIN.
+ * Derive an encryption key from the user's PIN using PBKDF2.
+ * 100,000 iterations makes brute force take months instead of minutes.
+ * The speaqId as salt ensures each device has unique key derivation.
  * Must be called after PIN verification, before any key load/save.
  */
-export function setKeystorePin(pin: string): void {
-  keystoreDerivedKey = CryptoJS.SHA256("speaq-keystore:" + pin).toString(CryptoJS.enc.Hex);
+export async function setKeystorePin(pin: string): Promise<void> {
+  // Get speaqId for use as salt (unique per device)
+  let speaqId = "default";
+  try {
+    const identityData = await AsyncStorage.getItem("speaq_identity");
+    if (identityData) {
+      const identity = JSON.parse(identityData);
+      if (identity.speaqId) speaqId = identity.speaqId;
+    }
+  } catch (e) {
+    // Fall back to "default" salt if identity not yet created
+  }
+
+  keystoreDerivedKey = CryptoJS.PBKDF2(pin, "speaq-salt:" + speaqId, {
+    keySize: 256 / 32,
+    iterations: 100000,
+  }).toString(CryptoJS.enc.Hex);
 }
 
 /** Encrypt data for storage using the PIN-derived key */

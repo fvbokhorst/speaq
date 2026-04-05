@@ -24,6 +24,7 @@ import VaultScreen from "./src/screens/VaultScreen";
 import MiningScreen from "./src/screens/MiningScreen";
 import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
+import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
@@ -38,6 +39,7 @@ import { loadMining } from "./src/services/mining";
 import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
 import { setNormalPin } from "./src/services/vault";
+import { setKeystorePin } from "./src/services/crypto";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -107,7 +109,7 @@ function App() {
     setPin(pin.slice(0, -1));
   }
 
-  function handlePinSubmit() {
+  async function handlePinSubmit() {
     if (phase === "pin-setup") {
       if (pinStep === "create") {
         if (pin.length < 4) return;
@@ -118,6 +120,7 @@ function App() {
         if (pin === tempPin) {
           setSavedPin(pin);
           setNormalPin(pin);
+          await setKeystorePin(pin);
           AsyncStorage.setItem("speaq_pin", pin);
           setPin("");
           setPhase("main");
@@ -131,6 +134,7 @@ function App() {
     } else if (phase === "pin-enter") {
       if (pin === savedPin) {
         setNormalPin(pin);
+        await setKeystorePin(pin);
         setPin("");
         setPhase("main");
       } else {
@@ -253,12 +257,13 @@ function App() {
         {activeTab === "settings" && <SettingsScreen onLogout={() => {
           setPhase("welcome");
           setActiveTab("chats");
-        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
+        }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onOpenBrowser={() => setActiveTab("browser")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "info" && <InfoScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "lightning" && <LightningScreen onBack={() => setActiveTab("wallet")} />}
+        {activeTab === "browser" && <BrowserScreen onBack={() => setActiveTab("settings")} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />

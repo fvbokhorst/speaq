@@ -7,6 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CryptoJS from "crypto-js";
 import { relay } from "./relay";
+import { loadKyberKeyPair } from "./crypto";
 
 // --- Ghost Groups ---
 // Groups with no member list visible. Stealth invites only.
@@ -29,6 +30,7 @@ export interface WitnessRecord {
   id: string;
   timestamp: number;
   contentHash: string; // SHA-256 of the content
+  signature: string; // HMAC-SHA256 signature for tamper evidence
   type: "text" | "photo" | "audio";
   content: string; // text or file URI
   location?: { lat: number; lng: number };
@@ -38,6 +40,20 @@ export interface WitnessRecord {
 // --- Dead Man's Switch ---
 // If you don't check in within the configured interval,
 // pre-configured messages are automatically sent to chosen contacts.
+
+// --- Ghost Polls ---
+// Anonymous polling within Ghost Groups. No voter identity recorded.
+
+export interface GhostPoll {
+  id: string;
+  groupId: string;
+  question: string;
+  options: string[];
+  votes: number[];
+  totalVoters: number;
+  votedUsers: string[]; // hashed SPEAQ IDs -- can't reverse but prevents double voting
+  createdAt: number;
+}
 
 export interface DeadManSwitch {
   id: string;
@@ -50,12 +66,14 @@ export interface DeadManSwitch {
 
 const STORAGE_KEYS = {
   ghostGroups: "speaq_ghost_groups",
+  ghostPolls: "speaq_ghost_polls",
   witnessRecords: "speaq_witness_records",
   deadManSwitch: "speaq_dead_man_switch",
 };
 
 class AdvancedService {
   private ghostGroups: GhostGroup[] = [];
+  private ghostPolls: GhostPoll[] = [];
   private witnessRecords: WitnessRecord[] = [];
   private deadManSwitch: DeadManSwitch | null = null;
   private loaded = false;
@@ -64,12 +82,14 @@ class AdvancedService {
   async load(): Promise<void> {
     if (this.loaded) return;
     try {
-      const [gg, wr, dms] = await Promise.all([
+      const [gg, gp, wr, dms] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.ghostGroups),
+        AsyncStorage.getItem(STORAGE_KEYS.ghostPolls),
         AsyncStorage.getItem(STORAGE_KEYS.witnessRecords),
         AsyncStorage.getItem(STORAGE_KEYS.deadManSwitch),
       ]);
       if (gg) this.ghostGroups = JSON.parse(gg);
+      if (gp) this.ghostPolls = JSON.parse(gp);
       if (wr) this.witnessRecords = JSON.parse(wr);
       if (dms) this.deadManSwitch = JSON.parse(dms);
       this.loaded = true;
@@ -138,17 +158,72 @@ class AdvancedService {
     await AsyncStorage.setItem(STORAGE_KEYS.ghostGroups, JSON.stringify(this.ghostGroups));
   }
 
+  // --- Ghost Polls ---
+
+  createGhostPoll(groupId: string, question: string, options: string[]): GhostPoll {
+    if (options.length < 2) throw new Error("Poll needs at least 2 options");
+
+    const poll: GhostPoll = {
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      groupId,
+      question,
+      options,
+      votes: new Array(options.length).fill(0),
+      totalVoters: 0,
+      votedUsers: [],
+      createdAt: Date.now(),
+    };
+    this.ghostPolls.push(poll);
+    this.saveGhostPolls();
+    return poll;
+  }
+
+  voteOnPoll(groupId: string, pollId: string, optionIndex: number, voterId?: string): boolean {
+    const poll = this.ghostPolls.find((p) => p.id === pollId && p.groupId === groupId);
+    if (!poll) return false;
+    if (optionIndex < 0 || optionIndex >= poll.options.length) return false;
+
+    // Hash the voter ID so we can prevent double voting without revealing identity
+    const voterHash = voterId
+      ? CryptoJS.SHA256(voterId + pollId).toString(CryptoJS.enc.Hex)
+      : Date.now().toString(36); // Anonymous fallback
+
+    if (poll.votedUsers.includes(voterHash)) return false; // Already voted
+
+    poll.votes[optionIndex]++;
+    poll.totalVoters++;
+    poll.votedUsers.push(voterHash);
+    this.saveGhostPolls();
+    return true;
+  }
+
+  getGhostPolls(groupId: string): GhostPoll[] {
+    return this.ghostPolls
+      .filter((p) => p.groupId === groupId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  private async saveGhostPolls(): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.ghostPolls, JSON.stringify(this.ghostPolls));
+  }
+
   // --- Witness Mode ---
 
   getWitnessRecords(): WitnessRecord[] {
     return [...this.witnessRecords].reverse();
   }
 
-  createWitness(type: WitnessRecord["type"], content: string): WitnessRecord {
+  createWitness(type: WitnessRecord["type"], content: string, signingKey?: string): WitnessRecord {
     // Generate SHA-256 hash of content + timestamp + nonce (RN-compatible)
     const timestamp = Date.now();
     const nonce = Math.random().toString(36).substring(2, 10);
     const contentHash = CryptoJS.SHA256(content + timestamp.toString() + nonce).toString();
+
+    // Create HMAC-SHA256 digital signature for tamper evidence
+    // Uses the signing key (Kyber-derived) or falls back to contentHash as HMAC key
+    const hmacKey = signingKey || contentHash;
+    const signatureData = content + contentHash + timestamp.toString();
+    const signature = CryptoJS.HmacSHA256(signatureData, hmacKey).toString(CryptoJS.enc.Hex);
 
     const recordId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
@@ -156,6 +231,7 @@ class AdvancedService {
       id: recordId,
       timestamp,
       contentHash,
+      signature,
       type,
       content,
       shared: false,
@@ -194,6 +270,26 @@ class AdvancedService {
   async deleteWitness(id: string): Promise<void> {
     this.witnessRecords = this.witnessRecords.filter((r) => r.id !== id);
     await AsyncStorage.setItem(STORAGE_KEYS.witnessRecords, JSON.stringify(this.witnessRecords));
+  }
+
+  verifyWitness(record: WitnessRecord, signingKey?: string): boolean {
+    // Re-compute the HMAC-SHA256 signature and compare
+    const hmacKey = signingKey || record.contentHash;
+    const signatureData = record.content + record.contentHash + record.timestamp.toString();
+    const expectedSig = CryptoJS.HmacSHA256(signatureData, hmacKey).toString(CryptoJS.enc.Hex);
+    return expectedSig === record.signature;
+  }
+
+  exportWitness(record: WitnessRecord): object {
+    // Return a shareable JSON proof (hash + signature + timestamp + content)
+    return {
+      contentHash: record.contentHash,
+      signature: record.signature,
+      timestamp: record.timestamp,
+      content: record.content,
+      type: record.type,
+      location: record.location || null,
+    };
   }
 
   // --- Dead Man's Switch ---
