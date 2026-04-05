@@ -8,7 +8,6 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Ima
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { pickProfilePhoto } from "../services/profile";
 
 interface Props {
