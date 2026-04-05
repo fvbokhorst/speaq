@@ -14,7 +14,11 @@ import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
 import { sendMessage, onMessage, getIdentity } from "../services/speaq";
-import { loadMessages, saveMessages, StoredMessage } from "../services/messages";
+import {
+  loadMessages, saveMessages, cleanExpiredMessages, StoredMessage,
+  getDisappearTimer, setDisappearTimer, getExpiresAt,
+  DISAPPEAR_OPTIONS, DisappearTimer,
+} from "../services/messages";
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
 import { getContactPhoto } from "../services/profile";
@@ -31,14 +35,21 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [disappearTimer, setDisappearTimerState] = useState<DisappearTimer>("off");
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load persisted messages
+  // Load persisted messages + clean expired + load timer
   useEffect(() => {
-    loadMessages(contactId).then((stored) => {
+    cleanExpiredMessages(contactId).then((stored) => {
       if (stored.length > 0) setMessages(stored);
     });
+    getDisappearTimer(contactId).then(setDisappearTimerState);
+    // Clean expired every 30 seconds
+    const cleanup = setInterval(() => {
+      cleanExpiredMessages(contactId).then(setMessages);
+    }, 30000);
+    return () => clearInterval(cleanup);
   }, [contactId]);
 
   // Save messages when they change
@@ -96,7 +107,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   function handleSend() {
     if (!message.trim()) return;
     const text = message.trim();
-    setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now() }]);
+    setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now(), expiresAt: getExpiresAt(disappearTimer) }]);
     sendMessage(contactId, text);
     playMessageSent();
     setMessage("");
@@ -205,9 +216,23 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
   function handleHeaderLongPress() {
     Alert.alert(contactName, contactId, [
+      { text: "Disappearing Messages", onPress: handleSetDisappear },
       { text: "Block User", style: "destructive", onPress: handleBlockUser },
       { text: "Cancel", style: "cancel" },
     ]);
+  }
+
+  function handleSetDisappear() {
+    const buttons = DISAPPEAR_OPTIONS.map((opt) => ({
+      text: `${opt.label}${disappearTimer === opt.key ? " (current)" : ""}`,
+      onPress: () => {
+        setDisappearTimer(contactId, opt.key);
+        setDisappearTimerState(opt.key);
+        Alert.alert("Set", opt.key === "off" ? "Messages will not disappear." : `Messages will disappear after ${opt.label}.`);
+      },
+    }));
+    buttons.push({ text: "Cancel", onPress: () => {} });
+    Alert.alert("Disappearing Messages", `Current: ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label || "Off"}`, buttons);
   }
 
   // Date separator logic
@@ -287,7 +312,10 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
       </TouchableWithoutFeedback>
 
       <View style={st.encBanner}>
-        <Text style={st.encText}>Kyber-768 + AES-256-GCM + Double Ratchet</Text>
+        <Text style={st.encText}>
+          Kyber-768 + AES-256-GCM + Double Ratchet
+          {disappearTimer !== "off" ? ` -- ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label}` : ""}
+        </Text>
       </View>
 
       <FlatList

@@ -422,7 +422,7 @@ export default function VaultScreen({ onBack }: Props) {
               <Text style={st.scanClose}>Close</Text>
             </TouchableOpacity>
           </View>
-          <CameraScreen
+          <Camera
             scanBarcode
             onReadCode={(event: any) => {
               const value = event.nativeEvent?.codeStringValue || "";

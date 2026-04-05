@@ -8,7 +8,7 @@ import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Dimensions,
 } from "react-native";
-import { CameraScreen } from "react-native-camera-kit";
+import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { advancedService, GhostGroup, WitnessRecord, DeadManSwitch } from "../services/advanced";
 import { contactsService, Contact } from "../services/contacts";
@@ -295,7 +295,7 @@ export default function AdvancedScreen({ onBack }: Props) {
               <Text style={st.scannerClose}>Close</Text>
             </TouchableOpacity>
           </View>
-          <CameraScreen
+          <Camera
             scanBarcode
             onReadCode={handleQRScan}
             showFrame
