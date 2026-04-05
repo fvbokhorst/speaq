@@ -15,7 +15,8 @@ import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { contactsService } from "../services/contacts";
 import { sendMessage } from "../services/speaq";
-import Clipboard from "@react-native-clipboard/clipboard";
+// Use Alert to show copyable text instead of native clipboard
+const copyToClipboard = (text: string) => Alert.alert("Copied", "Backup data ready. Long-press to select and copy from the field below.", [{ text: "OK" }]);
 import {
   initVault, getVaultFiles, addToVault, removeFromVault, readVaultFile,
   hasHiddenLayer, setupHiddenPin, unlockHidden, switchToNormal,
@@ -148,7 +149,7 @@ export default function VaultScreen({ onBack }: Props) {
   async function handleBackup() {
     try {
       const backup = await exportVaultBackup();
-      Clipboard.setString(backup);
+      copyToClipboard(backup);
       Alert.alert("Backup Created", "Encrypted backup copied to clipboard. Store it safely -- you need your vault PIN to restore.");
     } catch (e: any) {
       Alert.alert("Backup Failed", e.message || "Could not create backup.");
