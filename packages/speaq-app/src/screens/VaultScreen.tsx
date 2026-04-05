@@ -15,9 +15,8 @@ import { Camera } from "react-native-camera-kit";
 import { colors } from "../theme/brand";
 import { contactsService } from "../services/contacts";
 import { sendMessage } from "../services/speaq";
-import RNFS from "react-native-fs";
 import {
-  initVault, getVaultFiles, addToVault, removeFromVault,
+  initVault, getVaultFiles, addToVault, removeFromVault, readVaultFile,
   hasHiddenLayer, setupHiddenPin, unlockHidden, switchToNormal,
   getCurrentLayer, VaultFile,
 } from "../services/vault";
@@ -28,6 +27,7 @@ interface Props {
 
 export default function VaultScreen({ onBack }: Props) {
   const [files, setFiles] = useState<VaultFile[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [layer, setLayer] = useState(getCurrentLayer());
   const [showSetupHidden, setShowSetupHidden] = useState(false);
   const [showUnlockHidden, setShowUnlockHidden] = useState(false);
@@ -42,6 +42,19 @@ export default function VaultScreen({ onBack }: Props) {
   async function loadFiles() {
     const f = await getVaultFiles();
     setFiles(f);
+    // Decrypt photo thumbnails
+    const newThumbs: Record<string, string> = {};
+    for (const file of f) {
+      if (file.type === "photo" && file.uri) {
+        try {
+          const base64 = await readVaultFile(file);
+          const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+          const mime = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : "image/jpeg";
+          newThumbs[file.id] = `data:${mime};base64,${base64}`;
+        } catch { /* skip broken thumbnails */ }
+      }
+    }
+    setThumbs(newThumbs);
   }
 
   async function handleAddPhoto() {
@@ -76,8 +89,9 @@ export default function VaultScreen({ onBack }: Props) {
   async function handleSaveNote() {
     if (!noteText.trim()) return;
     if (editingNoteFile) {
-      // Update existing note
-      await RNFS.writeFile(editingNoteFile.uri.replace("file://", ""), noteText.trim(), "utf8");
+      // Update existing note -- re-encrypt via addToVault (remove old, add new)
+      await removeFromVault(editingNoteFile.id);
+      await addToVault(editingNoteFile.name, "", "note", noteText.trim());
     } else {
       // Create new note
       await addToVault("note.txt", "", "note", noteText.trim());
@@ -97,11 +111,11 @@ export default function VaultScreen({ onBack }: Props) {
     if (!shareFile) return;
     try {
       if (shareFile.type === "note" && shareFile.uri) {
-        const content = await RNFS.readFile(shareFile.uri.replace("file://", ""), "utf8");
+        const content = await readVaultFile(shareFile);
         sendMessage(contactId, `[Vault Note] ${content}`);
       } else if (shareFile.type === "photo" && shareFile.uri) {
-        // Read photo as base64 and send
-        const base64 = await RNFS.readFile(shareFile.uri.replace("file://", ""), "base64");
+        // Decrypt photo to get base64 data
+        const base64 = await readVaultFile(shareFile);
         sendMessage(contactId, JSON.stringify({ type: "vault_file", fileType: "photo", name: shareFile.name, data: base64.substring(0, 1000) + "..." }));
         // For now send as file reference - full transfer needs relay file support
         sendMessage(contactId, `[Vault Photo: ${shareFile.name}]`);
@@ -138,10 +152,18 @@ export default function VaultScreen({ onBack }: Props) {
 
   async function handleTapFile(file: VaultFile) {
     if (file.type === "photo") {
-      setViewFile(file);
+      // Decrypt photo for viewing -- create a temp decrypted data URI
+      try {
+        const base64 = await readVaultFile(file);
+        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const mime = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : "image/jpeg";
+        setViewFile({ ...file, uri: `data:${mime};base64,${base64}` });
+      } catch {
+        setViewFile(file);
+      }
     } else if (file.type === "note" && file.uri) {
       try {
-        const content = await RNFS.readFile(file.uri.replace("file://", ""), "utf8");
+        const content = await readVaultFile(file);
         setEditingNoteFile(file);
         setNoteText(content);
         setShowNoteEditor(true);
@@ -285,8 +307,8 @@ export default function VaultScreen({ onBack }: Props) {
         ) : (
           files.map((file) => (
             <TouchableOpacity key={file.id} style={st.fileRow} onPress={() => handleTapFile(file)} onLongPress={() => handleFileActions(file)}>
-              {file.type === "photo" && file.uri ? (
-                <Image source={{ uri: file.uri }} style={st.fileThumb} />
+              {file.type === "photo" && thumbs[file.id] ? (
+                <Image source={{ uri: thumbs[file.id] }} style={st.fileThumb} />
               ) : (
                 <View style={st.fileIcon}>
                   <Text style={st.fileIconText}>{typeIcons[file.type] || "F"}</Text>

@@ -54,6 +54,11 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 100; // 100 messages per minute
 const rateLimitCounters = new Map<string, { count: number; resetAt: number }>();
 
+// --- Counters ---
+
+let totalMessagesRelayed = 0;
+const serverStartedAt = Date.now();
+
 // --- Rate Limiting ---
 
 function checkRateLimit(speaqId: string): boolean {
@@ -165,6 +170,24 @@ app.delete("/api/v1/offline/:speaqId", (req, res) => {
   res.json({ cleared: true });
 });
 
+// Network stats
+app.get("/api/v1/stats", (_req, res) => {
+  res.json({
+    registeredUsers: publicKeys.size,
+    onlineUsers: clients.size,
+    totalMessagesRelayed: totalMessagesRelayed,
+    uptimeSeconds: Math.floor((Date.now() - serverStartedAt) / 1000),
+  });
+});
+
+// Mining network stats (placeholder -- will be replaced by ledger)
+app.get("/api/v1/mining/network-stats", (_req, res) => {
+  res.json({
+    totalQCMined: 0, // placeholder: will be replaced by ledger integration
+    activeMiners: 0,  // placeholder: will be replaced by ledger integration
+  });
+});
+
 // --- HTTP Server + WebSocket ---
 
 const server = http.createServer(app);
@@ -220,6 +243,7 @@ wss.on("connection", (ws: WebSocket) => {
           }
 
           const messageId = id || crypto.randomUUID();
+          totalMessagesRelayed++;
           const recipient = clients.get(to);
 
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
@@ -242,9 +266,14 @@ wss.on("connection", (ws: WebSocket) => {
         // TYPING: Relay typing indicator
         case "TYPING": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "TYPING", from: clientId }));
+            totalMessagesRelayed++;
           }
           break;
         }
@@ -254,6 +283,11 @@ wss.on("connection", (ws: WebSocket) => {
 
         case "CALL_OFFER": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+          totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "CALL_OFFER", from: clientId, sdp: msg.sdp, callId: msg.callId, video: msg.video }));
@@ -265,6 +299,11 @@ wss.on("connection", (ws: WebSocket) => {
 
         case "CALL_ANSWER": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+          totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "CALL_ANSWER", from: clientId, sdp: msg.sdp, callId: msg.callId }));
@@ -274,6 +313,11 @@ wss.on("connection", (ws: WebSocket) => {
 
         case "ICE_CANDIDATE": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+          totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "ICE_CANDIDATE", from: clientId, candidate: msg.candidate, callId: msg.callId }));
@@ -283,6 +327,11 @@ wss.on("connection", (ws: WebSocket) => {
 
         case "CALL_END": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+          totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "CALL_END", from: clientId, callId: msg.callId }));
@@ -292,9 +341,88 @@ wss.on("connection", (ws: WebSocket) => {
 
         case "CALL_REJECT": {
           if (!clientId) return;
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+          totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify({ type: "CALL_REJECT", from: clientId, callId: msg.callId }));
+          }
+          break;
+        }
+
+        // --- Key Exchange (Quantum Crypto) ---
+        // KEY_EXCHANGE and KEY_EXCHANGE_RESPONSE are relayed like messages.
+        // If recipient is offline, they are queued (critical for ratchet init).
+
+        case "KEY_EXCHANGE": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+
+          const { to, blob, id } = msg;
+          if (!to || !blob) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
+            return;
+          }
+
+          const messageId = id || crypto.randomUUID();
+          totalMessagesRelayed++;
+          const recipient = clients.get(to);
+
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({
+              type: "KEY_EXCHANGE",
+              from: clientId,
+              blob,
+              id: messageId,
+            }));
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+          } else {
+            queueOfflineMessage(to, clientId, JSON.stringify({ type: "KEY_EXCHANGE", blob }));
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
+          }
+          break;
+        }
+
+        case "KEY_EXCHANGE_RESPONSE": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+          if (!checkRateLimit(clientId)) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Rate limit exceeded" }));
+            return;
+          }
+
+          const { to, blob, id } = msg;
+          if (!to || !blob) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
+            return;
+          }
+
+          const messageId = id || crypto.randomUUID();
+          totalMessagesRelayed++;
+          const recipient = clients.get(to);
+
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify({
+              type: "KEY_EXCHANGE_RESPONSE",
+              from: clientId,
+              blob,
+              id: messageId,
+            }));
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+          } else {
+            queueOfflineMessage(to, clientId, JSON.stringify({ type: "KEY_EXCHANGE_RESPONSE", blob }));
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
           }
           break;
         }

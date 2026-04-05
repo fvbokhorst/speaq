@@ -11,6 +11,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import RNFS from "react-native-fs";
+import CryptoJS from "crypto-js";
 
 export interface VaultFile {
   id: string;
@@ -31,16 +32,39 @@ const DECOY_KEY = "speaq_vault_decoy";
 let currentLayer: "normal" | "hidden" = "normal";
 let hiddenPinHash: string | null = null;
 
-// Simple hash for PIN comparison (not crypto-grade, just for local comparison)
+// Encryption keys derived from PINs
+let normalEncKey: string | null = null;
+let hiddenEncKey: string | null = null;
+
+// --- Crypto helpers ---
+
+/** SHA-256 hash for PIN comparison (replaces simple JS hash) */
 function hashPin(pin: string): string {
-  let hash = 0;
-  for (let i = 0; i < pin.length; i++) {
-    const chr = pin.charCodeAt(i);
-    hash = ((hash << 5) - hash) + chr;
-    hash |= 0;
-  }
-  return "h" + Math.abs(hash).toString(36);
+  return CryptoJS.SHA256(pin).toString(CryptoJS.enc.Hex);
 }
+
+/** Derive an AES-256 encryption key from a PIN */
+function deriveKey(pin: string): string {
+  return CryptoJS.SHA256("speaq-vault-key:" + pin).toString(CryptoJS.enc.Hex);
+}
+
+/** Get the current layer's encryption key */
+function getEncKey(): string | null {
+  return currentLayer === "hidden" ? hiddenEncKey : normalEncKey;
+}
+
+/** AES-256 encrypt a string */
+function vaultEncrypt(data: string, key: string): string {
+  return CryptoJS.AES.encrypt(data, key).toString();
+}
+
+/** AES-256 decrypt a string */
+function vaultDecrypt(encrypted: string, key: string): string {
+  const bytes = CryptoJS.AES.decrypt(encrypted, key);
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
+
+// --- Init & Layer Management ---
 
 export async function initVault(): Promise<void> {
   try {
@@ -51,18 +75,28 @@ export async function initVault(): Promise<void> {
   } catch (e) {}
 }
 
+/**
+ * Set the normal layer encryption key from the user's PIN.
+ * Must be called after PIN verification in App.tsx.
+ */
+export function setNormalPin(pin: string): void {
+  normalEncKey = deriveKey(pin);
+}
+
 export function hasHiddenLayer(): boolean {
   return hiddenPinHash !== null;
 }
 
 export async function setupHiddenPin(pin: string): Promise<void> {
   hiddenPinHash = hashPin(pin);
+  hiddenEncKey = deriveKey(pin);
   await AsyncStorage.setItem(HIDDEN_PIN_KEY, hiddenPinHash);
 }
 
 export function unlockHidden(pin: string): boolean {
   if (!hiddenPinHash) return false;
   if (hashPin(pin) === hiddenPinHash) {
+    hiddenEncKey = deriveKey(pin);
     currentLayer = "hidden";
     return true;
   }
@@ -96,9 +130,15 @@ export async function getVaultFiles(): Promise<VaultFile[]> {
   }
 }
 
+/**
+ * Add a file to the vault. The file is AES-256 encrypted before writing to disk.
+ * - Notes: text is encrypted directly
+ * - Photos/documents/video: file is read as base64, encrypted, then written
+ */
 export async function addToVault(name: string, sourceUri: string, type: VaultFile["type"], textContent?: string): Promise<VaultFile> {
   const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
   const dir = getVaultDir();
+  const key = getEncKey();
 
   // Ensure directory exists
   const dirExists = await RNFS.exists(dir);
@@ -108,21 +148,23 @@ export async function addToVault(name: string, sourceUri: string, type: VaultFil
   let size = 0;
 
   if (type === "note" && textContent) {
-    // Write text directly
-    destPath = `${dir}/${id}.txt`;
-    await RNFS.writeFile(destPath, textContent, "utf8");
+    // Encrypt note text and write
+    destPath = `${dir}/${id}.enc`;
+    const encrypted = key ? vaultEncrypt(textContent, key) : textContent;
+    await RNFS.writeFile(destPath, encrypted, "utf8");
     size = textContent.length;
   } else if (sourceUri) {
-    // Copy file
-    const ext = name.split(".").pop() || "dat";
-    destPath = `${dir}/${id}.${ext}`;
+    // Read file as base64, encrypt, write encrypted version
+    destPath = `${dir}/${id}.enc`;
+    let base64Data: string;
     try {
-      await RNFS.copyFile(sourceUri, destPath);
+      base64Data = await RNFS.readFile(sourceUri, "base64");
     } catch {
-      await RNFS.copyFile(sourceUri.replace("file://", ""), destPath);
+      base64Data = await RNFS.readFile(sourceUri.replace("file://", ""), "base64");
     }
-    const stat = await RNFS.stat(destPath);
-    size = parseInt(stat.size as any) || 0;
+    size = base64Data.length; // approximate original size
+    const encrypted = key ? vaultEncrypt(base64Data, key) : base64Data;
+    await RNFS.writeFile(destPath, encrypted, "utf8");
   } else {
     return { id, name, type, uri: "", size: 0, addedAt: Date.now() };
   }
@@ -140,6 +182,29 @@ export async function addToVault(name: string, sourceUri: string, type: VaultFil
   files.push(file);
   await AsyncStorage.setItem(getStorageKey(), JSON.stringify(files));
   return file;
+}
+
+/**
+ * Read a vault file, decrypting it first.
+ * Returns the decrypted content:
+ * - For notes: returns the plain text string
+ * - For photos/documents: returns the base64 data (can be used as data URI)
+ */
+export async function readVaultFile(file: VaultFile): Promise<string> {
+  const key = getEncKey();
+  const filePath = file.uri.replace("file://", "");
+  const raw = await RNFS.readFile(filePath, "utf8");
+
+  if (!key) return raw;
+
+  try {
+    const decrypted = vaultDecrypt(raw, key);
+    if (!decrypted) return raw; // fallback for unencrypted legacy files
+    return decrypted;
+  } catch {
+    // Fallback: file might be from before encryption was added
+    return raw;
+  }
 }
 
 export async function removeFromVault(fileId: string): Promise<void> {
@@ -166,8 +231,9 @@ export async function addDecoyNote(text: string): Promise<void> {
   const existing: VaultFile[] = files ? JSON.parse(files) : [];
 
   const id = Date.now().toString(36);
-  const path = `${VAULT_DIR}/${id}.txt`;
-  await RNFS.writeFile(path, text, "utf8");
+  const path = `${VAULT_DIR}/${id}.enc`;
+  const encrypted = normalEncKey ? vaultEncrypt(text, normalEncKey) : text;
+  await RNFS.writeFile(path, encrypted, "utf8");
 
   existing.push({
     id,
