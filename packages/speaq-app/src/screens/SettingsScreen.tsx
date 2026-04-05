@@ -16,10 +16,11 @@ interface Props {
   onOpenAdvanced: () => void;
   onOpenVault: () => void;
   onOpenMining: () => void;
+  onOpenInfo: () => void;
   onLanguageChange: () => void;
 }
 
-export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onLanguageChange }: Props) {
+export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onOpenInfo, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -170,6 +171,10 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         {/* About */}
         <Text style={st.sectionLabel}>{t("about")}</Text>
         <View style={st.card}>
+          <TouchableOpacity style={st.row} onPress={onOpenInfo}>
+            <Text style={st.rowLabel}>How SPEAQ Works</Text>
+            <Text style={st.rowAction}>i</Text>
+          </TouchableOpacity>
           <View style={st.row}>
             <Text style={st.rowLabel}>{t("version")}</Text>
             <Text style={st.rowValue}>0.1.0 (Phase 5)</Text>
