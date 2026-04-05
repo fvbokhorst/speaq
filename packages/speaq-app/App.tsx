@@ -11,6 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import WelcomeScreen from "./src/screens/WelcomeScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
+import ContactsScreen from "./src/screens/ContactsScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity } from "./src/services/speaq";
@@ -156,7 +157,11 @@ function App() {
           setActiveTab("chat");
         }} />}
         {activeTab === "chat" && <ChatScreen contactId={chatContactId} contactName={chatContactName} onBack={() => setActiveTab("chats")} />}
-        {activeTab === "contacts" && <PH title="Contacts" />}
+        {activeTab === "contacts" && <ContactsScreen onOpenChat={(id: string, name: string) => {
+          setChatContactId(id);
+          setChatContactName(name);
+          setActiveTab("chat");
+        }} />}
         {activeTab === "wallet" && <PH title="Wallet" />}
         {activeTab === "settings" && <PH title="Settings" />}
         <View style={st.nav}>
