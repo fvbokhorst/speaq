@@ -19,6 +19,7 @@ import WalletScreen from "./src/screens/WalletScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import AdvancedScreen from "./src/screens/AdvancedScreen";
 import TransactionsScreen from "./src/screens/TransactionsScreen";
+import GroupsScreen from "./src/screens/GroupsScreen";
 import VaultScreen from "./src/screens/VaultScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
@@ -28,6 +29,8 @@ import { walletService } from "./src/services/wallet";
 import { contactsService } from "./src/services/contacts";
 import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
+import { loadGroups } from "./src/services/groups";
+import { loadLanguage } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
 
 function App() {
@@ -52,6 +55,8 @@ function App() {
     loadIdentity();
     loadBlocked();
     loadProfile();
+    loadGroups();
+    loadLanguage();
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
@@ -216,7 +221,12 @@ function App() {
         }} />}
         {activeTab === "chat" && !inCall && <ChatScreen contactId={chatContactId} contactName={chatContactName} onBack={() => setActiveTab("chats")} onCall={handleStartCall} />}
         {inCall && <CallScreen contactName={callContactName} isVideo={callIsVideo} isIncoming={callIsIncoming} onEnd={() => setInCall(false)} />}
-        {activeTab === "contacts" && <ContactsScreen onOpenChat={(id: string, name: string) => {
+        {activeTab === "groups" && <GroupsScreen onOpenGroupChat={(id, name) => {
+          setChatContactId(id);
+          setChatContactName(name);
+          setActiveTab("chat");
+        }} />}
+        {activeTab === "contacts" && <ContactsScreen onOpenGroups={() => setActiveTab("groups")} onOpenChat={(id: string, name: string) => {
           setChatContactId(id);
           setChatContactName(name);
           setActiveTab("chat");

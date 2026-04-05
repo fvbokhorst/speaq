@@ -12,9 +12,10 @@ import { contactsService, Contact } from "../services/contacts";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
+  onOpenGroups: () => void;
 }
 
-export default function ContactsScreen({ onOpenChat }: Props) {
+export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [contacts, setContacts] = useState<Contact[]>(contactsService.getContacts());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -42,9 +43,14 @@ export default function ContactsScreen({ onOpenChat }: Props) {
       {/* Header */}
       <View style={st.header}>
         <Text style={st.title}>Contacts</Text>
-        <TouchableOpacity onPress={() => setShowAddModal(true)} style={st.addBtn}>
-          <Text style={st.addBtnText}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity onPress={onOpenGroups} style={[st.addBtn, { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.voice.gold }]}>
+            <Text style={[st.addBtnText, { color: colors.voice.gold }]}>Groups</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowAddModal(true)} style={st.addBtn}>
+            <Text style={st.addBtnText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Your QR Code */}

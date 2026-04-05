@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
+import { getLanguage, setLanguage, LANGUAGES, Language } from "../services/i18n";
 
 interface Props {
   onLogout: () => void;
@@ -114,6 +115,22 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault }
           <TouchableOpacity style={st.row} onPress={handleResetPIN}>
             <Text style={st.rowLabel}>Reset PIN</Text>
             <Text style={st.rowAction}>Reset</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Language */}
+        <Text style={st.sectionLabel}>Language</Text>
+        <View style={st.card}>
+          <TouchableOpacity style={st.row} onPress={() => {
+            const buttons = LANGUAGES.map((l) => ({
+              text: `${l.native}${getLanguage() === l.key ? " (current)" : ""}`,
+              onPress: () => setLanguage(l.key),
+            }));
+            buttons.push({ text: "Cancel", onPress: () => {} });
+            Alert.alert("Language", "Select your language", buttons);
+          }}>
+            <Text style={st.rowLabel}>Language</Text>
+            <Text style={st.rowAction}>{LANGUAGES.find((l) => l.key === getLanguage())?.native || "English"}</Text>
           </TouchableOpacity>
         </View>
 
