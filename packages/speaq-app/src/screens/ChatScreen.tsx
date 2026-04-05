@@ -18,6 +18,7 @@ import { loadMessages, saveMessages, StoredMessage } from "../services/messages"
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
 import { getContactPhoto } from "../services/profile";
+import { playMessageReceived, playMessageSent } from "../services/sound";
 
 interface Props {
   contactId: string;
@@ -63,6 +64,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
             const data = JSON.parse(atob(msg.blob));
             if (data.type === "message") {
               Vibration.vibrate(100);
+              playMessageReceived();
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
                 text: data.text,
@@ -96,6 +98,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
     const text = message.trim();
     setMessages((prev) => [...prev, { id: Date.now().toString(), text, sent: true, type: "text", timestamp: now() }]);
     sendMessage(contactId, text);
+    playMessageSent();
     setMessage("");
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }
