@@ -13,10 +13,13 @@ import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import ContactsScreen from "./src/screens/ContactsScreen";
 import CallScreen from "./src/screens/CallScreen";
+import WalletScreen from "./src/screens/WalletScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
+import { walletService } from "./src/services/wallet";
 
 function App() {
   const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
@@ -32,8 +35,11 @@ function App() {
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
   const [tempPin, setTempPin] = useState("");
 
-  // Check if user is registered on startup
+  // Check if user is registered on startup + load wallet
   useEffect(() => {
+    walletService.load().then(() => {
+      walletService.addWelcomeBonus();
+    });
     AsyncStorage.getItem("speaq_pin").then((storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
@@ -189,8 +195,15 @@ function App() {
           setChatContactName(name);
           setActiveTab("chat");
         }} />}
-        {activeTab === "wallet" && <PH title="Wallet" />}
-        {activeTab === "settings" && <PH title="Settings" />}
+        {activeTab === "wallet" && <WalletScreen onOpenChat={(id, name) => {
+          setChatContactId(id);
+          setChatContactName(name);
+          setActiveTab("chat");
+        }} />}
+        {activeTab === "settings" && <SettingsScreen onLogout={() => {
+          setPhase("welcome");
+          setActiveTab("chats");
+        }} />}
         <View style={st.nav}>
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label="Chats" active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label="Contacts" active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
