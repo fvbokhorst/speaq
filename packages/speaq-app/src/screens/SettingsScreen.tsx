@@ -172,7 +172,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         <Text style={st.sectionLabel}>{t("about")}</Text>
         <View style={st.card}>
           <TouchableOpacity style={st.row} onPress={onOpenInfo}>
-            <Text style={st.rowLabel}>How SPEAQ Works</Text>
+            <Text style={st.rowLabel}>{t("howSpeaqWorks")}</Text>
             <Text style={st.rowAction}>i</Text>
           </TouchableOpacity>
           <View style={st.row}>

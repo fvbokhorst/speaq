@@ -102,6 +102,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Sent",
     today: "Today",
     yesterday: "Yesterday",
+    howSpeaqWorks: "How SPEAQ Works",
   },
   nl: {
     chats: "Chats",
@@ -161,6 +162,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Verzonden",
     today: "Vandaag",
     yesterday: "Gisteren",
+    howSpeaqWorks: "Hoe SPEAQ Werkt",
   },
   fr: {
     chats: "Discussions",
@@ -220,6 +222,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Envoye",
     today: "Aujourd'hui",
     yesterday: "Hier",
+    howSpeaqWorks: "Comment SPEAQ Fonctionne",
   },
   es: {
     chats: "Chats",
@@ -279,6 +282,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Enviado",
     today: "Hoy",
     yesterday: "Ayer",
+    howSpeaqWorks: "Como Funciona SPEAQ",
   },
   ru: {
     chats: "Chaty",
@@ -338,6 +342,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Otpravleno",
     today: "Segodnya",
     yesterday: "Vchera",
+    howSpeaqWorks: "Kak Rabotaet SPEAQ",
   },
   de: {
     chats: "Chats",
@@ -397,6 +402,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Gesendet",
     today: "Heute",
     yesterday: "Gestern",
+    howSpeaqWorks: "Wie SPEAQ Funktioniert",
   },
   sl: {
     chats: "Pogovori",
@@ -456,6 +462,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Poslano",
     today: "Danes",
     yesterday: "Vceraj",
+    howSpeaqWorks: "Kako Deluje SPEAQ",
   },
   lg: {
     chats: "Emboozi",
@@ -515,6 +522,7 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Ewereddwa",
     today: "Leero",
     yesterday: "Jjo",
+    howSpeaqWorks: "SPEAQ Ekola Etya",
   },
   sw: {
     chats: "Mazungumzo",
@@ -574,5 +582,6 @@ const translations: Record<Language, Record<string, string>> = {
     sent: "Imetumwa",
     today: "Leo",
     yesterday: "Jana",
+    howSpeaqWorks: "Jinsi SPEAQ Inavyofanya Kazi",
   },
 };
