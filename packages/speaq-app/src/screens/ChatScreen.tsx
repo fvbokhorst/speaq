@@ -17,6 +17,7 @@ import { sendMessage, onMessage, getIdentity } from "../services/speaq";
 import { loadMessages, saveMessages, StoredMessage } from "../services/messages";
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
+import { getContactPhoto } from "../services/profile";
 
 interface Props {
   contactId: string;
@@ -262,9 +263,13 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           <TouchableOpacity onPress={onBack} style={st.backBtn}>
             <Text style={st.backText}>{"<"}</Text>
           </TouchableOpacity>
-          <View style={st.headerAvatar}>
-            <Text style={st.headerAvatarText}>{contactName.charAt(0)}</Text>
-          </View>
+          {getContactPhoto(contactId) ? (
+            <Image source={{ uri: getContactPhoto(contactId)! }} style={st.headerPhoto} />
+          ) : (
+            <View style={st.headerAvatar}>
+              <Text style={st.headerAvatarText}>{contactName.charAt(0)}</Text>
+            </View>
+          )}
           <View style={st.headerInfo}>
             <Text style={st.headerName}>{contactName}</Text>
             <Text style={st.headerStatus}>{isTyping ? "typing..." : "Quantum Secured"}</Text>
@@ -327,6 +332,7 @@ const st = StyleSheet.create({
   },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
   backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
+  headerPhoto: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.quantum.teal },
   headerAvatar: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.quantum.teal,

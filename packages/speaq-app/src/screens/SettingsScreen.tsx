@@ -4,10 +4,11 @@
  */
 
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
+import { getProfilePhoto, pickProfilePhoto } from "../services/profile";
 
 interface Props {
   onLogout: () => void;
@@ -16,7 +17,13 @@ interface Props {
 
 export default function SettingsScreen({ onLogout, onOpenAdvanced }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [photoUri, setPhotoUri] = useState(getProfilePhoto());
   const identity = getIdentity();
+
+  async function handleChangePhoto() {
+    const uri = await pickProfilePhoto();
+    if (uri) setPhotoUri(uri);
+  }
 
   function handleDeleteData() {
     Alert.alert(
@@ -61,6 +68,18 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced }: Props) {
       </View>
 
       <ScrollView style={st.list}>
+        {/* Profile Photo */}
+        <TouchableOpacity style={st.photoSection} onPress={handleChangePhoto}>
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={st.profilePhoto} />
+          ) : (
+            <View style={st.profilePhotoPlaceholder}>
+              <Text style={st.profilePhotoInit}>{identity?.displayName?.charAt(0) || "?"}</Text>
+            </View>
+          )}
+          <Text style={st.photoHint}>Tap to change photo</Text>
+        </TouchableOpacity>
+
         {/* Profile */}
         <Text style={st.sectionLabel}>Profile</Text>
         <View style={st.card}>
@@ -210,6 +229,11 @@ const st = StyleSheet.create({
   header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
   title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
   list: { flex: 1, paddingHorizontal: 16 },
+  photoSection: { alignItems: "center", paddingVertical: 20 },
+  profilePhoto: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.voice.gold },
+  profilePhotoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.voice.gold },
+  profilePhotoInit: { color: colors.voice.gold, fontSize: 32, fontWeight: "600" },
+  photoHint: { color: colors.signal.steel, fontSize: 11, marginTop: 8 },
   sectionLabel: { color: colors.signal.steel, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginTop: 20, marginBottom: 8, paddingHorizontal: 8 },
   card: { backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, overflow: "hidden" },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },

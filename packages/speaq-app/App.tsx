@@ -8,6 +8,7 @@ import React, { useState, useEffect } from "react";
 import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import OnboardingScreen from "./src/screens/OnboardingScreen";
 import WelcomeScreen from "./src/screens/WelcomeScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
@@ -25,9 +26,10 @@ import { walletService } from "./src/services/wallet";
 import { contactsService } from "./src/services/contacts";
 import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
+import { loadProfile } from "./src/services/profile";
 
 function App() {
-  const [phase, setPhase] = useState<"loading" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
+  const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
   const [chatContactId, setChatContactId] = useState("");
   const [chatContactName, setChatContactName] = useState("");
@@ -47,12 +49,14 @@ function App() {
     advancedService.load();
     loadIdentity();
     loadBlocked();
-    AsyncStorage.getItem("speaq_pin").then((storedPin) => {
+    loadProfile();
+    AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
         setPhase("pin-enter");
       } else {
-        setPhase("welcome");
+        const seen = await AsyncStorage.getItem("speaq_onboarding_done");
+        setPhase(seen ? "welcome" : "onboarding");
       }
     });
   }, []);
@@ -127,6 +131,19 @@ function App() {
             <View style={st.lockQC}><Text style={st.lockQL}>Q</Text><View style={st.lockQB} /></View>
           </View>
         </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  // Onboarding (first time ever)
+  if (phase === "onboarding") {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="light-content" />
+        <OnboardingScreen onDone={() => {
+          AsyncStorage.setItem("speaq_onboarding_done", "1");
+          setPhase("welcome");
+        }} />
       </SafeAreaProvider>
     );
   }
