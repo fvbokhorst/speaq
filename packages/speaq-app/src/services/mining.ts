@@ -45,14 +45,16 @@ const REWARDS_KEY = "speaq_mining_rewards";
 const MINING_ACTIVE_KEY = "speaq_mining_active";
 
 // Reward rates per type (QC per action)
+// Calibrated to ~5-8% annual yield (comparable to Bitvavo/Binance staking)
+// Target: 0.02-0.05 QC/day per active miner
 const REWARD_RATES: Record<MiningType, { perAction: number; dailyCap: number; description: string }> = {
-  relay: { perAction: 0.01, dailyCap: 2.0, description: "Relayed encrypted message" },
-  mesh: { perAction: 0.05, dailyCap: 3.0, description: "Mesh node uptime (per 10 min)" },
-  bridge: { perAction: 0.50, dailyCap: 50.0, description: "Cash bridge transaction" },
-  validation: { perAction: 0.02, dailyCap: 1.5, description: "Validated transaction proof" },
-  storage: { perAction: 0.01, dailyCap: 1.0, description: "Stored encrypted fragment" },
-  translation: { perAction: 5.00, dailyCap: 5.0, description: "Translation contribution" },
-  onboarding: { perAction: 1.00, dailyCap: 10.0, description: "Onboarded new user" },
+  relay: { perAction: 0.0001, dailyCap: 0.01, description: "Relayed encrypted message" },
+  mesh: { perAction: 0.0005, dailyCap: 0.02, description: "Mesh node uptime (per 10 min)" },
+  bridge: { perAction: 0.005, dailyCap: 0.5, description: "Cash bridge transaction" },
+  validation: { perAction: 0.0002, dailyCap: 0.01, description: "Validated transaction proof" },
+  storage: { perAction: 0.0001, dailyCap: 0.005, description: "Stored encrypted fragment" },
+  translation: { perAction: 0.50, dailyCap: 0.5, description: "Translation contribution" },
+  onboarding: { perAction: 0.10, dailyCap: 1.0, description: "Onboarded new user" },
 };
 
 // === Q-Credits Tokenomics ===
