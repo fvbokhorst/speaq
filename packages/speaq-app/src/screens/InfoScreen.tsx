@@ -31,6 +31,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Security Tips", body: "1. Never share your PIN with anyone.\n2. Use a different PIN for the hidden vault layer.\n3. Enable Disappearing Messages for sensitive conversations.\n4. Regularly back up important vault files.\n5. Use the Dead Man's Switch if you are in a dangerous situation.\n6. Do not screenshot sensitive conversations.\n7. Keep your app updated for the latest security patches.\n8. Use a strong PIN (6 digits, not 1234 or birthday).\n9. If crossing a border, switch to the normal vault layer.\n10. Your SPEAQ ID is your identity -share it only with trusted people." },
       { heading: "What SPEAQ does NOT collect", body: "SPEAQ collects NO personal data on its servers. No email, no phone number, no real name, no location, no contacts, no message content, no call records, no wallet balances, no browsing history. Everything stays on your device. The relay server operates on zero-knowledge -it processes encrypted data without ever seeing the content." },
       { heading: "In case of emergency", body: "If you need to quickly erase all data: go to Settings > Delete All Data. This permanently removes everything -identity, messages, contacts, wallet, vault files. Nothing can be recovered. If you are being monitored, remember that the hidden vault layer is invisible to anyone who doesn't know the secret PIN." },
+      { heading: "Proof of Contribution (C+) -- Pre-Blockchain Mining", body: "Before the blockchain launches, all mining happens locally on your device. Every mining reward is double-signed:\n\n1. You sign with your private key (proves your identity)\n2. The relay server co-signs as witness (proves the work actually happened)\n\nBoth signatures are stored in your mining ledger. When the blockchain launches, only entries with BOTH signatures are accepted. This makes fraud impossible -- you cannot fake the relay's signature, and the relay only signs when you actually contribute to the network.\n\nYour mining ledger is your proof of early contribution. The earlier you start, the more you earn before the first halving." },
     ],
   },
   nl: {
@@ -50,6 +51,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Beveiligingstips", body: "1. Deel je PIN nooit met iemand.\n2. Gebruik een andere PIN voor de verborgen kluis laag.\n3. Schakel Verdwijnende Berichten in voor gevoelige gesprekken.\n4. Maak regelmatig back-ups van belangrijke kluis bestanden.\n5. Gebruik de Dead Man's Switch als je in een gevaarlijke situatie bent.\n6. Maak geen screenshots van gevoelige gesprekken.\n7. Houd je app bijgewerkt voor de laatste beveiligingsupdates.\n8. Gebruik een sterke PIN (6 cijfers, niet 1234 of verjaardag).\n9. Bij het oversteken van een grens, schakel naar de normale kluis laag.\n10. Je SPEAQ ID is je identiteit -deel het alleen met vertrouwde mensen." },
       { heading: "Wat SPEAQ NIET verzamelt", body: "SPEAQ verzamelt GEEN persoonlijke gegevens op zijn servers. Geen e-mail, geen telefoonnummer, geen echte naam, geen locatie, geen contacten, geen berichtinhoud, geen gespreksregistraties, geen saldi, geen browsegeschiedenis. Alles blijft op je apparaat. De relay server werkt op zero-knowledge -het verwerkt versleutelde data zonder ooit de inhoud te zien." },
       { heading: "In geval van nood", body: "Als je snel alle gegevens moet wissen: ga naar Instellingen > Alle gegevens wissen. Dit verwijdert permanent alles -identiteit, berichten, contacten, portemonnee, kluis bestanden. Niets kan worden hersteld. Als je wordt gemonitord, onthoud dat de verborgen kluis laag onzichtbaar is voor iedereen die de geheime PIN niet kent." },
+      { heading: "Proof of Contribution (C+) -- Pre-Blockchain Mining", body: "Voordat de blockchain live gaat, vindt alle mining lokaal plaats op je apparaat. Elke mining beloning wordt dubbel gesigned:\n\n1. Jij signeert met je private key (bewijst je identiteit)\n2. De relay server tekent mee als getuige (bewijst dat het werk echt is gedaan)\n\nBeide handtekeningen worden opgeslagen in je mining ledger. Bij blockchain launch worden alleen entries met BEIDE handtekeningen geaccepteerd. Fraude is onmogelijk.\n\nJe mining ledger is je bewijs van vroege bijdrage. Hoe eerder je begint, hoe meer je verdient voor de eerste halving." },
     ],
   },
   fr: {
@@ -69,6 +71,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Conseils de securite", body: "1. Ne partagez jamais votre PIN.\n2. Utilisez un PIN different pour le coffre cache.\n3. Activez les messages ephemeres pour les conversations sensibles.\n4. Utilisez le Dead Man's Switch en situation dangereuse.\n5. Ne faites pas de captures d'ecran sensibles.\n6. Gardez votre app a jour.\n7. Utilisez un PIN fort (6 chiffres).\n8. Aux frontieres, passez a la couche normale du coffre.\n9. Votre SPEAQ ID est votre identite, partagez-le avec des personnes de confiance.\n10. Sauvegardez regulierement les fichiers importants." },
       { heading: "Ce que SPEAQ ne collecte PAS", body: "SPEAQ ne collecte AUCUNE donnee personnelle sur ses serveurs. Pas d'email, pas de telephone, pas de nom, pas de localisation, pas de contenu de messages. Tout reste sur votre appareil." },
       { heading: "En cas d'urgence", body: "Pour effacer toutes les donnees: Parametres > Supprimer toutes les donnees. Cela supprime definitivement tout. La couche cachee du coffre est invisible pour quiconque ne connait pas le PIN secret." },
+      { heading: "Preuve de Contribution (C+) -- Minage Pre-Blockchain", body: "Avant le lancement de la blockchain, tout le minage se fait localement. Chaque recompense est doublement signee. La fraude est impossible car les deux signatures sont necessaires." },
     ],
   },
   es: {
@@ -88,6 +91,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Consejos de seguridad", body: "1. Nunca comparta su PIN.\n2. Use un PIN diferente para la boveda oculta.\n3. Active mensajes que desaparecen para conversaciones sensibles.\n4. Use el Dead Man's Switch en situaciones peligrosas.\n5. No haga capturas de pantalla sensibles.\n6. Mantenga la app actualizada.\n7. Use un PIN fuerte (6 digitos).\n8. En fronteras, cambie a la capa normal.\n9. Su SPEAQ ID es su identidad, compartalo solo con personas de confianza.\n10. Respalde archivos importantes regularmente." },
       { heading: "Lo que SPEAQ NO recopila", body: "SPEAQ no recopila NINGUN dato personal en sus servidores. Sin email, sin telefono, sin nombre, sin ubicacion, sin contenido de mensajes. Todo permanece en su dispositivo." },
       { heading: "En caso de emergencia", body: "Para borrar todos los datos: Ajustes > Eliminar todos los datos. Esto elimina permanentemente todo. La capa oculta es invisible para quien no conozca el PIN secreto." },
+      { heading: "Prueba de Contribucion (C+) -- Mineria Pre-Blockchain", body: "Antes del lanzamiento de la blockchain, toda la mineria ocurre localmente. Cada recompensa se firma dos veces. El fraude es imposible ya que ambas firmas son necesarias." },
     ],
   },
   ru: {
@@ -107,6 +111,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Sovety po bezopasnosti", body: "1. Nikogda ne soobshchayte PIN.\n2. Ispolzuyte drugoy PIN dlya skrytogo khranilishcha.\n3. Vklyuchite ischezayushchie soobshcheniya.\n4. Ispolzuyte Dead Man's Switch v opasnykh situatsiyakh.\n5. Ne delayte skrinshoty.\n6. Obnovlyayte prilozhenie.\n7. Ispolzuyte silnyy PIN.\n8. Na granitsakh perekhodite na obychnyy sloy.\n9. Vash SPEAQ ID - vasha lichnost.\n10. Regulyarno sokhyranayte fayly." },
       { heading: "Chto SPEAQ NE sobirayet", body: "SPEAQ ne sobirayet NIKAKIKH dannykh na serverakh. Ni email, ni telefon, ni imya, ni mestopolozhenie. Vse na vashem ustroystve." },
       { heading: "V sluchaye chrezvychaynoy situatsii", body: "Dlya udaleniya vsekh dannykh: Nastroyki > Udalit vse. Eto navsegda udalyaet vsyo. Skrytyy sloy nevidim bez sekretnogo PIN." },
+      { heading: "Dokazatelstvo Vklada (C+) -- Pre-Blockchain Majning", body: "Do zapuska blokchejna ves majning proiskhodit lokalno. Kazhdaya nagrada podpisyvaetsya dvazhdy. Moshennichestvo nevozmozhno." },
     ],
   },
   de: {
@@ -126,6 +131,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Sicherheitstipps", body: "1. Teilen Sie Ihre PIN niemals.\n2. Andere PIN fur den versteckten Tresor.\n3. Verschwindende Nachrichten fur sensible Gesprache.\n4. Dead Man's Switch in Gefahrensituationen.\n5. Keine Screenshots.\n6. App aktuell halten.\n7. Starke PIN (6 Ziffern).\n8. An Grenzen zur normalen Schicht wechseln.\n9. SPEAQ ID nur mit Vertrauenspersonen teilen.\n10. Regelmaessig Dateien sichern." },
       { heading: "Was SPEAQ NICHT sammelt", body: "SPEAQ sammelt KEINE Daten auf seinen Servern. Keine E-Mail, kein Telefon, kein Name, kein Standort, keine Nachrichteninhalte. Alles bleibt auf Ihrem Gerat." },
       { heading: "Im Notfall", body: "Alle Daten loschen: Einstellungen > Alle Daten loschen. Dies loscht permanent alles. Die versteckte Schicht ist unsichtbar ohne den geheimen PIN." },
+      { heading: "Beweis des Beitrags (C+) -- Pre-Blockchain Mining", body: "Vor dem Start der Blockchain findet alles Mining lokal statt. Jede Belohnung wird doppelt signiert. Betrug ist unmoglich." },
     ],
   },
   sl: {
@@ -145,6 +151,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Varnostni nasveti", body: "1. Nikoli ne delite PIN-a.\n2. Drugacen PIN za skriti trezor.\n3. Izginjajoca sporocila za obcutljive pogovore.\n4. Dead Man's Switch v nevarnih situacijah.\n5. Brez posnetkov zaslona.\n6. Posodabljajte aplikacijo.\n7. Mocen PIN (6 stevilk).\n8. Na mejah preklopite na obicajno plast.\n9. SPEAQ ID delite samo z zaupanja vrednimi.\n10. Redno varnostno kopirajte datoteke." },
       { heading: "Kaj SPEAQ NE zbira", body: "SPEAQ ne zbira NOBENIH podatkov na streznikih. Brez e-poste, telefona, imena, lokacije, vsebine sporocil. Vse ostane na vasi napravi." },
       { heading: "V primeru nujnosti", body: "Za brisanje vseh podatkov: Nastavitve > Izbrisi vse. To trajno izbrise vse. Skrita plast je nevidna brez skrivnega PIN-a." },
+      { heading: "Dokaz prispevka (C+) -- Pred-blockchain rudarjenje", body: "Pred zagonom verige blokov se vse rudarjenje izvaja lokalno. Vsaka nagrada je dvojno podpisana. Goljufija je nemogoca." },
     ],
   },
   lg: {
@@ -164,6 +171,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Ebiragiro by'Obukuumi", body: "1. Togabanya PIN yo.\n2. Kozesa PIN endala ku kifo ekikisiddwa.\n3. Kolola obubaka obugwaamu.\n4. Kozesa Dead Man's Switch mu mbeera ey'akabi.\n5. Tokola screenshots.\n6. Kozesa PIN ey'amaanyi.\n7. Update app.\n8. Ku borders kozesa normal layer.\n9. SPEAQ ID yo gabanya n'abantu b'okwesiga.\n10. Tereka fayiro zo." },
       { heading: "SPEAQ Kye Kitakuuŋŋaanya", body: "SPEAQ tekuuŋŋaanya data yonna ku servers. Tewali email, tewali nnamba, tewali erinnya, tewali location. Byonna bisigala ku simu yo." },
       { heading: "Mu mbeera ey'Amangu", body: "Okusangula data yonna: Settings > Delete All Data. Kino kisangula byonna. Ekifo ekikisiddwa tekirabikirwa eri buli omu atamanya PIN ey'ekyama." },
+      { heading: "Obujulizi bw'Okugaba (C+)", body: "Nga blockchain tennatandika, okusimba kwonna kukola mu kifo kyo. Buli mpeera esainibwa emirundi ebiri. Obbubbi tekisoboka." },
     ],
   },
   sw: {
@@ -183,6 +191,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
       { heading: "Vidokezo vya Usalama", body: "1. Usishiriki PIN yako.\n2. Tumia PIN tofauti kwa kabati la siri.\n3. Washa ujumbe unaopotea.\n4. Tumia Dead Man's Switch katika hali hatari.\n5. Usipige picha za skrini.\n6. Sasisha programu.\n7. Tumia PIN imara.\n8. Kwenye mipaka, badilisha hadi tabaka la kawaida.\n9. SPEAQ ID yako ni utambulisho wako.\n10. Hifadhi nakala za faili mara kwa mara." },
       { heading: "SPEAQ Haikusanyi Nini", body: "SPEAQ haikusanyi data YOYOTE kwenye seva. Hakuna barua pepe, nambari, jina, eneo, maudhui ya ujumbe. Kila kitu kinabaki kwenye kifaa chako." },
       { heading: "Kwa Dharura", body: "Kufuta data yote: Mipangilio > Futa data zote. Hii inafuta kila kitu milele. Tabaka iliyofichwa haionekani bila PIN ya siri." },
+      { heading: "Uthibitisho wa Mchango (C+)", body: "Kabla ya blockchain kuanzishwa, uchimbaji wote unafanyika ndani ya kifaa chako. Kila tuzo inasainiwa mara mbili. Udanganyifu hauwezekani." },
     ],
   },
 };
