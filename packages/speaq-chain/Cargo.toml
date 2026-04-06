@@ -1,0 +1,36 @@
+[package]
+name = "speaq-chain"
+version = "0.1.0"
+edition = "2021"
+description = "SPEAQ Chain - Quantum-Resistant Blockchain"
+authors = ["Frank van Bokhorst - Plexaris"]
+
+[dependencies]
+# Post-Quantum Cryptography (NIST certified)
+pqcrypto-dilithium = "0.5"
+pqcrypto-kyber = "0.8"
+pqcrypto-traits = "0.3"
+
+# Elliptic Curve (for Pedersen commitments, ring signatures)
+curve25519-dalek = { version = "4", features = ["digest"] }
+
+# Hashing
+sha2 = "0.10"
+
+# Cryptographic random
+rand = "0.8"
+rand_core = "0.6"
+
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Hex encoding
+hex = "0.4"
+
+# Timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1"
