@@ -17,4 +17,5 @@ pub mod wallet;
 pub mod transaction;
 pub mod block;
 pub mod consensus;
+pub mod chain;
 pub mod network;
