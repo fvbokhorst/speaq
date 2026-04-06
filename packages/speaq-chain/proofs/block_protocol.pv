@@ -1,0 +1,79 @@
+(* ============================================================
+   SPEAQ Chain Block Protocol v2 -- With Validator Registration
+
+   Verifies:
+   1. Validator key secrecy
+   2. Block authentication with registered validators
+   3. Only registered validators can produce accepted blocks
+   ============================================================ *)
+
+free network: channel.
+free validator_registry: channel [private]. (* Private: only consensus can add validators *)
+
+type skey.
+type vkey.
+
+(* --- Dilithium-3 Signatures --- *)
+fun dilithium_keygen(skey): vkey.
+fun dilithium_sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, sk: skey;
+  dilithium_verify(dilithium_sign(m, sk), m, dilithium_keygen(sk)) = dilithium_keygen(sk).
+
+(* --- Hashing --- *)
+fun block_hash(bitstring, bitstring, bitstring, vkey): bitstring.
+fun merkle_root(bitstring): bitstring.
+
+(* --- Events --- *)
+event ValidatorRegistered(vkey).
+event ValidatorSignsBlock(bitstring, vkey).
+event NodeAcceptsBlock(bitstring, vkey).
+
+(* --- Secrecy --- *)
+free validator_sk: skey [private].
+
+(* Q1: Validator private key must stay secret *)
+query attacker(validator_sk).
+
+(* Q2: Accepted blocks must be signed by a REGISTERED validator *)
+query bh: bitstring, pk: vkey;
+  event(NodeAcceptsBlock(bh, pk)) ==> event(ValidatorRegistered(pk)).
+
+(* --- Consensus: registers validators (trusted) --- *)
+let Consensus(val_sk: skey) =
+  let val_pk = dilithium_keygen(val_sk) in
+  event ValidatorRegistered(val_pk);
+  out(validator_registry, val_pk);
+  (* Also publish public key so nodes know it *)
+  out(network, val_pk).
+
+(* --- Validator: creates and signs blocks --- *)
+let Validator(val_sk: skey) =
+  let val_pk = dilithium_keygen(val_sk) in
+  in(network, prev_hash: bitstring);
+  in(network, transactions: bitstring);
+  let mr = merkle_root(transactions) in
+  new timestamp: bitstring;
+  let bh = block_hash(prev_hash, mr, timestamp, val_pk) in
+  let signature = dilithium_sign(bh, val_sk) in
+  event ValidatorSignsBlock(bh, val_pk);
+  out(network, (bh, signature, val_pk)).
+
+(* --- Node: validates blocks against registered validators --- *)
+let Node() =
+  (* Get registered validator from consensus *)
+  in(validator_registry, registered_pk: vkey);
+
+  (* Receive block *)
+  in(network, (bh: bitstring, signature: bitstring, claimed_pk: vkey));
+
+  (* Verify the claimed key is the registered validator *)
+  if claimed_pk = registered_pk then
+
+  (* Verify Dilithium-3 signature *)
+  if dilithium_verify(signature, bh, claimed_pk) = claimed_pk then
+
+  event NodeAcceptsBlock(bh, claimed_pk).
+
+(* --- Main --- *)
+process
+  (Consensus(validator_sk) | Validator(validator_sk) | Node() | Node())
