@@ -7,4 +7,4 @@ pub mod dilithium;
 pub mod kyber;
 pub mod pedersen;
 pub mod clsag;
-// pub mod bulletproofs;  // Requires additional dependencies
+pub mod rangeproof;
