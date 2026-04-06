@@ -43,6 +43,36 @@ export interface MiningReward {
 const STATS_KEY = "speaq_mining_stats";
 const REWARDS_KEY = "speaq_mining_rewards";
 const MINING_ACTIVE_KEY = "speaq_mining_active";
+const MINING_LEDGER_KEY = "speaq_mining_ledger";
+
+// C+ Signed Mining Ledger
+export interface MiningLedgerEntry {
+  speaqId: string;
+  miningType: MiningType;
+  amount: number;
+  timestamp: number;
+  minerSignature: string;
+  relaySignature?: string;
+  receiptData?: string;
+}
+
+export async function loadMiningLedger(): Promise<MiningLedgerEntry[]> {
+  try {
+    const s = await AsyncStorage.getItem(MINING_LEDGER_KEY);
+    return s ? JSON.parse(s) : [];
+  } catch { return []; }
+}
+
+export async function saveMiningLedger(ledger: MiningLedgerEntry[]): Promise<void> {
+  const trimmed = ledger.slice(-1000);
+  await AsyncStorage.setItem(MINING_LEDGER_KEY, JSON.stringify(trimmed));
+}
+
+export async function addLedgerEntry(entry: MiningLedgerEntry): Promise<void> {
+  const ledger = await loadMiningLedger();
+  ledger.push(entry);
+  await saveMiningLedger(ledger);
+}
 
 // Reward rates per type (QC per action)
 // Calibrated to ~5-8% annual yield (comparable to Bitvavo/Binance staking)

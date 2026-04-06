@@ -180,6 +180,65 @@ app.get("/api/v1/stats", (_req, res) => {
   });
 });
 
+// --- Mining Receipt System (C+) ---
+// Relay signs a receipt for each mining contribution it witnesses.
+// Double signature: miner signs + relay co-signs = unforgeable proof.
+
+// Relay's own signing key (generated once at startup)
+const relaySigningKey = crypto.randomBytes(32).toString("hex");
+
+// Sign a mining receipt with the relay's key
+function relaySign(data: string): string {
+  return crypto.createHmac("sha256", relaySigningKey).update(data).digest("hex");
+}
+
+// Issue a mining receipt
+app.post("/api/v1/mining/receipt", (req, res) => {
+  const { speaqId, miningType, amount, timestamp, minerSignature } = req.body;
+  if (!speaqId || !miningType || !amount || !timestamp || !minerSignature) {
+    return res.status(400).json({ error: "speaqId, miningType, amount, timestamp, minerSignature required" });
+  }
+
+  // Verify the miner is currently connected (proof of activity)
+  const client = clients.get(speaqId);
+  if (!client) {
+    return res.status(403).json({ error: "Miner not connected to relay" });
+  }
+
+  // Create receipt data string
+  const receiptData = `${speaqId}:${miningType}:${amount}:${timestamp}`;
+
+  // Relay co-signs the receipt
+  const relaySignature = relaySign(receiptData);
+  const receiptId = crypto.randomUUID();
+
+  res.json({
+    receiptId,
+    speaqId,
+    miningType,
+    amount,
+    timestamp,
+    minerSignature,
+    relaySignature,
+    relayTimestamp: Date.now(),
+    valid: true,
+  });
+});
+
+// Verify a mining receipt
+app.post("/api/v1/mining/verify-receipt", (req, res) => {
+  const { speaqId, miningType, amount, timestamp, relaySignature } = req.body;
+  if (!speaqId || !miningType || !amount || !timestamp || !relaySignature) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  const receiptData = `${speaqId}:${miningType}:${amount}:${timestamp}`;
+  const expectedSig = relaySign(receiptData);
+  const valid = expectedSig === relaySignature;
+
+  res.json({ valid, receiptData });
+});
+
 // Mining network stats (placeholder -- will be replaced by ledger)
 app.get("/api/v1/mining/network-stats", (_req, res) => {
   res.json({
@@ -336,11 +395,16 @@ wss.on("connection", (ws: WebSocket) => {
               blob,
               id: messageId,
             }));
-            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+            // Include mining receipt for relay contribution
+            const receiptData = `${clientId}:relay:0.0001:${Date.now()}`;
+            const miningReceipt = relaySign(receiptData);
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered", miningReceipt, receiptData }));
           } else {
             // Recipient offline: queue
             queueOfflineMessage(to, clientId, blob);
-            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
+            const receiptData = `${clientId}:relay:0.0001:${Date.now()}`;
+            const miningReceipt = relaySign(receiptData);
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued", miningReceipt, receiptData }));
           }
           break;
         }

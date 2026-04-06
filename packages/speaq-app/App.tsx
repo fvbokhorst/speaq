@@ -25,7 +25,7 @@ import MiningScreen from "./src/screens/MiningScreen";
 import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
-import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
+import { ChatIcon, ContactIcon, WalletIcon, MiningIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
@@ -260,7 +260,7 @@ function App() {
         }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onOpenBrowser={() => setActiveTab("browser")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
-        {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("settings")} />}
+        {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("chats")} />}
         {activeTab === "info" && <InfoScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "lightning" && <LightningScreen onBack={() => setActiveTab("wallet")} />}
         {activeTab === "browser" && <BrowserScreen onBack={() => setActiveTab("settings")} />}
@@ -268,6 +268,7 @@ function App() {
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
           <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label={t("wallet")} active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
+          <Tab icon={<MiningIcon active={activeTab === "mining"} />} label="Mining" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
           <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label={t("settings")} active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
         </View>
       </View>
