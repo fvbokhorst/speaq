@@ -5,6 +5,6 @@
 
 pub mod dilithium;
 pub mod kyber;
-// pub mod pedersen;     // Step 2
-// pub mod clsag;        // Step 2
-// pub mod bulletproofs;  // Step 2
+pub mod pedersen;
+pub mod clsag;
+// pub mod bulletproofs;  // Requires additional dependencies
