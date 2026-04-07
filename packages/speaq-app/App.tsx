@@ -6,7 +6,7 @@
 
 import "react-native-get-random-values"; // Must be first - crypto polyfill
 import React, { useState, useEffect } from "react";
-import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
+import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert, Linking } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
@@ -52,10 +52,35 @@ function App() {
   const [callIsIncoming, setCallIsIncoming] = useState(false);
   const [callContactName, setCallContactName] = useState("");
   const [langKey, setLangKey] = useState(0); // force re-render on language change
+  const [pendingConnectId, setPendingConnectId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [savedPin, setSavedPin] = useState("");
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
   const [tempPin, setTempPin] = useState("");
+
+  // Handle deep links: speaq://connect/[id]
+  useEffect(() => {
+    function handleUrl(event: { url: string }) {
+      const url = event.url;
+      if (url.includes("connect/")) {
+        const id = url.split("connect/").pop()?.split("?")[0] || "";
+        if (id.length >= 8) setPendingConnectId(id);
+      }
+    }
+    // Check if app was opened via deep link
+    Linking.getInitialURL().then((url) => { if (url) handleUrl({ url }); });
+    // Listen for deep links while app is running
+    const sub = Linking.addEventListener("url", handleUrl);
+    return () => sub.remove();
+  }, []);
+
+  // When main screen loads and there's a pending connect, switch to contacts tab
+  useEffect(() => {
+    if (phase === "main" && pendingConnectId) {
+      setActiveTab("contacts");
+      // ContactsScreen will receive the pendingConnectId via props
+    }
+  }, [phase, pendingConnectId]);
 
   // Check if user is registered on startup + load wallet
   useEffect(() => {
@@ -244,7 +269,7 @@ function App() {
           setChatContactName(name);
           setActiveTab("chat");
         }} />}
-        {activeTab === "contacts" && <ContactsScreen onOpenGroups={() => setActiveTab("groups")} onOpenChat={(id: string, name: string) => {
+        {activeTab === "contacts" && <ContactsScreen pendingConnectId={pendingConnectId} onClearPendingConnect={() => setPendingConnectId(null)} onOpenGroups={() => setActiveTab("groups")} onOpenChat={(id: string, name: string) => {
           setChatContactId(id);
           setChatContactName(name);
           setActiveTab("chat");

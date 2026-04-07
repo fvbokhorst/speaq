@@ -16,9 +16,11 @@ import { t } from "../services/i18n";
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
   onOpenGroups: () => void;
+  pendingConnectId?: string | null;
+  onClearPendingConnect?: () => void;
 }
 
-export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
+export default function ContactsScreen({ onOpenChat, onOpenGroups, pendingConnectId, onClearPendingConnect }: Props) {
   const [contacts, setContacts] = useState<Contact[]>(contactsService.getContacts());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -34,6 +36,16 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
     AsyncStorage.getItem("speaq_profile_photo").then((uri) => { if (uri) setProfilePhoto(uri); });
     AsyncStorage.getItem("speaq_contact_photos").then((json) => { if (json) try { setContactPhotos(JSON.parse(json)); } catch {} });
   }, []);
+
+  // Handle deep link connect
+  useEffect(() => {
+    if (pendingConnectId && pendingConnectId.length >= 8) {
+      setNewContactId(pendingConnectId);
+      setNewContactName("");
+      setShowAddModal(true);
+      onClearPendingConnect?.();
+    }
+  }, [pendingConnectId]);
 
   function addContact() {
     if (!newContactId.trim() || !newContactName.trim()) return;
