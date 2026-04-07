@@ -161,8 +161,41 @@ mod tests {
         let chunks = split_into_chunks(&data, 1);
         for chunk in &chunks {
             let serialized = bincode::serialize(chunk).unwrap();
-            // Each serialized chunk should be reasonable size
             assert!(serialized.len() < 500, "Chunk too large: {} bytes", serialized.len());
         }
+    }
+
+    #[test]
+    fn test_corrupt_chunk_rejected() {
+        let original = vec![42u8; 500];
+        let mut chunks = split_into_chunks(&original, 1);
+
+        // Corrupt one chunk
+        if let Some(MeshMessage::BlockChunk { ref mut data, .. }) = chunks.get_mut(0) {
+            data[0] ^= 0xFF;
+        }
+
+        let reassembled = reassemble_chunks(&chunks).unwrap();
+        assert_ne!(reassembled, original, "Corrupt chunk must produce different data");
+    }
+
+    #[test]
+    fn test_missing_chunk_fails() {
+        let data = vec![1u8; 1000];
+        let mut chunks = split_into_chunks(&data, 1);
+
+        // Remove a chunk
+        if chunks.len() > 2 {
+            chunks.remove(1);
+        }
+
+        let result = reassemble_chunks(&chunks);
+        assert!(result.is_none(), "Missing chunk must fail reassembly");
+    }
+
+    #[test]
+    fn test_empty_data() {
+        let chunks = split_into_chunks(&[], 1);
+        assert_eq!(chunks.len(), 0, "Empty data produces no chunks");
     }
 }

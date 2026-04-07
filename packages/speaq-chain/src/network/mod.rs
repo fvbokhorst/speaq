@@ -264,3 +264,41 @@ mod tests {
         println!("Node 2: {}", node2_peer_id);
     }
 }
+
+    #[test]
+    fn test_reject_malformed_block_message() {
+        // Corrupt data should not crash the deserializer
+        let corrupt = vec![0xFF, 0xFF, 0xFF, 0xFF, 0x00];
+        let result: Result<NetworkMessage, _> = bincode::deserialize(&corrupt);
+        assert!(result.is_err(), "Corrupt data must be rejected");
+    }
+
+    #[test]
+    fn test_reject_empty_message() {
+        let empty: Vec<u8> = vec![];
+        let result: Result<NetworkMessage, _> = bincode::deserialize(&empty);
+        assert!(result.is_err(), "Empty data must be rejected");
+    }
+
+    #[test]
+    fn test_block_message_integrity() {
+        use crate::block::genesis::create_genesis_block;
+        use crate::wallet::Wallet;
+
+        let wallet = Wallet::generate();
+        let block = create_genesis_block(&wallet);
+        let block_bytes = block.to_bytes();
+
+        let msg = NetworkMessage::NewBlock(block_bytes.clone());
+        let serialized = bincode::serialize(&msg).unwrap();
+
+        // Tamper with serialized data
+        let mut tampered = serialized.clone();
+        if let Some(last) = tampered.last_mut() { *last ^= 0xFF; }
+
+        let result: Result<NetworkMessage, _> = bincode::deserialize(&tampered);
+        // Either fails to deserialize or produces different data
+        if let Ok(NetworkMessage::NewBlock(data)) = result {
+            assert_ne!(data, block_bytes, "Tampered data must differ from original");
+        }
+    }

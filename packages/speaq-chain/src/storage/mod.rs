@@ -164,4 +164,45 @@ mod tests {
         let db = temp_db();
         assert!(db.get_block(999).unwrap().is_none());
     }
+
+    #[test]
+    fn test_corrupted_block_returns_none() {
+        let db = temp_db();
+        // Write corrupt data directly
+        let cf = db.db.cf_handle(super::CF_BLOCKS).unwrap();
+        db.db.put_cf(&cf, 0u64.to_le_bytes(), b"corrupt_data").unwrap();
+        // Should return None (deserialization fails), not crash
+        let result = db.get_block(0).unwrap();
+        assert!(result.is_none(), "Corrupt block data must return None");
+    }
+
+    #[test]
+    fn test_overwrite_block() {
+        let db = temp_db();
+        let wallet = Wallet::generate();
+        let genesis = create_genesis_block(&wallet);
+        
+        db.put_block(0, &genesis).unwrap();
+        let hash1 = db.get_block(0).unwrap().unwrap().hash();
+        
+        // Overwrite with same block should work
+        db.put_block(0, &genesis).unwrap();
+        let hash2 = db.get_block(0).unwrap().unwrap().hash();
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_multiple_key_images() {
+        let db = temp_db();
+        let ki1 = [1u8; 32];
+        let ki2 = [2u8; 32];
+        let ki3 = [3u8; 32];
+        
+        db.mark_key_image_spent(&ki1, 1).unwrap();
+        db.mark_key_image_spent(&ki2, 2).unwrap();
+        
+        assert!(db.is_key_image_spent(&ki1).unwrap());
+        assert!(db.is_key_image_spent(&ki2).unwrap());
+        assert!(!db.is_key_image_spent(&ki3).unwrap(), "Unspent must return false");
+    }
 }

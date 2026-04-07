@@ -239,4 +239,53 @@ mod tests {
         let proof = generate_merkle_proof(&tx_hashes, 0, 0).unwrap();
         assert_eq!(proof.tx_hash, [42u8; 32]);
     }
+
+    #[test]
+    fn test_forged_merkle_proof_rejected() {
+        use crate::transaction::Transaction;
+        use crate::wallet::Wallet;
+
+        let wallet = Wallet::generate();
+        let txs: Vec<Transaction> = (0..4).map(|i| {
+            Transaction::create_mining_reward(wallet.address.0, 10000, i, &wallet)
+        }).collect();
+        let merkle_root = compute_merkle_root(&txs);
+
+        // Attacker creates fake proof with wrong sibling hashes
+        let fake_proof = MerkleProof {
+            tx_hash: txs[0].hash(),
+            block_height: 1,
+            path: vec![(true, [0xFF; 32]), (true, [0xAA; 32])], // Forged
+        };
+        assert!(!verify_merkle_proof(&fake_proof.tx_hash, &fake_proof.path, &merkle_root),
+            "Forged merkle proof must be REJECTED");
+    }
+
+    #[test]
+    fn test_wrong_tx_hash_rejected() {
+        use crate::transaction::Transaction;
+        use crate::wallet::Wallet;
+
+        let wallet = Wallet::generate();
+        let txs: Vec<Transaction> = (0..4).map(|i| {
+            Transaction::create_mining_reward(wallet.address.0, 10000, i, &wallet)
+        }).collect();
+        let tx_hashes: Vec<TxHash> = txs.iter().map(|tx| tx.hash()).collect();
+        let merkle_root = compute_merkle_root(&txs);
+
+        // Get valid proof for tx 0
+        let proof = generate_merkle_proof(&tx_hashes, 0, 1).unwrap();
+
+        // Try to verify with a DIFFERENT tx hash (attacker claims different tx is in block)
+        let fake_tx_hash = [0xDE; 32];
+        assert!(!verify_merkle_proof(&fake_tx_hash, &proof.path, &merkle_root),
+            "Wrong tx hash with valid proof must be REJECTED");
+    }
+
+    #[test]
+    fn test_proof_for_nonexistent_index() {
+        let tx_hashes = vec![[1u8; 32], [2u8; 32]];
+        let result = generate_merkle_proof(&tx_hashes, 99, 1);
+        assert!(result.is_none(), "Out of bounds index must return None");
+    }
 }
