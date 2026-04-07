@@ -241,6 +241,9 @@ export function initiateKeyExchange(toSpeaqId: string): void {
   }));
 }
 
+// Track which contacts already received our photo this session
+const photoSentThisSession = new Set<string>();
+
 /**
  * Send a message to a contact
  * NOW: uses Double Ratchet encryption with forward secrecy
@@ -248,15 +251,29 @@ export function initiateKeyExchange(toSpeaqId: string): void {
 export async function sendMessage(toSpeaqId: string, text: string): Promise<void> {
   if (!ws || !connected || !identity) return;
 
+  // Include profile photo with first message per session to each contact
+  let photo: string | undefined;
+  if (!photoSentThisSession.has(toSpeaqId)) {
+    try {
+      const storedPhoto = await AsyncStorage.getItem("speaq_profile_photo");
+      if (storedPhoto) {
+        photo = storedPhoto;
+        photoSentThisSession.add(toSpeaqId);
+      }
+    } catch (e) {}
+  }
+
   // Include sender identity INSIDE the encrypted blob (sealed sender)
   // The relay never sees who sent the message
-  const plaintext = JSON.stringify({
+  const payload: any = {
     type: "message",
     text,
     from: identity.displayName,
     senderId: identity.speaqId,
     timestamp: Date.now(),
-  });
+  };
+  if (photo) payload.photo = photo;
+  const plaintext = JSON.stringify(payload);
 
   // Try ratchet encryption first (quantum-grade)
   const contactPubKey = await loadContactPublicKey(toSpeaqId);
@@ -295,7 +312,14 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
 export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<void> {
   if (!ws || !connected || !identity) return;
 
-  const plaintext = JSON.stringify({
+  // Load profile photo for payment messages
+  let photo: string | undefined;
+  try {
+    const storedPhoto = await AsyncStorage.getItem("speaq_profile_photo");
+    if (storedPhoto) photo = storedPhoto;
+  } catch (e) {}
+
+  const payload: any = {
     type: "message",
     qc: true,
     amount,
@@ -304,7 +328,9 @@ export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<
     fromName: identity.displayName,
     text: `[Payment: ${amount.toFixed(4)} QC]`,
     timestamp: Date.now(),
-  });
+  };
+  if (photo) payload.photo = photo;
+  const plaintext = JSON.stringify(payload);
 
   const contactPubKey = await loadContactPublicKey(toSpeaqId);
   const { state, kyberCiphertext } = await getOrCreateRatchet(

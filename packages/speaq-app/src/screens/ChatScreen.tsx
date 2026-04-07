@@ -10,6 +10,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, Vibration,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
@@ -44,6 +45,15 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   const [disappearTimer, setDisappearTimerState] = useState<DisappearTimer>("off");
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profilePhotoRef = useRef<string | null>(null);
+  const photoSentRef = useRef<Set<string>>(new Set());
+
+  // Load profile photo on mount
+  useEffect(() => {
+    AsyncStorage.getItem("speaq_profile_photo").then((photo) => {
+      if (photo) profilePhotoRef.current = photo;
+    });
+  }, []);
 
   // Load persisted messages + clean expired + load timer
   useEffect(() => {
@@ -121,6 +131,14 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               }
             }
             if (data.type === "message") {
+              // Save sender's contact photo if included
+              if (data.photo && data.senderId) {
+                AsyncStorage.getItem("speaq_contact_photos").then((stored) => {
+                  const photos = stored ? JSON.parse(stored) : {};
+                  photos[data.senderId] = data.photo;
+                  AsyncStorage.setItem("speaq_contact_photos", JSON.stringify(photos));
+                });
+              }
               Vibration.vibrate(100);
               playMessageReceived();
               // Handle QC payment receive
