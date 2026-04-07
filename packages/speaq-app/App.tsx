@@ -210,9 +210,9 @@ function App() {
             {[0,1,2,3,4,5].map(i => <View key={i} style={[st.dot, i < pin.length && st.dotFull]} />)}
           </View>
           <View style={st.numpad}>
-            {["1","2","3","4","5","6","7","8","9","","0","del"].map(k => (
-              <TouchableOpacity key={k||"x"} style={[st.nk, !k && st.nkHide]} disabled={!k}
-                onPress={() => k === "del" ? handlePinDelete() : k ? handlePinDigit(k) : null} activeOpacity={0.6}>
+            {["1","2","3","4","5","6","7","8","9","*","0","del"].map(k => (
+              <TouchableOpacity key={k} style={st.nk}
+                onPress={() => k === "del" ? handlePinDelete() : handlePinDigit(k)} activeOpacity={0.6}>
                 <Text style={st.nkTxt}>{k === "del" ? "←" : k}</Text>
               </TouchableOpacity>
             ))}
