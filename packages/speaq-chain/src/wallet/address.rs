@@ -5,8 +5,7 @@
 //!
 //! SQ1 prefix identifies SPEAQ Chain addresses (like BTC's bc1)
 
-use crate::crypto::dilithium;
-use crate::crypto::kyber;
+use crate::crypto::{dilithium, kyber, sphincs};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -50,8 +49,10 @@ impl std::fmt::Display for WalletAddress {
 /// A complete SPEAQ wallet
 #[derive(Clone)]
 pub struct Wallet {
-    /// Dilithium-3 signing keypair (for signing transactions)
+    /// Dilithium-3 signing keypair (primary, for signing transactions)
     pub signing: dilithium::SigningKeyPair,
+    /// SPHINCS+ signing keypair (backup, for dual signing blocks)
+    pub sphincs: sphincs::SphincsKeyPair,
     /// Kyber-768 KEM keypair (for receiving stealth payments)
     pub kem: kyber::KemKeyPair,
     /// Derived wallet address
@@ -64,6 +65,7 @@ impl Wallet {
     /// Generate a new wallet with fresh quantum-resistant keypairs
     pub fn generate() -> Self {
         let signing = dilithium::generate_keypair();
+        let sphincs_kp = sphincs::generate_keypair();
         let kem = kyber::generate_keypair();
         let address = Self::derive_address(&signing, &kem);
         let created_at = std::time::SystemTime::now()
@@ -73,6 +75,7 @@ impl Wallet {
 
         Wallet {
             signing,
+            sphincs: sphincs_kp,
             kem,
             address,
             created_at,

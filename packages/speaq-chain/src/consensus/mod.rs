@@ -224,15 +224,25 @@ pub fn check_finality(confirmations: &[BlockConfirmation], validators: &[Validat
 
 /// Calculate block reward based on halving schedule
 /// Halving every 2,100,000 QC mined
+/// Maximum supply: 21,000,000 QC = 2,100,000,000,000,000 Sparks
+pub const MAX_SUPPLY_SPARKS: u64 = 2_100_000_000_000_000;
+pub const MAX_SUPPLY_QC: u64 = 21_000_000;
+pub const SPARKS_PER_QC: u64 = 100_000_000;
+
 pub fn calculate_block_reward(total_mined_sparks: u64) -> u64 {
-    let total_mined_qc = total_mined_sparks / 100_000_000;
+    // Hard limit: no more mining after max supply
+    if total_mined_sparks >= MAX_SUPPLY_SPARKS {
+        return 0;
+    }
+
+    let total_mined_qc = total_mined_sparks / SPARKS_PER_QC;
     let halvings = total_mined_qc / 2_100_000;
 
-    // Initial reward: 50 QC per block = 5,000,000,000 Sparks
-    let initial_reward: u64 = 5_000_000_000;
+    // Initial reward: 0.5 QC per block = 50,000,000 Sparks (PRD Section 9.1)
+    let initial_reward: u64 = 50_000_000;
 
     if halvings >= 64 {
-        return 0; // All QC mined
+        return 0;
     }
 
     initial_reward >> halvings
@@ -441,18 +451,23 @@ mod tests {
 
     #[test]
     fn test_block_reward_halving() {
+        // PRD 9.1: Initial reward = 0.5 QC = 50,000,000 Sparks
         let initial = calculate_block_reward(0);
-        assert_eq!(initial, 5_000_000_000, "Initial reward = 50 QC");
+        assert_eq!(initial, 50_000_000, "Initial reward = 0.5 QC");
 
         // After first halving (2,100,000 QC mined = 210,000,000,000,000 Sparks)
         let after_first = calculate_block_reward(210_000_000_000_000);
-        assert_eq!(after_first, 2_500_000_000, "After 1st halving = 25 QC");
+        assert_eq!(after_first, 25_000_000, "After 1st halving = 0.25 QC");
 
         // After second halving
         let after_second = calculate_block_reward(420_000_000_000_000);
-        assert_eq!(after_second, 1_250_000_000, "After 2nd halving = 12.5 QC");
+        assert_eq!(after_second, 12_500_000, "After 2nd halving = 0.125 QC");
 
-        // Far future: reward approaches 0
+        // Max supply exceeded: no more rewards
+        let max_exceeded = calculate_block_reward(MAX_SUPPLY_SPARKS);
+        assert_eq!(max_exceeded, 0, "After max supply = 0");
+
+        // Far future: reward = 0
         let far_future = calculate_block_reward(u64::MAX);
         assert_eq!(far_future, 0, "Eventually reward = 0");
     }

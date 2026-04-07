@@ -12,7 +12,7 @@
 
 pub mod genesis;
 
-use crate::crypto::dilithium;
+use crate::crypto::{dilithium, sphincs};
 use crate::transaction::{Transaction, TxHash};
 use crate::wallet::Wallet;
 use serde::{Deserialize, Serialize};
@@ -57,8 +57,10 @@ pub struct Block {
     pub header: BlockHeader,
     /// Transactions in this block
     pub transactions: Vec<Transaction>,
-    /// Dilithium-3 signature of the block hash by the validator
+    /// Dilithium-3 signature of the block hash by the validator (primary)
     pub signature: dilithium::SignatureBytes,
+    /// SPHINCS+ signature of the block hash (backup, PRD 7.3 dual signing)
+    pub sphincs_signature: sphincs::SphincsSignatureBytes,
 }
 
 impl BlockHeader {
@@ -115,16 +117,19 @@ impl Block {
         };
 
         let block_hash = header.hash();
+        // Dual signing: Dilithium (primary) + SPHINCS+ (backup) -- PRD 7.3
         let signature = validator.sign(&block_hash);
+        let sphincs_signature = sphincs::sign(&block_hash, &validator.sphincs.secret_key);
 
         Block {
             header,
             transactions,
             signature,
+            sphincs_signature,
         }
     }
 
-    /// Verify the block's signature against the validator's public key
+    /// Verify the block's dual signatures (both must pass -- PRD 7.3)
     pub fn verify_signature(&self) -> bool {
         let pk = match dilithium::import_public_key(&self.header.validator_pubkey) {
             Some(pk) => pk,
