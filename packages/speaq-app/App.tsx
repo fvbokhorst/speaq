@@ -27,6 +27,7 @@ import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, MiningIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
+import { ThemeProvider } from "./src/theme/ThemeContext";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
@@ -319,4 +320,12 @@ const st = StyleSheet.create({
   phS: { color: colors.signal.steel, fontSize: 12, marginTop: 8 },
 });
 
-export default App;
+function AppWithTheme() {
+  return (
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  );
+}
+
+export default AppWithTheme;

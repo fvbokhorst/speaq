@@ -74,8 +74,28 @@ export const radius = {
   full: 9999,
 };
 
+// Light mode colors
+export const lightColors = {
+  depth: {
+    void: "#FAFBFC",
+    surface: "#F1F5F9",
+    card: "#FFFFFF",
+    elevated: "#F8FAFC",
+  },
+  signal: {
+    white: "#0F172A",
+    light: "#475569",
+    steel: "#64748B",
+    red: "#E24B4A",
+  },
+  border: {
+    subtle: "rgba(100, 116, 139, 0.2)",
+    hover: "rgba(100, 116, 139, 0.3)",
+  },
+};
+
 // Dark theme is DEFAULT per brand guide
-export const theme = {
+export const darkTheme = {
   background: colors.depth.void,
   surface: colors.depth.surface,
   card: colors.depth.card,
@@ -88,3 +108,20 @@ export const theme = {
   border: colors.border.subtle,
   error: colors.signal.red,
 };
+
+export const lightTheme = {
+  background: lightColors.depth.void,
+  surface: lightColors.depth.surface,
+  card: lightColors.depth.card,
+  elevated: lightColors.depth.elevated,
+  textPrimary: lightColors.signal.white,
+  textSecondary: lightColors.signal.light,
+  textMuted: lightColors.signal.steel,
+  accent: colors.voice.gold,
+  accentSecondary: colors.quantum.teal,
+  border: lightColors.border.subtle,
+  error: colors.signal.red,
+};
+
+// Backwards compatible default
+export const theme = darkTheme;

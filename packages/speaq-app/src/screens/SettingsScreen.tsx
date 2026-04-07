@@ -7,6 +7,7 @@ import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
+import { useTheme, ThemeMode } from "../theme/ThemeContext";
 import { getIdentity, getKyberPublicKey } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
@@ -142,6 +143,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   const [showExport, setShowExport] = useState(false);
   const [exportData, setExportData] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const { mode: themeMode, setMode: setThemeMode, theme: th, colors: c } = useTheme();
   const identity = getIdentity();
 
   useEffect(() => {
@@ -225,10 +227,35 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
     );
   }
 
+  // Dynamic styles based on theme
+  const dyn = {
+    container: [st.container, { backgroundColor: c.depth.void }],
+    header: [st.header, { borderBottomColor: c.border.subtle }],
+    title: [st.title, { color: c.signal.white }],
+    sectionLabel: [st.sectionLabel, { color: c.signal.steel }],
+    card: [st.card, { backgroundColor: c.depth.card, borderColor: c.border.subtle }],
+    row: [st.row, { borderBottomColor: c.border.subtle }],
+    rowLabel: [st.rowLabel, { color: c.signal.white }],
+    rowValue: [st.rowValue, { color: c.signal.steel }],
+    rowValueMono: [st.rowValueMono],
+    rowValueTeal: [st.rowValueTeal],
+    rowAction: [st.rowAction],
+    photoHint: [st.photoHint, { color: c.signal.steel }],
+    profilePhotoPlaceholder: [st.profilePhotoPlaceholder, { backgroundColor: c.depth.elevated }],
+    profilePhotoInit: [st.profilePhotoInit],
+    privacyContainer: [st.privacyContainer, { backgroundColor: c.depth.void }],
+    privacyHeader: [st.privacyHeader, { borderBottomColor: c.border.subtle }],
+    privacyTitle: [st.privacyTitle, { color: c.signal.white }],
+    privacyText: [st.privacyText, { color: c.signal.light }],
+    exportBox: [st.exportBox, { backgroundColor: c.depth.card, borderColor: c.border.subtle }],
+    langRow: [st.langRow, { borderTopColor: c.border.subtle }],
+    langNative: [st.langNative, { color: c.signal.white }],
+  };
+
   return (
-    <View style={st.container}>
-      <View style={st.header}>
-        <Text style={st.title}>{t("settings")}</Text>
+    <View style={dyn.container}>
+      <View style={dyn.header}>
+        <Text style={dyn.title}>{t("settings")}</Text>
       </View>
 
       <ScrollView style={st.list}>
@@ -237,124 +264,137 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={st.profilePhoto} />
           ) : (
-            <View style={st.profilePhotoPlaceholder}>
-              <Text style={st.profilePhotoInit}>{identity?.displayName?.charAt(0) || "?"}</Text>
+            <View style={dyn.profilePhotoPlaceholder}>
+              <Text style={dyn.profilePhotoInit}>{identity?.displayName?.charAt(0) || "?"}</Text>
             </View>
           )}
-          <Text style={st.photoHint}>{t("tapChangePhoto")}</Text>
+          <Text style={dyn.photoHint}>{t("tapChangePhoto")}</Text>
         </TouchableOpacity>
 
         {/* Profile */}
-        <Text style={st.sectionLabel}>{t("profile")}</Text>
-        <View style={st.card}>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>{t("name")}</Text>
-            <Text style={st.rowValue}>{identity?.displayName || "Unknown"}</Text>
+        <Text style={dyn.sectionLabel}>{t("profile")}</Text>
+        <View style={dyn.card}>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>{t("name")}</Text>
+            <Text style={dyn.rowValue}>{identity?.displayName || "Unknown"}</Text>
           </View>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>SPEAQ ID</Text>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>SPEAQ ID</Text>
             <Text style={st.rowValueMono}>{identity?.speaqId || "None"}</Text>
           </View>
           {identity?.did && (
-            <View style={st.row}>
-              <Text style={st.rowLabel}>DID</Text>
+            <View style={dyn.row}>
+              <Text style={dyn.rowLabel}>DID</Text>
               <Text style={[st.rowValueMono, { fontSize: 9, maxWidth: 180 }]} numberOfLines={1} ellipsizeMode="middle">{identity.did}</Text>
             </View>
           )}
-          <TouchableOpacity style={st.row} onPress={handleExportIdentity}>
-            <Text style={st.rowLabel}>Export Identity</Text>
+          <TouchableOpacity style={dyn.row} onPress={handleExportIdentity}>
+            <Text style={dyn.rowLabel}>Export Identity</Text>
             <Text style={st.rowAction}>QR</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={handleVerifyIdentity}>
-            <Text style={st.rowLabel}>Verify Identity</Text>
+          <TouchableOpacity style={dyn.row} onPress={handleVerifyIdentity}>
+            <Text style={dyn.rowLabel}>Verify Identity</Text>
             <Text style={st.rowAction}>Check</Text>
           </TouchableOpacity>
         </View>
 
         {/* Security */}
-        <Text style={st.sectionLabel}>{t("security")}</Text>
-        <View style={st.card}>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>{t("encryption")}</Text>
+        <Text style={dyn.sectionLabel}>{t("security")}</Text>
+        <View style={dyn.card}>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>{t("encryption")}</Text>
             <Text style={st.rowValueTeal}>Kyber-768 + AES-256-GCM</Text>
           </View>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>{t("forwardSecrecy")}</Text>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>{t("forwardSecrecy")}</Text>
             <Text style={st.rowValueTeal}>Double Ratchet</Text>
           </View>
-          <TouchableOpacity style={st.row} onPress={handleResetPIN}>
-            <Text style={st.rowLabel}>{t("resetPin")}</Text>
+          <TouchableOpacity style={dyn.row} onPress={handleResetPIN}>
+            <Text style={dyn.rowLabel}>{t("resetPin")}</Text>
             <Text style={st.rowAction}>{t("reset")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Language */}
-        <Text style={st.sectionLabel}>{t("language")}</Text>
-        <View style={st.card}>
-          <TouchableOpacity style={st.row} onPress={() => setShowLangPicker(!showLangPicker)}>
-            <Text style={st.rowLabel}>{t("language")}</Text>
+        <Text style={dyn.sectionLabel}>{t("language")}</Text>
+        <View style={dyn.card}>
+          <TouchableOpacity style={dyn.row} onPress={() => setShowLangPicker(!showLangPicker)}>
+            <Text style={dyn.rowLabel}>{t("language")}</Text>
             <Text style={st.rowAction}>{LANGUAGES.find((l) => l.key === getLanguage())?.native || "English"}</Text>
           </TouchableOpacity>
           {showLangPicker && LANGUAGES.map((l) => (
-            <TouchableOpacity key={l.key} style={[st.langRow, getLanguage() === l.key && st.langRowActive]}
+            <TouchableOpacity key={l.key} style={[dyn.langRow, getLanguage() === l.key && st.langRowActive]}
               onPress={() => { setLanguage(l.key); onLanguageChange(); setShowLangPicker(false); }}>
-              <Text style={[st.langNative, getLanguage() === l.key && st.langNativeActive]}>{l.native}</Text>
-              <Text style={st.langLabel}>{l.label}</Text>
+              <Text style={[dyn.langNative, getLanguage() === l.key && st.langNativeActive]}>{l.native}</Text>
+              <Text style={[st.langLabel, { color: c.signal.steel }]}>{l.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Appearance / Theme */}
+        <Text style={dyn.sectionLabel}>{t("appearance")}</Text>
+        <View style={[dyn.card, { flexDirection: "row", padding: 4, gap: 4 }]}>
+          {(["system", "dark", "light"] as ThemeMode[]).map((opt) => (
+            <TouchableOpacity key={opt} onPress={() => setThemeMode(opt)}
+              style={[st.themeBtn, themeMode === opt && st.themeBtnActive]}>
+              <Text style={[st.themeBtnText, themeMode === opt && st.themeBtnTextActive]}>
+                {t(`theme${opt.charAt(0).toUpperCase() + opt.slice(1)}`)}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Advanced Features */}
-        <Text style={st.sectionLabel}>{t("advanced")}</Text>
-        <View style={st.card}>
-          <TouchableOpacity style={st.row} onPress={onOpenMining}>
-            <Text style={st.rowLabel}>Mining</Text>
+        <Text style={dyn.sectionLabel}>{t("advanced")}</Text>
+        <View style={dyn.card}>
+          <TouchableOpacity style={dyn.row} onPress={onOpenMining}>
+            <Text style={dyn.rowLabel}>Mining</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={onOpenVault}>
-            <Text style={st.rowLabel}>{t("quantumVault")}</Text>
+          <TouchableOpacity style={dyn.row} onPress={onOpenVault}>
+            <Text style={dyn.rowLabel}>{t("quantumVault")}</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={onOpenAdvanced}>
-            <Text style={st.rowLabel}>{t("ghostWitness")}</Text>
+          <TouchableOpacity style={dyn.row} onPress={onOpenAdvanced}>
+            <Text style={dyn.rowLabel}>{t("ghostWitness")}</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={onOpenBrowser}>
-            <Text style={st.rowLabel}>Freedom Browse</Text>
+          <TouchableOpacity style={dyn.row} onPress={onOpenBrowser}>
+            <Text style={dyn.rowLabel}>Freedom Browse</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Privacy & Data */}
-        <Text style={st.sectionLabel}>{t("privacyData")}</Text>
-        <View style={st.card}>
-          <TouchableOpacity style={st.row} onPress={() => setShowPrivacy(true)}>
-            <Text style={st.rowLabel}>{t("privacyPolicy")}</Text>
+        <Text style={dyn.sectionLabel}>{t("privacyData")}</Text>
+        <View style={dyn.card}>
+          <TouchableOpacity style={dyn.row} onPress={() => setShowPrivacy(true)}>
+            <Text style={dyn.rowLabel}>{t("privacyPolicy")}</Text>
             <Text style={st.rowAction}>{t("view")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={st.row} onPress={handleDeleteData}>
+          <TouchableOpacity style={dyn.row} onPress={handleDeleteData}>
             <Text style={st.rowLabelRed}>{t("deleteAllData")}</Text>
             <Text style={st.rowActionRed}>{t("delete")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* About */}
-        <Text style={st.sectionLabel}>{t("about")}</Text>
-        <View style={st.card}>
-          <TouchableOpacity style={st.row} onPress={onOpenInfo}>
-            <Text style={st.rowLabel}>{t("howSpeaqWorks")}</Text>
+        <Text style={dyn.sectionLabel}>{t("about")}</Text>
+        <View style={dyn.card}>
+          <TouchableOpacity style={dyn.row} onPress={onOpenInfo}>
+            <Text style={dyn.rowLabel}>{t("howSpeaqWorks")}</Text>
             <Text style={st.rowAction}>i</Text>
           </TouchableOpacity>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>{t("version")}</Text>
-            <Text style={st.rowValue}>0.1.0 (Phase 5)</Text>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>{t("version")}</Text>
+            <Text style={dyn.rowValue}>0.1.0 (Phase 5)</Text>
           </View>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>{t("platform")}</Text>
-            <Text style={st.rowValue}>SPEAQ Freely.</Text>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>{t("platform")}</Text>
+            <Text style={dyn.rowValue}>SPEAQ Freely.</Text>
           </View>
-          <View style={st.row}>
-            <Text style={st.rowLabel}>Website</Text>
+          <View style={dyn.row}>
+            <Text style={dyn.rowLabel}>Website</Text>
             <Text style={st.rowValueMono}>thespeaq.com</Text>
           </View>
         </View>
@@ -364,34 +404,34 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
 
       {/* Privacy Policy Modal */}
       <Modal visible={showPrivacy} animationType="slide">
-        <View style={st.privacyContainer}>
-          <View style={st.privacyHeader}>
-            <Text style={st.privacyTitle}>{t("privacyPolicy")}</Text>
+        <View style={dyn.privacyContainer}>
+          <View style={dyn.privacyHeader}>
+            <Text style={dyn.privacyTitle}>{t("privacyPolicy")}</Text>
             <TouchableOpacity onPress={() => setShowPrivacy(false)}>
               <Text style={st.privacyClose}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={st.privacyScroll}>
-            <Text style={st.privacyText}>{getPrivacyPolicyText()}</Text>
+            <Text style={dyn.privacyText}>{getPrivacyPolicyText()}</Text>
           </ScrollView>
         </View>
       </Modal>
 
       {/* Export Identity Modal */}
       <Modal visible={showExport} animationType="slide">
-        <View style={st.privacyContainer}>
-          <View style={st.privacyHeader}>
-            <Text style={st.privacyTitle}>Export Identity</Text>
+        <View style={dyn.privacyContainer}>
+          <View style={dyn.privacyHeader}>
+            <Text style={dyn.privacyTitle}>Export Identity</Text>
             <TouchableOpacity onPress={() => setShowExport(false)}>
               <Text style={st.privacyClose}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={st.privacyScroll}>
-            <Text style={[st.privacyText, { marginBottom: 12 }]}>
+            <Text style={[dyn.privacyText, { marginBottom: 12 }]}>
               Scan this data on your new device to transfer your identity.
               Note: private keys must be transferred separately for security.
             </Text>
-            <View style={st.exportBox}>
+            <View style={dyn.exportBox}>
               <Text style={st.exportData} selectable>{exportData}</Text>
             </View>
           </ScrollView>
@@ -426,6 +466,10 @@ const st = StyleSheet.create({
   langNativeActive: { color: colors.voice.gold, fontWeight: "600" },
   langLabel: { color: colors.signal.steel, fontSize: 12 },
   rowActionRed: { color: colors.signal.red, fontSize: 14, fontWeight: "500" },
+  themeBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44 },
+  themeBtnActive: { backgroundColor: "rgba(212,168,83,0.15)" },
+  themeBtnText: { color: colors.signal.steel, fontSize: 14 },
+  themeBtnTextActive: { color: colors.voice.gold, fontWeight: "600" },
 
   privacyContainer: { flex: 1, backgroundColor: colors.depth.void },
   privacyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
