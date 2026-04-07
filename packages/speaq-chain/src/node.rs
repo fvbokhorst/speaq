@@ -424,6 +424,8 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                 if reward == 0 {
                     println!("  [SLOT {}] Max supply reached. No more rewards.", next_height);
                 } else {
+                    // Sort validators by pubkey so all nodes have same order
+                    validators.sort_by(|a, b| a.signing_pubkey.0.cmp(&b.signing_pubkey.0));
                     // Determine who should produce this block
                     let producer_idx = select_block_producer(&validators, next_height, &current_prev_hash);
 
@@ -501,6 +503,7 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                         println!("  [P2P] Connected to peer: {} (total: {})", pid, peer_count.load(Ordering::Relaxed));
                         // Announce ourselves as validator to the new peer
                         let announce = NetworkMessage::ValidatorAnnounce {
+                            address: wallet.address.0,
                             signing_pubkey: my_signing_pk.0.clone(),
                             contribution_score: my_validator.contribution_score,
                         };
@@ -601,17 +604,11 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                                     txs_received.fetch_add(1, Ordering::Relaxed);
                                     println!("  [P2P] Received transaction ({} bytes) -- queued", data.len());
                                 }
-                                NetworkMessage::ValidatorAnnounce { signing_pubkey, contribution_score } => {
+                                NetworkMessage::ValidatorAnnounce { address, signing_pubkey, contribution_score } => {
                                     let pk = dilithium::PublicKeyBytes(signing_pubkey);
                                     if !validators.iter().any(|v| v.signing_pubkey.0 == pk.0) {
-                                        use sha2::{Sha256, Digest};
-                                        let mut hasher = Sha256::new();
-                                        hasher.update(&pk.0);
-                                        let hash = hasher.finalize();
-                                        let mut addr_bytes = [0u8; 32];
-                                        addr_bytes.copy_from_slice(&hash);
                                         let peer_validator = Validator {
-                                            address: speaq_chain::wallet::WalletAddress(addr_bytes),
+                                            address: speaq_chain::wallet::WalletAddress(address),
                                             signing_pubkey: pk,
                                             region: Region::Unknown,
                                             messages_relayed: 0,
@@ -628,6 +625,18 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                                         };
                                         validators.push(peer_validator);
                                         println!("  [P2P] Validator announced (total: {})", validators.len());
+                                        // Re-announce ALL known validators so new peer learns about the network
+                                        for v in &validators {
+                                            let re_announce = NetworkMessage::ValidatorAnnounce {
+                                                address: v.address.0,
+                                                signing_pubkey: v.signing_pubkey.0.clone(),
+                                                contribution_score: v.contribution_score,
+                                            };
+                                            if let Ok(bytes) = bincode::serialize(&re_announce) {
+                                                let topic = libp2p::gossipsub::IdentTopic::new(speaq_chain::network::TOPIC_BLOCKS);
+                                                swarm.behaviour_mut().gossipsub.publish(topic, bytes).ok();
+                                            }
+                                        }
                                     }
                                 }
                                 _ => {}

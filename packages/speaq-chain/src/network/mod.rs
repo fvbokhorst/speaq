@@ -41,6 +41,7 @@ pub enum NetworkMessage {
     ResponseBlock { height: u64, data: Vec<u8> },
     /// Validator announces itself to the network
     ValidatorAnnounce {
+        address: [u8; 32],
         signing_pubkey: Vec<u8>,
         contribution_score: u64,
     },
