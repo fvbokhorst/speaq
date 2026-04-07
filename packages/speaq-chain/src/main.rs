@@ -24,8 +24,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new node (genesis block + data directory)
+    /// Initialize a new network (creates genesis block)
     Init,
+
+    /// Join an existing network (copies genesis from another node)
+    Join {
+        /// Data directory of the node to copy genesis from
+        #[arg(long)]
+        genesis_from: PathBuf,
+    },
 
     /// Start the node (P2P + REST API)
     Start {
@@ -95,6 +102,9 @@ async fn main() {
     match cli.command {
         Commands::Init => {
             node::handle_init(&cli.data_dir).await;
+        }
+        Commands::Join { genesis_from } => {
+            node::handle_join(&cli.data_dir, &genesis_from).await;
         }
         Commands::Start { p2p_port, api_port, peers } => {
             node::handle_start(&cli.data_dir, p2p_port, api_port, peers).await;

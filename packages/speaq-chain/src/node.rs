@@ -157,6 +157,95 @@ pub async fn handle_init(data_dir: &Path) {
 }
 
 // ============================================================================
+// JOIN (join existing network by copying genesis from another node)
+// ============================================================================
+
+pub async fn handle_join(data_dir: &Path, genesis_from: &Path) {
+    println!();
+    println!("  SPEAQ Chain Node - Join Network");
+    println!("  \"By the people, for the people.\"");
+    println!();
+
+    // Check if already initialized
+    let config_path = data_dir.join(NODE_CONFIG_FILE);
+    if config_path.exists() {
+        println!("  [!] Node already initialized at {}", data_dir.display());
+        return;
+    }
+
+    // Check source node exists
+    let source_config_path = genesis_from.join(NODE_CONFIG_FILE);
+    let source_db_path = genesis_from.join("chaindata");
+    if !source_config_path.exists() {
+        println!("  [ERROR] Source node not found at {}", genesis_from.display());
+        return;
+    }
+
+    // Read source config for genesis hash
+    let source_config = match load_config(genesis_from) {
+        Some(c) => c,
+        None => { println!("  [ERROR] Failed to read source config"); return; }
+    };
+
+    // Create data directory
+    std::fs::create_dir_all(data_dir).ok();
+    println!("  [1/4] Data directory: {}", data_dir.display());
+
+    // Generate own wallet (each node has its own identity)
+    println!("  [2/4] Generating quantum-resistant wallet...");
+    let wallet = Wallet::generate();
+    println!("         Address: {}", wallet.address);
+
+    // Save wallet
+    let wallet_data = serialize_wallet(&wallet);
+    let wallet_path = data_dir.join(WALLET_FILE);
+    let json = serde_json::to_string_pretty(&wallet_data).unwrap();
+    std::fs::write(&wallet_path, json).ok();
+    println!("  [3/4] Wallet saved");
+
+    // Copy genesis block from source RocksDB
+    println!("  [4/4] Copying genesis block from source...");
+    let source_db = match speaq_chain::storage::BlockchainDB::open(&source_db_path) {
+        Ok(d) => d,
+        Err(e) => { println!("  [ERROR] Failed to open source RocksDB: {}", e); return; }
+    };
+    let genesis = match source_db.get_block(0) {
+        Ok(Some(b)) => b,
+        _ => { println!("  [ERROR] No genesis block in source"); return; }
+    };
+    drop(source_db); // Close source DB
+
+    // Store genesis in our own RocksDB
+    let db_path = data_dir.join("chaindata");
+    let db = match speaq_chain::storage::BlockchainDB::open(&db_path) {
+        Ok(d) => d,
+        Err(e) => { println!("  [ERROR] Failed to create RocksDB: {}", e); return; }
+    };
+    db.put_block(0, &genesis).ok();
+    db.set_tip_height(0).ok();
+    db.put_metadata("total_mined_sparks", &0u64.to_le_bytes()).ok();
+    println!("         Genesis hash: {}", source_config.genesis_hash);
+
+    // Save config with SAME genesis hash
+    let config = NodeConfig {
+        initialized: true,
+        genesis_hash: source_config.genesis_hash,
+        chain_height: 0,
+        p2p_port: 9333,
+        api_port: 9334,
+    };
+    let json = serde_json::to_string_pretty(&config).unwrap();
+    std::fs::write(data_dir.join(NODE_CONFIG_FILE), json).ok();
+
+    println!();
+    println!("  Joined network successfully.");
+    println!("  Same genesis block as source node.");
+    println!();
+    println!("  Next: speaq-node start --peers /ip4/127.0.0.1/tcp/9333");
+    println!();
+}
+
+// ============================================================================
 // START
 // ============================================================================
 
@@ -282,6 +371,32 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
     ));
     println!("  REST API listening on http://0.0.0.0:{}", api_port);
 
+    // Register this node as a validator
+    use speaq_chain::consensus::{Validator, Region, calculate_block_reward, select_block_producer};
+    use speaq_chain::crypto::dilithium;
+
+    let my_validator = Validator {
+        address: wallet.address.clone(),
+        signing_pubkey: dilithium::export_public_key(&wallet.signing.public_key),
+        region: Region::Europe, // TODO: detect from IP
+        messages_relayed: 0,
+        proofs_validated: 0,
+        storage_mb: 0,
+        mesh_minutes: 0,
+        translations: 0,
+        onboarded_users: 0,
+        uptime_hours: 1,
+        total_hours: 1,
+        active_days: 30,
+        slashed: false,
+        contribution_score: 100, // Initial score
+    };
+
+    // Validator registry: starts with just this node, peers register when they connect
+    let mut validators: Vec<Validator> = vec![my_validator.clone()];
+    let my_address = wallet.address.clone();
+
+    println!("  Validator registered: {} (score: {})", my_address, 100);
     println!();
     println!("  Node is running. Press Ctrl+C to stop.");
     println!("  -----------------------------------------");
@@ -300,63 +415,78 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
         tokio::select! {
             // Block production timer (every 30 seconds)
             _ = block_timer.tick() => {
-                use speaq_chain::consensus::calculate_block_reward;
                 use speaq_chain::transaction::Transaction;
 
                 let next_height = current_height + 1;
                 let reward = calculate_block_reward(current_mined_sparks);
 
                 if reward == 0 {
-                    println!("  [MINE] Max supply reached. No more rewards.");
+                    println!("  [SLOT {}] Max supply reached. No more rewards.", next_height);
                 } else {
-                    // Create coinbase transaction (mining reward)
-                    let coinbase = Transaction::create_mining_reward(
-                        wallet.address.0,
-                        reward,
-                        next_height,
-                        &wallet,
-                    );
+                    // Determine who should produce this block
+                    let producer_idx = select_block_producer(&validators, next_height, &current_prev_hash);
 
-                    // Create and sign block (dual: Dilithium + SPHINCS+)
-                    let block = speaq_chain::block::Block::create(
-                        current_prev_hash,
-                        next_height,
-                        vec![coinbase],
-                        &wallet,
-                        next_height * 10, // Contribution score grows with chain
-                    );
+                    let is_my_turn = match producer_idx {
+                        Some(idx) => validators[idx].address == my_address,
+                        None => validators.len() == 1, // Solo node fallback
+                    };
 
-                    // Verify before storing
-                    if !block.verify_signature() || !block.verify_merkle_root() {
-                        println!("  [MINE] Block {} FAILED verification -- NOT stored", next_height);
-                        continue;
-                    }
+                    if is_my_turn {
+                        // I am the selected producer for this slot
+                        let coinbase = Transaction::create_mining_reward(
+                            wallet.address.0,
+                            reward,
+                            next_height,
+                            &wallet,
+                        );
 
-                    // Store in RocksDB
-                    let block_hash = hex::encode(&block.hash()[..8]);
-                    if let Err(e) = db.put_block(next_height, &block) {
-                        println!("  [MINE] Failed to store block {}: {}", next_height, e);
-                        continue;
-                    }
-                    db.set_tip_height(next_height).ok();
-                    current_mined_sparks += reward;
-                    db.put_metadata("total_mined_sparks", &current_mined_sparks.to_le_bytes()).ok();
+                        let block = speaq_chain::block::Block::create(
+                            current_prev_hash,
+                            next_height,
+                            vec![coinbase],
+                            &wallet,
+                            my_validator.contribution_score,
+                        );
 
-                    // Update state
-                    current_prev_hash = block.hash();
-                    current_height = next_height;
-                    chain_height.store(next_height, Ordering::Relaxed);
-
-                    let reward_qc = reward as f64 / 100_000_000.0;
-                    println!("  [MINE] Block {} produced | hash={}... | reward={:.8} QC | total={:.8} QC",
-                        next_height, block_hash, reward_qc,
-                        current_mined_sparks as f64 / 100_000_000.0);
-
-                    // Broadcast to peers
-                    if peer_count.load(Ordering::Relaxed) > 0 {
-                        if let Err(e) = speaq_chain::network::broadcast_block(&mut swarm, &block) {
-                            println!("  [MINE] Broadcast failed: {}", e);
+                        // Verify before storing
+                        if !block.verify_signature() || !block.verify_merkle_root() {
+                            println!("  [SLOT {}] Block FAILED verification -- NOT stored", next_height);
+                            continue;
                         }
+
+                        // Store in RocksDB
+                        let block_hash = hex::encode(&block.hash()[..8]);
+                        if let Err(e) = db.put_block(next_height, &block) {
+                            println!("  [SLOT {}] Failed to store block: {}", next_height, e);
+                            continue;
+                        }
+                        db.set_tip_height(next_height).ok();
+                        current_mined_sparks += reward;
+                        db.put_metadata("total_mined_sparks", &current_mined_sparks.to_le_bytes()).ok();
+
+                        // Update state
+                        current_prev_hash = block.hash();
+                        current_height = next_height;
+                        chain_height.store(next_height, Ordering::Relaxed);
+
+                        let reward_qc = reward as f64 / 100_000_000.0;
+                        let total_validators = validators.len();
+                        println!("  [SLOT {}] PRODUCED block | hash={}... | reward={:.8} QC | validators={} | total={:.8} QC",
+                            next_height, block_hash, reward_qc, total_validators,
+                            current_mined_sparks as f64 / 100_000_000.0);
+
+                        // Broadcast to peers
+                        if peer_count.load(Ordering::Relaxed) > 0 {
+                            if let Err(e) = speaq_chain::network::broadcast_block(&mut swarm, &block) {
+                                println!("  [SLOT {}] Broadcast failed: {}", next_height, e);
+                            }
+                        }
+                    } else {
+                        // Not my turn -- waiting for block from selected producer
+                        let producer_addr = producer_idx
+                            .map(|i| validators[i].address.to_string_short())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        println!("  [SLOT {}] Waiting for block from {}", next_height, producer_addr);
                     }
                 }
             }
@@ -409,10 +539,39 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                                                     println!("  [P2P] Block {} store failed: {}", bh, e);
                                                 } else {
                                                     db.set_tip_height(bh).ok();
+                                                    // Track mined sparks from received blocks
+                                                    let block_reward = calculate_block_reward(current_mined_sparks);
+                                                    current_mined_sparks += block_reward;
+                                                    db.put_metadata("total_mined_sparks", &current_mined_sparks.to_le_bytes()).ok();
                                                     current_prev_hash = block.hash();
                                                     current_height = bh;
                                                     chain_height.store(bh, Ordering::Relaxed);
-                                                    println!("  [P2P] Block {} accepted | hash={}... | txs={}", bh, bhash, block.header.tx_count);
+
+                                                    // Register block producer as validator if not known
+                                                    let producer_pk = block.header.validator_pubkey.clone();
+                                                    if !validators.iter().any(|v| v.signing_pubkey.0 == producer_pk.0) {
+                                                        let peer_validator = Validator {
+                                                            address: speaq_chain::wallet::WalletAddress([0u8; 32]), // Derived from block
+                                                            signing_pubkey: producer_pk,
+                                                            region: Region::Unknown,
+                                                            messages_relayed: 0,
+                                                            proofs_validated: 0,
+                                                            storage_mb: 0,
+                                                            mesh_minutes: 0,
+                                                            translations: 0,
+                                                            onboarded_users: 0,
+                                                            uptime_hours: 1,
+                                                            total_hours: 1,
+                                                            active_days: 30,
+                                                            slashed: false,
+                                                            contribution_score: block.header.contribution_score,
+                                                        };
+                                                        validators.push(peer_validator);
+                                                        println!("  [P2P] New validator registered (total: {})", validators.len());
+                                                    }
+
+                                                    println!("  [P2P] Block {} accepted | hash={}... | txs={} | validators={}",
+                                                        bh, bhash, block.header.tx_count, validators.len());
                                                 }
                                             }
                                         }
