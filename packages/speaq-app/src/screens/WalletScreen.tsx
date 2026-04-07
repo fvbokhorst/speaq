@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { colors } from "../theme/brand";
-import { getIdentity } from "../services/speaq";
+import { getIdentity, sendQCPayment } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
 import { t } from "../services/i18n";
@@ -69,9 +69,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     setShowConfirm(true);
   }
 
-  function handleConfirmSend() {
+  async function handleConfirmSend() {
     const amount = parseFloat(sendAmount);
     walletService.send(sendTo.trim(), amount, sendNote.trim());
+    // Send encrypted QC payment to recipient
+    await sendQCPayment(sendTo.trim(), amount);
     setBalance(walletService.getBalance());
     setTransactions(walletService.getTransactions());
     setShowConfirm(false);

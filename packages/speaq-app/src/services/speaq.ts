@@ -290,6 +290,47 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
 }
 
 /**
+ * Send a QC payment to a contact (encrypted via ratchet)
+ */
+export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<void> {
+  if (!ws || !connected || !identity) return;
+
+  const plaintext = JSON.stringify({
+    type: "message",
+    qc: true,
+    amount,
+    from: identity.displayName,
+    senderId: identity.speaqId,
+    fromName: identity.displayName,
+    text: `[Payment: ${amount.toFixed(4)} QC]`,
+    timestamp: Date.now(),
+  });
+
+  const contactPubKey = await loadContactPublicKey(toSpeaqId);
+  const { state, kyberCiphertext } = await getOrCreateRatchet(
+    identity.speaqId, toSpeaqId, contactPubKey
+  );
+
+  if (kyberCiphertext) {
+    ws.send(JSON.stringify({
+      type: "KEY_EXCHANGE_RESPONSE",
+      to: toSpeaqId,
+      kyberCiphertext,
+    }));
+  }
+
+  const ratchetMsg = await ratchetEncrypt(state, plaintext, toSpeaqId);
+
+  ws.send(JSON.stringify({
+    type: "SEND_SEALED",
+    to: toSpeaqId,
+    blob: JSON.stringify(ratchetMsg),
+    encrypted: true,
+    protocol: "ratchet-v1",
+  }));
+}
+
+/**
  * Listen for incoming messages
  */
 export function onMessage(callback: MessageCallback): () => void {

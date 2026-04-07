@@ -13,7 +13,7 @@ import {
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
-import { sendMessage, onMessage, getIdentity } from "../services/speaq";
+import { sendMessage, sendQCPayment, onMessage, getIdentity } from "../services/speaq";
 import {
   decryptMessage, getContactKey,
   getOrCreateRatchet, ratchetDecrypt,
@@ -123,12 +123,16 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
             if (data.type === "message") {
               Vibration.vibrate(100);
               playMessageReceived();
+              // Handle QC payment receive
+              if (data.qc && data.amount && data.amount > 0) {
+                walletService.receive(data.senderId || contactId, data.amount, `From ${data.fromName || contactId.substring(0, 8)}`);
+              }
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
                 text: data.text,
                 sent: false,
-                type: data.paymentAmount ? "payment" : "text",
-                amount: data.paymentAmount,
+                type: (data.qc || data.paymentAmount) ? "payment" : "text",
+                amount: data.amount || data.paymentAmount,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
               };
               setMessages((prev) => [...prev, newMsg]);
@@ -183,7 +187,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           timestamp: now(),
         };
         setMessages((prev) => [...prev, payMsg]);
-        sendMessage(contactId, JSON.stringify({ type: "message", text: `${amount.toFixed(2)} QC`, paymentAmount: amount }));
+        sendQCPayment(contactId, amount);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       }},
     ], "plain-text", "", "decimal-pad");
