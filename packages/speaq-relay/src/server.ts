@@ -213,7 +213,7 @@ setInterval(() => {
 // --- Express REST API ---
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: "*", allowedHeaders: ["Content-Type", "x-admin-pin"] }));
 app.use(express.json({ limit: "1mb" }));
 
 // Health check
@@ -277,9 +277,9 @@ app.get("/api/v1/stats", (_req, res) => {
 // --- Admin Stats Endpoint (PIN-protected) ---
 
 app.get("/api/v1/admin/stats", (req, res) => {
-  const pin = req.headers["x-admin-pin"] as string;
+  const pin = (req.query.pin as string) || (req.headers["x-admin-pin"] as string);
   if (!pin) {
-    return res.status(401).json({ error: "x-admin-pin header required" });
+    return res.status(401).json({ error: "PIN required" });
   }
   const pinHash = crypto.createHash("sha256").update(pin).digest("hex");
   if (pinHash !== ADMIN_PIN_HASH) {
