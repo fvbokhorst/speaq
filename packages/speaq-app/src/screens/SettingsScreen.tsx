@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image, Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/brand";
 import { useTheme, ThemeMode } from "../theme/ThemeContext";
@@ -370,6 +370,10 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         <View style={dyn.card}>
           <TouchableOpacity style={dyn.row} onPress={() => setShowPrivacy(true)}>
             <Text style={dyn.rowLabel}>{t("privacyPolicy")}</Text>
+            <Text style={st.rowAction}>{t("view")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={dyn.row} onPress={() => Linking.openURL("https://thespeaq.com/terms")}>
+            <Text style={dyn.rowLabel}>Terms of Service</Text>
             <Text style={st.rowAction}>{t("view")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={dyn.row} onPress={handleDeleteData}>
