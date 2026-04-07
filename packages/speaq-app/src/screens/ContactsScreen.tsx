@@ -3,9 +3,10 @@
  * Show your QR code + scan others to pair
  */
 
-import React, { useState, Suspense } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Share } from "react-native";
+import React, { useState, useEffect, Suspense } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Share, Image } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Camera } from "react-native-camera-kit";
 import { colors, spacing, radius } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
@@ -24,8 +25,15 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [newContactId, setNewContactId] = useState("");
   const [newContactName, setNewContactName] = useState("");
   const [showScanner, setShowScanner] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [contactPhotos, setContactPhotos] = useState<Record<string, string>>({});
   const identity = getIdentity();
   const qrData = `speaq://${identity?.speaqId || "unknown"}`;
+
+  useEffect(() => {
+    AsyncStorage.getItem("speaq_profile_photo").then((uri) => { if (uri) setProfilePhoto(uri); });
+    AsyncStorage.getItem("speaq_contact_photos").then((json) => { if (json) try { setContactPhotos(JSON.parse(json)); } catch {} });
+  }, []);
 
   function addContact() {
     if (!newContactId.trim() || !newContactName.trim()) return;
@@ -62,13 +70,20 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
       {/* Your QR Code */}
       <TouchableOpacity style={st.qrCard} onPress={() => setShowQRModal(true)} activeOpacity={0.8}>
         <View style={st.qrRow}>
-          <View style={st.qrSmall}>
-            <QRCode value={qrData} size={60} backgroundColor="transparent" color={colors.voice.gold} />
-          </View>
+          {profilePhoto ? (
+            <Image source={{ uri: profilePhoto }} style={st.profilePhoto} />
+          ) : (
+            <View style={st.profilePhotoPlaceholder}>
+              <Text style={st.profilePhotoInit}>{identity?.displayName?.charAt(0) || "?"}</Text>
+            </View>
+          )}
           <View style={st.qrInfo}>
             <Text style={st.qrName}>{identity?.displayName || "You"}</Text>
             <Text style={st.qrId}>{identity?.speaqId || "No ID"}</Text>
             <Text style={st.qrHint}>Tap to enlarge or share</Text>
+          </View>
+          <View style={st.qrSmall}>
+            <QRCode value={qrData} size={50} backgroundColor="transparent" color={colors.voice.gold} />
           </View>
         </View>
       </TouchableOpacity>
@@ -82,9 +97,13 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
       ) : (
         contacts.map((c) => (
           <TouchableOpacity key={c.id} style={st.contactItem} onPress={() => onOpenChat(c.id, c.name)} activeOpacity={0.7}>
-            <View style={st.contactAvatar}>
-              <Text style={st.contactAvatarText}>{c.name.charAt(0)}</Text>
-            </View>
+            {contactPhotos[c.id] ? (
+              <Image source={{ uri: contactPhotos[c.id] }} style={st.contactPhotoImg} />
+            ) : (
+              <View style={st.contactAvatar}>
+                <Text style={st.contactAvatarText}>{c.name.charAt(0)}</Text>
+              </View>
+            )}
             <View style={st.contactInfo}>
               <Text style={st.contactName}>{c.name}</Text>
               <Text style={st.contactId}>{c.id}</Text>
@@ -191,7 +210,11 @@ const st = StyleSheet.create({
 
   qrCard: { margin: 16, padding: 16, backgroundColor: colors.depth.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.subtle },
   qrRow: { flexDirection: "row", alignItems: "center" },
-  qrSmall: { marginRight: 16 },
+  qrSmall: { marginLeft: 12 },
+  profilePhoto: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: colors.voice.gold, marginRight: 12 },
+  profilePhotoPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.voice.gold, marginRight: 12 },
+  profilePhotoInit: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
+  contactPhotoImg: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.voice.gold, marginRight: 12 },
   qrInfo: { flex: 1 },
   qrName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   qrId: { color: colors.voice.gold, fontSize: 12, fontFamily: "Courier", marginTop: 2 },
