@@ -172,8 +172,8 @@ export default function AdvancedScreen({ onBack }: Props) {
 
   function handleQRScan(event: any) {
     const value = event.nativeEvent?.codeStringValue || "";
-    // Parse speaq:// URI to get SPEAQ ID
-    const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+    // Parse QR code to get SPEAQ ID (supports both old and new format)
+    const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value.includes("thespeaq.com/connect/") ? value.split("/connect/").pop() || "" : value;
     if (speaqId && pickerGroupId) {
       advancedService.addMemberToGhost(pickerGroupId, speaqId);
       setGhostGroups(advancedService.getGhostGroups());

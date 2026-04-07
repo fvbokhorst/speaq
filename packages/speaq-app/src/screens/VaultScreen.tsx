@@ -496,7 +496,7 @@ export default function VaultScreen({ onBack }: Props) {
             scanBarcode
             onReadCode={(event: any) => {
               const value = event.nativeEvent?.codeStringValue || "";
-              const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+              const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value.includes("thespeaq.com/connect/") ? value.split("/connect/").pop() || "" : value;
               if (speaqId) {
                 setShowShareQR(false);
                 handleSendToContact(speaqId, speaqId);

@@ -28,7 +28,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [contactPhotos, setContactPhotos] = useState<Record<string, string>>({});
   const identity = getIdentity();
-  const qrData = `speaq://${identity?.speaqId || "unknown"}`;
+  const qrData = `https://thespeaq.com/connect/${identity?.speaqId || "unknown"}`;
 
   useEffect(() => {
     AsyncStorage.getItem("speaq_profile_photo").then((uri) => { if (uri) setProfilePhoto(uri); });
@@ -149,7 +149,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
               scanBarcode
               onReadCode={(event: any) => {
                 const value = event.nativeEvent?.codeStringValue || "";
-                const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+                const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value.includes("thespeaq.com/connect/") ? value.split("/connect/").pop() || "" : value;
                 if (speaqId) {
                   setShowScanner(false);
                   setNewContactId(speaqId);
