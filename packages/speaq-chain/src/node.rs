@@ -46,7 +46,7 @@ struct NodeConfig {
 pub async fn handle_init(data_dir: &Path) {
     println!();
     println!("  SPEAQ Chain Node - Initialization");
-    println!("  \"Van en voor de people.\"");
+    println!("  \"By the people, for the people.\"");
     println!();
 
     // Check if already initialized
@@ -96,7 +96,7 @@ pub async fn handle_init(data_dir: &Path) {
     let genesis = create_genesis_block(&wallet);
     let genesis_hash = hex::encode(genesis.hash());
     println!("         Genesis hash: {}", genesis_hash);
-    println!("         Motto: \"Van en voor de people.\"");
+    println!("         Motto: \"By the people, for the people.\"");
     println!("         Transactions: {}", genesis.header.tx_count);
 
     // Save node config
@@ -153,7 +153,7 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
 
     println!();
     println!("  SPEAQ Chain Node - Starting");
-    println!("  \"Van en voor de people.\"");
+    println!("  \"By the people, for the people.\"");
     println!();
     println!("  Chain height: {}", config.chain_height);
     println!("  Genesis: {}...", &config.genesis_hash[..16]);

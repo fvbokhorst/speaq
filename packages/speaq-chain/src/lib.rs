@@ -11,7 +11,7 @@
 //! - Layer 5: Application (Wallet, SPV Light Client, Payments)
 //! - Storage: RocksDB persistent database
 //!
-//! ## Motto: Van en voor de people.
+//! ## Motto: By the people, for the people.
 
 pub mod crypto;
 pub mod wallet;

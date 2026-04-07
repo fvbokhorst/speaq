@@ -5,7 +5,7 @@
 //! Previous hash is all zeros.
 //! Height is 0.
 //!
-//! "Van en voor de people." -- Frank van Bokhorst, 2026
+//! "By the people, for the people." -- Frank van Bokhorst, 2026
 
 use super::{Block, BlockHeader};
 use crate::crypto::dilithium;
@@ -13,7 +13,7 @@ use crate::transaction::Transaction;
 use crate::wallet::Wallet;
 
 /// The SPEAQ Chain motto, embedded in the genesis block
-pub const GENESIS_MOTTO: &str = "Van en voor de people. - SPEAQ Chain Genesis, April 2026";
+pub const GENESIS_MOTTO: &str = "By the people, for the people. - SPEAQ Chain Genesis, April 2026";
 
 /// Create the genesis block
 ///

@@ -1,6 +1,6 @@
 //! SPEAQ Chain Node
 //! Quantum-resistant blockchain node with CLI interface.
-//! "Van en voor de people."
+//! "By the people, for the people."
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
