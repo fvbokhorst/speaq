@@ -8,3 +8,4 @@ pub mod kyber;
 pub mod pedersen;
 pub mod clsag;
 pub mod rangeproof;
+pub mod sphincs;

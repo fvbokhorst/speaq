@@ -9,6 +9,7 @@ authors = ["Frank van Bokhorst - Plexaris"]
 # Post-Quantum Cryptography (NIST certified)
 pqcrypto-dilithium = "0.5"
 pqcrypto-kyber = "0.8"
+pqcrypto-sphincsplus = "0.7"
 pqcrypto-traits = "0.3"
 
 # Elliptic Curve (for Pedersen commitments, ring signatures)
@@ -49,9 +50,18 @@ libp2p = { version = "0.54", features = [
 ] }
 tokio = { version = "1", features = ["full"] }
 
+# Persistent storage (used by Bitcoin, Ethereum, CockroachDB)
+rocksdb = "0.24"
+
+# Tor anonymity network
+arti-client = { version = "0.41", default-features = false }
+tor-rtcompat = { version = "0.41", features = ["tokio"] }
+
 # Error handling
 thiserror = "1"
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = "0.3"
+[dev-dependencies]
+tempfile = "3"
