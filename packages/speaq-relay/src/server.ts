@@ -17,6 +17,8 @@ import express from "express";
 import cors from "cors";
 import http from "http";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 // --- Types ---
 
@@ -53,6 +55,98 @@ const OFFLINE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 100; // 100 messages per minute
 const rateLimitCounters = new Map<string, { count: number; resetAt: number }>();
+
+// --- Admin Stats ---
+
+const ADMIN_PIN_HASH = crypto.createHash("sha256").update("555766").digest("hex");
+const ADMIN_SPEAQ_ID = process.env.ADMIN_SPEAQ_ID || "";
+const STATS_FILE = path.join(process.cwd(), "speaq-stats.json");
+
+interface UserRecord {
+  firstSeen: number;
+}
+
+// All users ever seen, keyed by speaqId
+const allUsers = new Map<string, UserRecord>();
+
+// Mining stats
+let totalMiningReceipts = 0;
+let totalQCMined = 0;
+
+// Load persisted stats from disk
+function loadStats(): void {
+  try {
+    if (fs.existsSync(STATS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STATS_FILE, "utf-8"));
+      if (data.users) {
+        for (const [id, record] of Object.entries(data.users)) {
+          allUsers.set(id, record as UserRecord);
+        }
+      }
+      if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
+      if (data.totalQCMined) totalQCMined = data.totalQCMined;
+      console.log(`  Stats loaded: ${allUsers.size} users from disk`);
+    }
+  } catch (e) {
+    console.error("  Failed to load stats:", e);
+  }
+}
+
+// Save stats to disk
+function saveStats(): void {
+  try {
+    const data = {
+      users: Object.fromEntries(allUsers),
+      totalMiningReceipts,
+      totalQCMined,
+      savedAt: Date.now(),
+    };
+    fs.writeFileSync(STATS_FILE, JSON.stringify(data), "utf-8");
+  } catch (e) {
+    console.error("  Failed to save stats:", e);
+  }
+}
+
+// Save stats every 5 minutes
+setInterval(saveStats, 5 * 60 * 1000);
+
+// Track a user connection, returns true if NEW user
+function trackUser(speaqId: string): boolean {
+  if (allUsers.has(speaqId)) return false;
+  allUsers.set(speaqId, { firstSeen: Date.now() });
+  return true;
+}
+
+// Count users first seen in a time range
+function countUsersInRange(sinceMs: number): number {
+  const since = Date.now() - sinceMs;
+  let count = 0;
+  for (const record of allUsers.values()) {
+    if (record.firstSeen >= since) count++;
+  }
+  return count;
+}
+
+// Send a system notification to admin via WebSocket
+function notifyAdmin(text: string): void {
+  if (!ADMIN_SPEAQ_ID) return;
+  const adminClient = clients.get(ADMIN_SPEAQ_ID);
+  if (adminClient && adminClient.ws.readyState === WebSocket.OPEN) {
+    const blob = JSON.stringify({
+      type: "message",
+      text,
+      from: "SPEAQ Network",
+      senderId: "system",
+      timestamp: Date.now(),
+    });
+    adminClient.ws.send(JSON.stringify({
+      type: "RECEIVE",
+      from: "system",
+      blob,
+      id: crypto.randomUUID(),
+    }));
+  }
+}
 
 // --- Counters ---
 
@@ -180,6 +274,75 @@ app.get("/api/v1/stats", (_req, res) => {
   });
 });
 
+// --- Admin Stats Endpoint (PIN-protected) ---
+
+app.get("/api/v1/admin/stats", (req, res) => {
+  const pin = req.headers["x-admin-pin"] as string;
+  if (!pin) {
+    return res.status(401).json({ error: "x-admin-pin header required" });
+  }
+  const pinHash = crypto.createHash("sha256").update(pin).digest("hex");
+  if (pinHash !== ADMIN_PIN_HASH) {
+    return res.status(403).json({ error: "Invalid PIN" });
+  }
+
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  const WEEK = 7 * DAY;
+  const MONTH = 30 * DAY;
+  const YEAR = 365 * DAY;
+
+  // Build user growth timeline (daily buckets for last 30 days)
+  const userGrowth: { date: string; count: number }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const dayStart = now - (i + 1) * DAY;
+    const dayEnd = now - i * DAY;
+    let count = 0;
+    for (const record of allUsers.values()) {
+      if (record.firstSeen <= dayEnd) count++;
+    }
+    const d = new Date(dayEnd);
+    userGrowth.push({
+      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      count,
+    });
+  }
+
+  res.json({
+    users: {
+      total: allUsers.size,
+      activeNow: clients.size,
+      newToday: countUsersInRange(DAY),
+      newThisWeek: countUsersInRange(WEEK),
+      newThisMonth: countUsersInRange(MONTH),
+      newThisYear: countUsersInRange(YEAR),
+      growth: userGrowth,
+    },
+    miners: {
+      totalReceipts: totalMiningReceipts,
+      activeNow: clients.size, // every connected user can mine
+      newToday: countUsersInRange(DAY), // miners ~ users for now
+      newThisWeek: countUsersInRange(WEEK),
+      newThisMonth: countUsersInRange(MONTH),
+      newThisYear: countUsersInRange(YEAR),
+    },
+    economy: {
+      totalQCMined,
+      maxSupply: 21_000_000,
+      remaining: 21_000_000 - totalQCMined,
+      percentMined: ((totalQCMined / 21_000_000) * 100),
+    },
+    network: {
+      connectedClients: clients.size,
+      registeredKeys: publicKeys.size,
+      totalMessagesRelayed,
+      offlineQueued: Array.from(offlineQueue.values()).reduce((sum, msgs) => sum + msgs.length, 0),
+      uptimeSeconds: Math.floor((now - serverStartedAt) / 1000),
+      serverStartedAt,
+    },
+  });
+});
+
 // --- Mining Receipt System (C+) ---
 // Relay signs a receipt for each mining contribution it witnesses.
 // Double signature: miner signs + relay co-signs = unforgeable proof.
@@ -211,6 +374,10 @@ app.post("/api/v1/mining/receipt", (req, res) => {
   // Relay co-signs the receipt
   const relaySignature = relaySign(receiptData);
   const receiptId = crypto.randomUUID();
+
+  // Track mining stats
+  totalMiningReceipts++;
+  totalQCMined += parseFloat(amount) || 0;
 
   res.json({
     receiptId,
@@ -351,6 +518,12 @@ wss.on("connection", (ws: WebSocket) => {
           }
 
           clients.set(clientId, { speaqId: clientId, ws, connectedAt: Date.now() });
+
+          // Track user for admin stats
+          const isNewUser = trackUser(clientId);
+          if (isNewUser) {
+            notifyAdmin(`[SYSTEM] New user joined: ${clientId.substring(0, 8)}`);
+          }
 
           // Deliver any offline messages
           const offline = getOfflineMessages(clientId);
@@ -647,6 +820,9 @@ setInterval(() => {
 
 const PORT = parseInt(process.env.PORT || "8080", 10);
 
+// Load persisted stats before starting
+loadStats();
+
 server.listen(PORT, () => {
   console.log("");
   console.log("  SPEAQ Relay Server v0.1.0");
@@ -654,6 +830,17 @@ server.listen(PORT, () => {
   console.log("");
   console.log("  WebSocket: ws://localhost:" + PORT);
   console.log("  REST API:  http://localhost:" + PORT + "/api/v1/health");
+  console.log("  Admin:     http://localhost:" + PORT + "/api/v1/admin/stats");
   console.log("  Zero knowledge: server sees ONLY encrypted blobs");
   console.log("");
+});
+
+// Save stats on graceful shutdown
+process.on("SIGTERM", () => {
+  saveStats();
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  saveStats();
+  process.exit(0);
 });
