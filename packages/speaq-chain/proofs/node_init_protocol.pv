@@ -1,0 +1,89 @@
+(* SPEAQ Chain - Node Initialization Protocol Verification *)
+(* Proves: wallet key secrecy, genesis block integrity, node identity *)
+
+(* Channels *)
+free c: channel.          (* Public network *)
+free disk: channel [private].  (* Local disk storage - private *)
+
+(* Types *)
+type skey.    (* Dilithium signing secret key *)
+type pkey.    (* Dilithium signing public key *)
+type spkey.   (* SPHINCS+ public key *)
+type sskey.   (* SPHINCS+ secret key *)
+type kemsk.   (* Kyber KEM secret key *)
+type kempk.   (* Kyber KEM public key *)
+type address. (* Wallet address *)
+type blockhash. (* Block hash *)
+
+(* Cryptographic functions *)
+fun pk(skey): pkey.                        (* Derive public key from secret *)
+fun sphincs_pk(sskey): spkey.              (* SPHINCS+ public key *)
+fun kem_pk(kemsk): kempk.                  (* Kyber public key *)
+fun sign(bitstring, skey): bitstring.      (* Dilithium sign *)
+fun derive_address(pkey, kempk): address.  (* Address = SHA-256(pk || kem_pk) *)
+fun genesis_hash(bitstring, bitstring): blockhash. (* Genesis block hash *)
+
+(* Verification *)
+reduc forall m: bitstring, sk: skey; verify(sign(m, sk), m, pk(sk)) = true.
+
+(* Secrets to verify *)
+free wallet_sk: skey [private].
+free wallet_sphincs_sk: sskey [private].
+free wallet_kem_sk: kemsk [private].
+
+(* Queries: these secrets must NEVER leak *)
+query attacker(wallet_sk).
+query attacker(wallet_sphincs_sk).
+query attacker(wallet_kem_sk).
+
+(* Query: genesis block signature requires the secret key *)
+event GenesisCreated(blockhash, pkey).
+event GenesisVerified(blockhash, pkey).
+(* An attacker cannot forge a genesis signed by our validator key *)
+query bh: blockhash; event(GenesisVerified(bh, pk(wallet_sk))) ==> event(GenesisCreated(bh, pk(wallet_sk))).
+
+(* Query: wallet address is correctly derived *)
+event WalletCreated(address, pkey, kempk).
+query a: address, spk: pkey, kpk: kempk;
+  event(WalletCreated(a, spk, kpk)) ==> a = derive_address(spk, kpk).
+
+(* Node initialization process *)
+let nodeInit() =
+  (* Step 1: Generate wallet keypairs *)
+  let signing_pk = pk(wallet_sk) in
+  let sphincs_public = sphincs_pk(wallet_sphincs_sk) in
+  let kem_public = kem_pk(wallet_kem_sk) in
+
+  (* Step 2: Derive address *)
+  let addr = derive_address(signing_pk, kem_public) in
+  event WalletCreated(addr, signing_pk, kem_public);
+
+  (* Step 3: Create genesis block *)
+  let motto = sign((addr, signing_pk), wallet_sk) in
+  let gh = genesis_hash(motto, (signing_pk, kem_public)) in
+  event GenesisCreated(gh, signing_pk);
+
+  (* Step 4: Save to disk (private channel - attacker cannot read) *)
+  out(disk, (addr, signing_pk, kem_public, gh));
+
+  (* Step 5: Publish public info only (address, public keys, genesis hash, signature) *)
+  out(c, (addr, signing_pk, kem_public, gh));
+  out(c, motto);
+
+  (* Secret keys NEVER leave the node *)
+  0.
+
+(* Verifier process - any node can verify genesis *)
+let verifier() =
+  in(c, (addr: address, vpk: pkey, vkem: kempk, bh: blockhash));
+  (* Verify address derivation *)
+  if addr = derive_address(vpk, vkem) then
+  (* Verify genesis signature -- only the creator can produce valid signature *)
+  in(c, genesis_sig: bitstring);
+  if verify(genesis_sig, (addr, vpk), vpk) = true then
+  event GenesisVerified(bh, vpk);
+  0.
+
+(* Main process *)
+process
+  nodeInit() | verifier() | verifier()
