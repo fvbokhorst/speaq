@@ -40,8 +40,8 @@ export const config = {
   features: {
     voiceCalls: true,     // Phase 3 - ACTIVE
     videoCalls: true,     // Phase 3 - ACTIVE
-    quantumPay: false,    // Phase 5
-    freedomBrowse: false, // Phase 4
+    quantumPay: true,     // Phase 5 - ACTIVE
+    freedomBrowse: true,  // Phase 4 - ACTIVE
     witnessMode: true,    // Phase 5 - ACTIVE
     meshNetwork: false,   // Phase 4 - BLE not implemented yet
     torRouting: true,     // Phase 4 - ACTIVE (transport layer)
