@@ -395,6 +395,7 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
     // Validator registry: starts with just this node, peers register when they connect
     let mut validators: Vec<Validator> = vec![my_validator.clone()];
     let my_address = wallet.address.clone();
+    let my_signing_pk = dilithium::export_public_key(&wallet.signing.public_key);
 
     println!("  Validator registered: {} (score: {})", my_address, 100);
     println!();
@@ -427,7 +428,7 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                     let producer_idx = select_block_producer(&validators, next_height, &current_prev_hash);
 
                     let is_my_turn = match producer_idx {
-                        Some(idx) => validators[idx].address == my_address,
+                        Some(idx) => validators[idx].signing_pubkey.0 == my_signing_pk.0,
                         None => validators.len() == 1, // Solo node fallback
                     };
 
@@ -550,8 +551,15 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                                                     // Register block producer as validator if not known
                                                     let producer_pk = block.header.validator_pubkey.clone();
                                                     if !validators.iter().any(|v| v.signing_pubkey.0 == producer_pk.0) {
+                                                        // Derive address from signing public key
+                                                        use sha2::{Sha256, Digest};
+                                                        let mut hasher = Sha256::new();
+                                                        hasher.update(&producer_pk.0);
+                                                        let hash = hasher.finalize();
+                                                        let mut addr_bytes = [0u8; 32];
+                                                        addr_bytes.copy_from_slice(&hash);
                                                         let peer_validator = Validator {
-                                                            address: speaq_chain::wallet::WalletAddress([0u8; 32]), // Derived from block
+                                                            address: speaq_chain::wallet::WalletAddress(addr_bytes),
                                                             signing_pubkey: producer_pk,
                                                             region: Region::Unknown,
                                                             messages_relayed: 0,
