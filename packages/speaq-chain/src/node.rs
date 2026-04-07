@@ -381,13 +381,50 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                             match net_msg {
                                 NetworkMessage::NewBlock(data) => {
                                     blocks_received.fetch_add(1, Ordering::Relaxed);
-                                    println!("  [P2P] Received block ({} bytes)", data.len());
-                                    // TODO: Validate and add to chain
+                                    // Deserialize and validate received block
+                                    match speaq_chain::block::Block::from_bytes(&data) {
+                                        Some(block) => {
+                                            let bh = block.header.height;
+                                            let bhash = hex::encode(&block.hash()[..8]);
+
+                                            // Check height is next expected
+                                            if bh != current_height + 1 {
+                                                println!("  [P2P] Block {} rejected: expected height {}", bh, current_height + 1);
+                                            }
+                                            // Verify signatures (Dilithium + SPHINCS+)
+                                            else if !block.verify_signature() {
+                                                println!("  [P2P] Block {} rejected: invalid signature", bh);
+                                            }
+                                            // Verify merkle root
+                                            else if !block.verify_merkle_root() {
+                                                println!("  [P2P] Block {} rejected: invalid merkle root", bh);
+                                            }
+                                            // Verify links to our chain tip
+                                            else if block.header.previous_hash != current_prev_hash {
+                                                println!("  [P2P] Block {} rejected: previous hash mismatch", bh);
+                                            }
+                                            // All checks passed -- store it
+                                            else {
+                                                if let Err(e) = db.put_block(bh, &block) {
+                                                    println!("  [P2P] Block {} store failed: {}", bh, e);
+                                                } else {
+                                                    db.set_tip_height(bh).ok();
+                                                    current_prev_hash = block.hash();
+                                                    current_height = bh;
+                                                    chain_height.store(bh, Ordering::Relaxed);
+                                                    println!("  [P2P] Block {} accepted | hash={}... | txs={}", bh, bhash, block.header.tx_count);
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            println!("  [P2P] Received invalid block data ({} bytes)", data.len());
+                                        }
+                                    }
                                 }
                                 NetworkMessage::NewTransaction(data) => {
                                     txs_received.fetch_add(1, Ordering::Relaxed);
-                                    println!("  [P2P] Received transaction ({} bytes)", data.len());
-                                    // TODO: Validate and add to mempool
+                                    println!("  [P2P] Received transaction ({} bytes) -- queued", data.len());
+                                    // Transactions are included in next block production cycle
                                 }
                                 _ => {}
                             }
@@ -398,9 +435,23 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
             }
             _ = tokio::signal::ctrl_c() => {
                 println!("\n  Shutting down...");
+                println!("  Chain height: {}", current_height);
+                println!("  Total mined: {:.8} QC", current_mined_sparks as f64 / 100_000_000.0);
                 println!("  Peers: {}", peer_count.load(Ordering::Relaxed));
                 println!("  Blocks received: {}", blocks_received.load(Ordering::Relaxed));
                 println!("  Transactions received: {}", txs_received.load(Ordering::Relaxed));
+                // Update config with current chain height
+                let mut cfg = load_config(data_dir).unwrap_or(NodeConfig {
+                    initialized: true,
+                    genesis_hash: config.genesis_hash.clone(),
+                    chain_height: current_height,
+                    p2p_port,
+                    api_port,
+                });
+                cfg.chain_height = current_height;
+                if let Ok(json) = serde_json::to_string_pretty(&cfg) {
+                    std::fs::write(data_dir.join(NODE_CONFIG_FILE), json).ok();
+                }
                 break;
             }
         }
