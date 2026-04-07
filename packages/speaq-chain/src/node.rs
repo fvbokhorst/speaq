@@ -91,13 +91,38 @@ pub async fn handle_init(data_dir: &Path) {
     }
     println!("  [3/4] Wallet saved to {}", wallet_path.display());
 
-    // Create genesis block
-    println!("  [4/4] Creating genesis block...");
+    // Create genesis block and store in RocksDB
+    println!("  [4/5] Creating genesis block...");
     let genesis = create_genesis_block(&wallet);
     let genesis_hash = hex::encode(genesis.hash());
     println!("         Genesis hash: {}", genesis_hash);
     println!("         Motto: \"By the people, for the people.\"");
     println!("         Transactions: {}", genesis.header.tx_count);
+
+    // Store genesis block in RocksDB
+    println!("  [5/5] Storing genesis block in RocksDB...");
+    let db_path = data_dir.join("chaindata");
+    match speaq_chain::storage::BlockchainDB::open(&db_path) {
+        Ok(db) => {
+            if let Err(e) = db.put_block(0, &genesis) {
+                println!("  [ERROR] Failed to store genesis block: {}", e);
+                return;
+            }
+            if let Err(e) = db.set_tip_height(0) {
+                println!("  [ERROR] Failed to set tip height: {}", e);
+                return;
+            }
+            if let Err(e) = db.put_metadata("total_mined_sparks", &0u64.to_le_bytes()) {
+                println!("  [ERROR] Failed to set total mined: {}", e);
+                return;
+            }
+            println!("         RocksDB: {}", db_path.display());
+        }
+        Err(e) => {
+            println!("  [ERROR] Failed to open RocksDB: {}", e);
+            return;
+        }
+    }
 
     // Save node config
     let config = NodeConfig {
@@ -162,6 +187,16 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
     println!("  Peers: {}", if peers.is_empty() { "none (standalone)".to_string() } else { peers.join(", ") });
     println!();
 
+    // Load wallet
+    let wallet = match load_wallet(data_dir) {
+        Some(w) => w,
+        None => {
+            println!("  [ERROR] No wallet found. Run: speaq-node init");
+            return;
+        }
+    };
+    println!("  Wallet: {}", wallet.address);
+
     // Create P2P swarm
     let mut swarm = match create_swarm() {
         Ok(s) => s,
@@ -203,9 +238,32 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
         }
     }
 
+    // Open RocksDB and load chain state
+    let db_path = data_dir.join("chaindata");
+    let db = match speaq_chain::storage::BlockchainDB::open(&db_path) {
+        Ok(d) => d,
+        Err(e) => {
+            println!("  [ERROR] Failed to open RocksDB: {}", e);
+            return;
+        }
+    };
+    let tip_height = db.get_tip_height().unwrap_or(0);
+    let total_mined_sparks: u64 = db.get_metadata("total_mined_sparks")
+        .ok().flatten()
+        .and_then(|b| if b.len() == 8 { Some(u64::from_le_bytes(b.try_into().unwrap())) } else { None })
+        .unwrap_or(0);
+    println!("  RocksDB loaded: height={}, mined={} Sparks", tip_height, total_mined_sparks);
+
+    // Get previous block hash for block production
+    let prev_hash: [u8; 32] = if let Ok(Some(tip_block)) = db.get_block(tip_height) {
+        tip_block.hash()
+    } else {
+        [0u8; 32]
+    };
+
     // Shared state for API
     let peer_count = Arc::new(AtomicUsize::new(0));
-    let chain_height = Arc::new(AtomicU64::new(config.chain_height));
+    let chain_height = Arc::new(AtomicU64::new(tip_height));
     let blocks_received = Arc::new(AtomicU64::new(0));
     let txs_received = Arc::new(AtomicU64::new(0));
 
@@ -228,9 +286,80 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
     println!("  Node is running. Press Ctrl+C to stop.");
     println!("  -----------------------------------------");
 
-    // Event loop: process P2P events + Ctrl+C
+    // Block production state
+    let mut current_height = tip_height;
+    let mut current_prev_hash = prev_hash;
+    let mut current_mined_sparks = total_mined_sparks;
+    let mut block_timer = tokio::time::interval(std::time::Duration::from_secs(
+        speaq_chain::block::BLOCK_INTERVAL_SECS
+    ));
+    block_timer.tick().await; // Skip first immediate tick
+
+    // Event loop: process P2P events + block production + Ctrl+C
     loop {
         tokio::select! {
+            // Block production timer (every 30 seconds)
+            _ = block_timer.tick() => {
+                use speaq_chain::consensus::calculate_block_reward;
+                use speaq_chain::transaction::Transaction;
+
+                let next_height = current_height + 1;
+                let reward = calculate_block_reward(current_mined_sparks);
+
+                if reward == 0 {
+                    println!("  [MINE] Max supply reached. No more rewards.");
+                } else {
+                    // Create coinbase transaction (mining reward)
+                    let coinbase = Transaction::create_mining_reward(
+                        wallet.address.0,
+                        reward,
+                        next_height,
+                        &wallet,
+                    );
+
+                    // Create and sign block (dual: Dilithium + SPHINCS+)
+                    let block = speaq_chain::block::Block::create(
+                        current_prev_hash,
+                        next_height,
+                        vec![coinbase],
+                        &wallet,
+                        next_height * 10, // Contribution score grows with chain
+                    );
+
+                    // Verify before storing
+                    if !block.verify_signature() || !block.verify_merkle_root() {
+                        println!("  [MINE] Block {} FAILED verification -- NOT stored", next_height);
+                        continue;
+                    }
+
+                    // Store in RocksDB
+                    let block_hash = hex::encode(&block.hash()[..8]);
+                    if let Err(e) = db.put_block(next_height, &block) {
+                        println!("  [MINE] Failed to store block {}: {}", next_height, e);
+                        continue;
+                    }
+                    db.set_tip_height(next_height).ok();
+                    current_mined_sparks += reward;
+                    db.put_metadata("total_mined_sparks", &current_mined_sparks.to_le_bytes()).ok();
+
+                    // Update state
+                    current_prev_hash = block.hash();
+                    current_height = next_height;
+                    chain_height.store(next_height, Ordering::Relaxed);
+
+                    let reward_qc = reward as f64 / 100_000_000.0;
+                    println!("  [MINE] Block {} produced | hash={}... | reward={:.8} QC | total={:.8} QC",
+                        next_height, block_hash, reward_qc,
+                        current_mined_sparks as f64 / 100_000_000.0);
+
+                    // Broadcast to peers
+                    if peer_count.load(Ordering::Relaxed) > 0 {
+                        if let Err(e) = speaq_chain::network::broadcast_block(&mut swarm, &block) {
+                            println!("  [MINE] Broadcast failed: {}", e);
+                        }
+                    }
+                }
+            }
             event = swarm.select_next_some() => {
                 match event {
                     SwarmEvent::NewListenAddr { address, .. } => {
@@ -508,9 +637,48 @@ fn serialize_wallet(wallet: &Wallet) -> WalletData {
     }
 }
 
-fn deserialize_wallet(_data: &WalletData) -> Option<Wallet> {
-    // TODO: Implement full key deserialization from hex
-    // Full implementation requires pqcrypto key import functions
-    // For now, wallet is regenerated on each load -- keys are saved for backup
-    None
+fn deserialize_wallet(data: &WalletData) -> Option<Wallet> {
+    use pqcrypto_dilithium::dilithium3;
+    use pqcrypto_sphincsplus::sphincsshake256fsimple as sphincs_lib;
+    use pqcrypto_kyber::kyber768;
+    use pqcrypto_traits::sign::PublicKey as SignPubTrait;
+    use pqcrypto_traits::kem::PublicKey as KemPubTrait;
+    use speaq_chain::crypto::{dilithium, kyber, sphincs};
+    use speaq_chain::wallet::WalletAddress;
+
+    // Decode hex to bytes
+    let signing_pk_bytes = hex::decode(&data.signing_pk).ok()?;
+    let signing_sk_bytes = hex::decode(&data.signing_sk).ok()?;
+    let sphincs_pk_bytes = hex::decode(&data.sphincs_pk).ok()?;
+    let sphincs_sk_bytes = hex::decode(&data.sphincs_sk).ok()?;
+    let kem_pk_bytes = hex::decode(&data.kem_pk).ok()?;
+    let kem_sk_bytes = hex::decode(&data.kem_sk).ok()?;
+
+    // Reconstruct keys from bytes
+    let signing_pk = dilithium3::PublicKey::from_bytes(&signing_pk_bytes).ok()?;
+    let signing_sk = dilithium3::SecretKey::from_bytes(&signing_sk_bytes).ok()?;
+    let sphincs_pk = sphincs_lib::PublicKey::from_bytes(&sphincs_pk_bytes).ok()?;
+    let sphincs_sk = sphincs_lib::SecretKey::from_bytes(&sphincs_sk_bytes).ok()?;
+    let kem_pk = kyber768::PublicKey::from_bytes(&kem_pk_bytes).ok()?;
+    let kem_sk = kyber768::SecretKey::from_bytes(&kem_sk_bytes).ok()?;
+
+    // Reconstruct address
+    let address = WalletAddress::from_string(&data.address)?;
+
+    Some(Wallet {
+        signing: dilithium::SigningKeyPair {
+            public_key: signing_pk,
+            secret_key: signing_sk,
+        },
+        sphincs: sphincs::SphincsKeyPair {
+            public_key: sphincs_pk,
+            secret_key: sphincs_sk,
+        },
+        kem: kyber::KemKeyPair {
+            public_key: kem_pk,
+            secret_key: kem_sk,
+        },
+        address,
+        created_at: data.created_at,
+    })
 }
