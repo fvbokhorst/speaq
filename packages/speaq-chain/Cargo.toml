@@ -73,5 +73,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 # Home directory
 dirs = "5"
+
+# Async streams
+futures = "0.3"
 [dev-dependencies]
 tempfile = "3"

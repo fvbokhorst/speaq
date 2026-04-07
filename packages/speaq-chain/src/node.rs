@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 use std::net::SocketAddr;
+use futures::StreamExt;
 use speaq_chain::wallet::Wallet;
 use speaq_chain::block::genesis::create_genesis_block;
 use pqcrypto_traits::sign::SecretKey as SignSecretKey;
@@ -135,6 +136,12 @@ pub async fn handle_init(data_dir: &Path) {
 // ============================================================================
 
 pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: Vec<String>) {
+    use speaq_chain::network::{create_swarm, subscribe_to_topics, TOPIC_BLOCKS, TOPIC_TRANSACTIONS, NetworkMessage};
+    use libp2p::{swarm::SwarmEvent, Multiaddr};
+    use libp2p::gossipsub;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
     // Check initialization
     let config = match load_config(data_dir) {
         Some(c) => c,
@@ -155,28 +162,120 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
     println!("  Peers: {}", if peers.is_empty() { "none (standalone)".to_string() } else { peers.join(", ") });
     println!();
 
-    // Load wallet
-    let wallet = match load_wallet(data_dir) {
-        Some(w) => w,
-        None => {
-            println!("  [ERROR] No wallet found. Run: speaq-node wallet create");
+    // Create P2P swarm
+    let mut swarm = match create_swarm() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("  [ERROR] Failed to create P2P swarm: {}", e);
             return;
         }
     };
-    println!("  Wallet: {}", wallet.address);
 
-    // Start REST API server
+    // Listen on P2P port
+    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", p2p_port).parse().unwrap();
+    if let Err(e) = swarm.listen_on(listen_addr) {
+        println!("  [ERROR] Failed to listen on port {}: {}", p2p_port, e);
+        return;
+    }
+    let peer_id = *swarm.local_peer_id();
+    println!("  P2P PeerId: {}", peer_id);
+    println!("  P2P listening on /ip4/0.0.0.0/tcp/{}", p2p_port);
+
+    // Subscribe to topics
+    if let Err(e) = subscribe_to_topics(&mut swarm) {
+        println!("  [ERROR] Failed to subscribe to topics: {}", e);
+        return;
+    }
+    println!("  Subscribed to: {}, {}", TOPIC_BLOCKS, TOPIC_TRANSACTIONS);
+
+    // Connect to bootstrap peers
+    for peer_addr in &peers {
+        match peer_addr.parse::<Multiaddr>() {
+            Ok(addr) => {
+                println!("  Connecting to peer: {}", addr);
+                if let Err(e) = swarm.dial(addr) {
+                    println!("  [WARN] Failed to dial peer: {}", e);
+                }
+            }
+            Err(e) => {
+                println!("  [WARN] Invalid peer address '{}': {}", peer_addr, e);
+            }
+        }
+    }
+
+    // Shared state for API
+    let peer_count = Arc::new(AtomicUsize::new(0));
+    let chain_height = Arc::new(AtomicU64::new(config.chain_height));
+    let blocks_received = Arc::new(AtomicU64::new(0));
+    let txs_received = Arc::new(AtomicU64::new(0));
+
+    // Start REST API server with shared state
     let api_addr: SocketAddr = ([0, 0, 0, 0], api_port).into();
-    let _api_handle = tokio::spawn(start_api_server(api_addr, data_dir.to_path_buf()));
+    let api_peer_count = peer_count.clone();
+    let api_chain_height = chain_height.clone();
+    let api_blocks = blocks_received.clone();
+    let api_txs = txs_received.clone();
+    let api_peer_id = peer_id.to_string();
+    let api_genesis = config.genesis_hash.clone();
+    let api_data_dir = data_dir.to_path_buf();
+    let _api_handle = tokio::spawn(start_api_server_with_state(
+        api_addr, api_data_dir, api_peer_id, api_genesis,
+        api_peer_count, api_chain_height, api_blocks, api_txs,
+    ));
     println!("  REST API listening on http://0.0.0.0:{}", api_port);
 
     println!();
     println!("  Node is running. Press Ctrl+C to stop.");
-    println!();
+    println!("  -----------------------------------------");
 
-    // Keep running until Ctrl+C
-    tokio::signal::ctrl_c().await.ok();
-    println!("\n  Shutting down...");
+    // Event loop: process P2P events + Ctrl+C
+    loop {
+        tokio::select! {
+            event = swarm.select_next_some() => {
+                match event {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("  [P2P] Listening on {}/p2p/{}", address, peer_id);
+                    }
+                    SwarmEvent::ConnectionEstablished { peer_id: pid, .. } => {
+                        peer_count.fetch_add(1, Ordering::Relaxed);
+                        println!("  [P2P] Connected to peer: {} (total: {})", pid, peer_count.load(Ordering::Relaxed));
+                    }
+                    SwarmEvent::ConnectionClosed { peer_id: pid, .. } => {
+                        peer_count.fetch_sub(1, Ordering::Relaxed);
+                        println!("  [P2P] Disconnected from peer: {} (total: {})", pid, peer_count.load(Ordering::Relaxed));
+                    }
+                    SwarmEvent::Behaviour(speaq_chain::network::SpeaqBehaviourEvent::Gossipsub(
+                        gossipsub::Event::Message { message, .. }
+                    )) => {
+                        // Decode incoming GossipSub message
+                        if let Ok(net_msg) = bincode::deserialize::<NetworkMessage>(&message.data) {
+                            match net_msg {
+                                NetworkMessage::NewBlock(data) => {
+                                    blocks_received.fetch_add(1, Ordering::Relaxed);
+                                    println!("  [P2P] Received block ({} bytes)", data.len());
+                                    // TODO: Validate and add to chain
+                                }
+                                NetworkMessage::NewTransaction(data) => {
+                                    txs_received.fetch_add(1, Ordering::Relaxed);
+                                    println!("  [P2P] Received transaction ({} bytes)", data.len());
+                                    // TODO: Validate and add to mempool
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n  Shutting down...");
+                println!("  Peers: {}", peer_count.load(Ordering::Relaxed));
+                println!("  Blocks received: {}", blocks_received.load(Ordering::Relaxed));
+                println!("  Transactions received: {}", txs_received.load(Ordering::Relaxed));
+                break;
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -321,29 +420,44 @@ pub async fn handle_wallet_send(data_dir: &Path, to: &str, amount: f64) {
 // REST API
 // ============================================================================
 
-async fn start_api_server(addr: SocketAddr, data_dir: PathBuf) {
+async fn start_api_server_with_state(
+    addr: SocketAddr,
+    data_dir: PathBuf,
+    peer_id: String,
+    genesis_hash: String,
+    peer_count: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    chain_height: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    blocks_received: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    txs_received: std::sync::Arc<std::sync::atomic::AtomicU64>,
+) {
     use axum::{Router, Json, routing::get};
     use tower_http::cors::CorsLayer;
+    use std::sync::atomic::Ordering;
 
-    let data_dir_status = data_dir.clone();
     let data_dir_balance = data_dir.clone();
+
+    let pc = peer_count.clone();
+    let ch = chain_height.clone();
+    let br = blocks_received.clone();
+    let tr = txs_received.clone();
+    let pid = peer_id.clone();
+    let gh = genesis_hash.clone();
 
     let app = Router::new()
         .route("/api/health", get(|| async {
             Json(serde_json::json!({ "status": "ok", "chain": "SPEAQ", "version": "1.0.0" }))
         }))
         .route("/api/status", get(move || async move {
-            let config = load_config(&data_dir_status);
-            match config {
-                Some(c) => Json(serde_json::json!({
-                    "initialized": c.initialized,
-                    "chain_height": c.chain_height,
-                    "genesis_hash": c.genesis_hash,
-                    "p2p_port": c.p2p_port,
-                    "api_port": c.api_port,
-                })),
-                None => Json(serde_json::json!({ "error": "not initialized" })),
-            }
+            Json(serde_json::json!({
+                "chain": "SPEAQ",
+                "version": "1.0.0",
+                "peer_id": pid,
+                "genesis_hash": gh,
+                "chain_height": ch.load(Ordering::Relaxed),
+                "connected_peers": pc.load(Ordering::Relaxed),
+                "blocks_received": br.load(Ordering::Relaxed),
+                "txs_received": tr.load(Ordering::Relaxed),
+            }))
         }))
         .route("/api/wallet/balance", get(move || async move {
             let wallet = load_wallet(&data_dir_balance);

@@ -4906,6 +4906,7 @@ dependencies = [
  "clap",
  "curve25519-dalek",
  "dirs 5.0.1",
+ "futures",
  "hex",
  "libp2p",
  "merlin",
