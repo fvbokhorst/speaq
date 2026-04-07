@@ -499,6 +499,15 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                     SwarmEvent::ConnectionEstablished { peer_id: pid, .. } => {
                         peer_count.fetch_add(1, Ordering::Relaxed);
                         println!("  [P2P] Connected to peer: {} (total: {})", pid, peer_count.load(Ordering::Relaxed));
+                        // Announce ourselves as validator to the new peer
+                        let announce = NetworkMessage::ValidatorAnnounce {
+                            signing_pubkey: my_signing_pk.0.clone(),
+                            contribution_score: my_validator.contribution_score,
+                        };
+                        if let Ok(bytes) = bincode::serialize(&announce) {
+                            let topic = libp2p::gossipsub::IdentTopic::new(speaq_chain::network::TOPIC_BLOCKS);
+                            swarm.behaviour_mut().gossipsub.publish(topic, bytes).ok();
+                        }
                     }
                     SwarmEvent::ConnectionClosed { peer_id: pid, .. } => {
                         peer_count.fetch_sub(1, Ordering::Relaxed);
@@ -591,7 +600,35 @@ pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: 
                                 NetworkMessage::NewTransaction(data) => {
                                     txs_received.fetch_add(1, Ordering::Relaxed);
                                     println!("  [P2P] Received transaction ({} bytes) -- queued", data.len());
-                                    // Transactions are included in next block production cycle
+                                }
+                                NetworkMessage::ValidatorAnnounce { signing_pubkey, contribution_score } => {
+                                    let pk = dilithium::PublicKeyBytes(signing_pubkey);
+                                    if !validators.iter().any(|v| v.signing_pubkey.0 == pk.0) {
+                                        use sha2::{Sha256, Digest};
+                                        let mut hasher = Sha256::new();
+                                        hasher.update(&pk.0);
+                                        let hash = hasher.finalize();
+                                        let mut addr_bytes = [0u8; 32];
+                                        addr_bytes.copy_from_slice(&hash);
+                                        let peer_validator = Validator {
+                                            address: speaq_chain::wallet::WalletAddress(addr_bytes),
+                                            signing_pubkey: pk,
+                                            region: Region::Unknown,
+                                            messages_relayed: 0,
+                                            proofs_validated: 0,
+                                            storage_mb: 0,
+                                            mesh_minutes: 0,
+                                            translations: 0,
+                                            onboarded_users: 0,
+                                            uptime_hours: 1,
+                                            total_hours: 1,
+                                            active_days: 30,
+                                            slashed: false,
+                                            contribution_score,
+                                        };
+                                        validators.push(peer_validator);
+                                        println!("  [P2P] Validator announced (total: {})", validators.len());
+                                    }
                                 }
                                 _ => {}
                             }

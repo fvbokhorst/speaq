@@ -39,6 +39,11 @@ pub enum NetworkMessage {
     RequestBlock { height: u64 },
     /// Response with a block
     ResponseBlock { height: u64, data: Vec<u8> },
+    /// Validator announces itself to the network
+    ValidatorAnnounce {
+        signing_pubkey: Vec<u8>,
+        contribution_score: u64,
+    },
 }
 
 /// SPEAQ network behaviour combining GossipSub + Kademlia + Identify
