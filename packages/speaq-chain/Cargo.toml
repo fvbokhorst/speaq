@@ -36,5 +36,22 @@ chrono = { version = "0.4", features = ["serde"] }
 bulletproofs = "5.0"
 merlin = "3"
 
+# P2P Networking (used by Polkadot, Filecoin, IPFS)
+libp2p = { version = "0.54", features = [
+    "tcp",
+    "noise",
+    "yamux",
+    "gossipsub",
+    "kad",
+    "identify",
+    "tokio",
+    "macros",
+] }
+tokio = { version = "1", features = ["full"] }
+
 # Error handling
 thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
