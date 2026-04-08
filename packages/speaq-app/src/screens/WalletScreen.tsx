@@ -14,6 +14,7 @@ import { getIdentity, sendQCPayment } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
 import { t } from "../services/i18n";
+import { getOrCreateOnChainWallet, type OnChainWallet } from "../services/onchain-wallet";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -25,6 +26,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
   const [chainData, setChainData] = useState<{ chain_height: number; genesis_hash: string; connected_peers: number; version: string } | null>(null);
+  const [onChainWallet, setOnChainWallet] = useState<OnChainWallet | null>(null);
 
   // Live refresh balance every 5 seconds (for mining rewards) + chain data every 30s
   useEffect(() => {
@@ -40,6 +42,8 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     };
     fetchChain();
     const chainInterval = setInterval(fetchChain, 30000);
+    // Initialize sovereign wallet
+    getOrCreateOnChainWallet().then(setOnChainWallet).catch(() => {});
     return () => { clearInterval(interval); clearInterval(chainInterval); };
   }, []);
   const [projects, setProjects] = useState<Project[]>(walletService.getProjects());
@@ -246,6 +250,20 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             <View style={{ borderTopWidth: 1, borderTopColor: colors.border.subtle, marginTop: 10, paddingTop: 8 }}>
               <Text style={st.chainMetaLabel}>Genesis</Text>
               <Text style={{ fontSize: 8, fontFamily: "Courier", color: colors.signal.steel }} numberOfLines={1}>{chainData.genesis_hash}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sovereign Wallet */}
+        {onChainWallet && (
+          <View style={st.chainCard}>
+            <Text style={[st.chainLabel, { color: colors.voice.gold }]}>SOVEREIGN WALLET (FIPS 204)</Text>
+            <View style={{ marginTop: 8 }}>
+              <Text style={st.chainMetaLabel}>On-Chain Address</Text>
+              <Text style={{ fontSize: 9, fontFamily: "Courier", color: colors.voice.gold }} numberOfLines={1}>{onChainWallet.address}</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 }}>
+              <Text style={{ fontSize: 9, fontFamily: "Courier", color: colors.quantum.teal }}>ML-DSA-65 -- Quantum Resistant</Text>
             </View>
           </View>
         )}
