@@ -277,6 +277,7 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
         .unwrap_or(0);
 
     let chain_height = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(tip_height));
+    let chain_height_mine = chain_height.clone();
     let peer_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let blocks_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let txs_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -363,6 +364,7 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
                         db.put_metadata("total_mined_sparks", &current_mined.to_le_bytes()).ok();
                         current_prev_hash = block.hash();
                         current_height = next;
+                        chain_height_mine.store(next, std::sync::atomic::Ordering::Relaxed);
                         if tx_count > 0 {
                             println!("  [MINE] Block {} | {:.8} QC | {} txs | total {:.8} QC",
                                 next, reward as f64 / 100_000_000.0, tx_count, current_mined as f64 / 100_000_000.0);
