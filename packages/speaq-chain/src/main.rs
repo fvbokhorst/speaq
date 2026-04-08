@@ -44,6 +44,10 @@ enum Commands {
         #[arg(long, default_value_t = 9334)]
         api_port: u16,
 
+        /// API-only mode (no P2P, for Cloud Run)
+        #[arg(long, default_value_t = false)]
+        api_only: bool,
+
         /// Bootstrap peer addresses (multiaddr format)
         #[arg(long)]
         peers: Vec<String>,
@@ -106,8 +110,12 @@ async fn main() {
         Commands::Join { genesis_from } => {
             node::handle_join(&cli.data_dir, &genesis_from).await;
         }
-        Commands::Start { p2p_port, api_port, peers } => {
-            node::handle_start(&cli.data_dir, p2p_port, api_port, peers).await;
+        Commands::Start { p2p_port, api_port, api_only, peers } => {
+            if api_only {
+                node::handle_start_api_only(&cli.data_dir, api_port).await;
+            } else {
+                node::handle_start(&cli.data_dir, p2p_port, api_port, peers).await;
+            }
         }
         Commands::Status => {
             node::handle_status(&cli.data_dir).await;

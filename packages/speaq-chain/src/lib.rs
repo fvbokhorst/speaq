@@ -22,5 +22,6 @@ pub mod chain;
 pub mod network;
 pub mod storage;
 pub mod spv;
+#[cfg(feature = "tor")]
 pub mod tor;
 pub mod mesh;

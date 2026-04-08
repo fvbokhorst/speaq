@@ -249,6 +249,81 @@ pub async fn handle_join(data_dir: &Path, genesis_from: &Path) {
 // START
 // ============================================================================
 
+// API-only mode for Cloud Run (no P2P, just REST API + block production)
+pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
+    let config = match load_config(data_dir) {
+        Some(c) => c,
+        None => { println!("  [ERROR] Node not initialized. Run: speaq-node init"); return; }
+    };
+
+    println!("  SPEAQ Chain Node - API Only Mode");
+    println!("  API port: {}", api_port);
+    println!("  Genesis: {}...", &config.genesis_hash[..16]);
+
+    let db_path = data_dir.join("chaindata");
+    let db = match speaq_chain::storage::BlockchainDB::open(&db_path) {
+        Ok(d) => d,
+        Err(e) => { println!("  [ERROR] Failed to open RocksDB: {}", e); return; }
+    };
+    let tip_height = db.get_tip_height().unwrap_or(0);
+    let total_mined: u64 = db.get_metadata("total_mined_sparks")
+        .ok().flatten()
+        .and_then(|b| if b.len() == 8 { Some(u64::from_le_bytes(b.try_into().unwrap())) } else { None })
+        .unwrap_or(0);
+
+    let chain_height = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(tip_height));
+    let peer_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let blocks_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let txs_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+    let api_addr: SocketAddr = ([0, 0, 0, 0], api_port).into();
+    let _api = tokio::spawn(start_api_server_with_state(
+        api_addr, data_dir.to_path_buf(), "api-only".to_string(), config.genesis_hash,
+        peer_count, chain_height, blocks_received, txs_received,
+    ));
+    println!("  REST API listening on http://0.0.0.0:{}", api_port);
+    println!("  Node running in API-only mode. Press Ctrl+C to stop.");
+
+    // Block production timer
+    use speaq_chain::consensus::calculate_block_reward;
+    use speaq_chain::transaction::Transaction;
+
+    let wallet = match load_wallet(data_dir) {
+        Some(w) => w,
+        None => { println!("  [WARN] No wallet, running without block production"); tokio::signal::ctrl_c().await.ok(); return; }
+    };
+
+    let mut current_height = tip_height;
+    let mut current_prev_hash: [u8; 32] = if let Ok(Some(b)) = db.get_block(tip_height) { b.hash() } else { [0u8; 32] };
+    let mut current_mined = total_mined;
+    let mut timer = tokio::time::interval(std::time::Duration::from_secs(speaq_chain::block::BLOCK_INTERVAL_SECS));
+    timer.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = timer.tick() => {
+                let next = current_height + 1;
+                let reward = calculate_block_reward(current_mined);
+                if reward > 0 {
+                    let coinbase = Transaction::create_mining_reward(wallet.address.0, reward, next, &wallet);
+                    let block = speaq_chain::block::Block::create(current_prev_hash, next, vec![coinbase], &wallet, 100);
+                    if block.verify_signature() && block.verify_merkle_root() {
+                        db.put_block(next, &block).ok();
+                        db.set_tip_height(next).ok();
+                        current_mined += reward;
+                        db.put_metadata("total_mined_sparks", &current_mined.to_le_bytes()).ok();
+                        current_prev_hash = block.hash();
+                        current_height = next;
+                        println!("  [MINE] Block {} | {:.8} QC | total {:.8} QC",
+                            next, reward as f64 / 100_000_000.0, current_mined as f64 / 100_000_000.0);
+                    }
+                }
+            }
+            _ = tokio::signal::ctrl_c() => { println!("  Shutting down..."); break; }
+        }
+    }
+}
+
 pub async fn handle_start(data_dir: &Path, p2p_port: u16, api_port: u16, peers: Vec<String>) {
     use speaq_chain::network::{create_swarm, subscribe_to_topics, TOPIC_BLOCKS, TOPIC_TRANSACTIONS, NetworkMessage};
     use libp2p::{swarm::SwarmEvent, Multiaddr};

@@ -53,9 +53,9 @@ tokio = { version = "1", features = ["full"] }
 # Persistent storage (used by Bitcoin, Ethereum, CockroachDB)
 rocksdb = "0.24"
 
-# Tor anonymity network
-arti-client = { version = "0.41", default-features = false }
-tor-rtcompat = { version = "0.41", features = ["tokio"] }
+# Tor anonymity network (optional -- requires Rust nightly for latest versions)
+arti-client = { version = "0.41", default-features = false, optional = true }
+tor-rtcompat = { version = "0.41", features = ["tokio"], optional = true }
 
 # Error handling
 thiserror = "1"
@@ -76,5 +76,9 @@ dirs = "5"
 
 # Async streams
 futures = "0.3"
+[features]
+default = []
+tor = ["arti-client", "tor-rtcompat"]
+
 [dev-dependencies]
 tempfile = "3"
