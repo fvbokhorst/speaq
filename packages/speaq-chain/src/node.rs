@@ -14,6 +14,11 @@ use pqcrypto_traits::kem::SecretKey as KemSecretKey;
 use tracing::error;
 
 const WALLET_FILE: &str = "wallet.json";
+
+// Global shared state for API <-> block production communication
+use std::sync::Mutex as StdMutex;
+static SHARED_MEMPOOL: StdMutex<Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>>> = StdMutex::new(None);
+static SHARED_BALANCES: StdMutex<Option<std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>>> = StdMutex::new(None);
 const NODE_CONFIG_FILE: &str = "node.json";
 
 /// Serializable wallet data (keys are large, store as hex)
@@ -276,6 +281,17 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
     let blocks_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let txs_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
 
+    // Shared mempool between API and block production
+    let shared_mempool: std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    // Shared balances: address -> sparks
+    let shared_balances: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+
+    // Pass shared mempool and balances to API server
+    SHARED_MEMPOOL.lock().unwrap().replace(shared_mempool.clone());
+    SHARED_BALANCES.lock().unwrap().replace(shared_balances.clone());
+
     let api_addr: SocketAddr = ([0, 0, 0, 0], api_port).into();
     let _api = tokio::spawn(start_api_server_with_state(
         api_addr, data_dir.to_path_buf(), "api-only".to_string(), config.genesis_hash,
@@ -305,6 +321,39 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
                 let next = current_height + 1;
                 let reward = calculate_block_reward(current_mined);
                 if reward > 0 {
+                    // Drain mempool into this block
+                    let pending_txs: Vec<serde_json::Value> = {
+                        let mut pool = shared_mempool.lock().unwrap();
+                        pool.drain(..).collect()
+                    };
+                    let tx_count = pending_txs.len();
+
+                    // Process pending transactions: update balances
+                    for tx in &pending_txs {
+                        let from = tx.get("from").and_then(|v| v.as_str()).unwrap_or("");
+                        let to = tx.get("to").and_then(|v| v.as_str()).unwrap_or("");
+                        let amount = tx.get("amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let sparks = (amount * 100_000_000.0) as u64;
+
+                        let mut balances = shared_balances.lock().unwrap();
+                        let from_bal = balances.entry(from.to_string()).or_insert(0);
+                        if *from_bal >= sparks {
+                            *from_bal -= sparks;
+                            let to_bal = balances.entry(to.to_string()).or_insert(0);
+                            *to_bal += sparks;
+                            println!("  [TX] {} -> {} | {:.8} QC", from, to, amount);
+                        } else {
+                            println!("  [TX] REJECTED (insufficient balance): {} -> {} | {:.8} QC", from, to, amount);
+                        }
+                    }
+
+                    // Credit mining reward to validator
+                    {
+                        let mut balances = shared_balances.lock().unwrap();
+                        let validator_bal = balances.entry(wallet.address.to_string_full()).or_insert(0);
+                        *validator_bal += reward;
+                    }
+
                     let coinbase = Transaction::create_mining_reward(wallet.address.0, reward, next, &wallet);
                     let block = speaq_chain::block::Block::create(current_prev_hash, next, vec![coinbase], &wallet, 100);
                     if block.verify_signature() && block.verify_merkle_root() {
@@ -314,8 +363,10 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
                         db.put_metadata("total_mined_sparks", &current_mined.to_le_bytes()).ok();
                         current_prev_hash = block.hash();
                         current_height = next;
-                        println!("  [MINE] Block {} | {:.8} QC | total {:.8} QC",
-                            next, reward as f64 / 100_000_000.0, current_mined as f64 / 100_000_000.0);
+                        if tx_count > 0 {
+                            println!("  [MINE] Block {} | {:.8} QC | {} txs | total {:.8} QC",
+                                next, reward as f64 / 100_000_000.0, tx_count, current_mined as f64 / 100_000_000.0);
+                        }
                     }
                 }
             }
@@ -914,10 +965,16 @@ async fn start_api_server_with_state(
     let pid = peer_id.clone();
     let gh = genesis_hash.clone();
 
-    // Shared mempool for pending transactions
-    let mempool: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+    // Use shared mempool (connected to block production) or local fallback
+    let mempool: Arc<Mutex<Vec<serde_json::Value>>> = SHARED_MEMPOOL.lock().unwrap()
+        .clone()
+        .unwrap_or_else(|| Arc::new(Mutex::new(Vec::new())));
+    let balances: Arc<Mutex<std::collections::HashMap<String, u64>>> = SHARED_BALANCES.lock().unwrap()
+        .clone()
+        .unwrap_or_else(|| Arc::new(Mutex::new(std::collections::HashMap::new())));
     let mempool_submit = mempool.clone();
     let mempool_list = mempool.clone();
+    let balances_api = balances.clone();
 
     let app = Router::new()
         .route("/api/health", get(|| async {
@@ -937,14 +994,26 @@ async fn start_api_server_with_state(
         }))
         .route("/api/wallet/balance", get(move || async move {
             let wallet = load_wallet(&data_dir_balance);
+            let bals = balances_api.lock().unwrap();
             match wallet {
-                Some(w) => Json(serde_json::json!({
-                    "address": w.address.to_string_full(),
-                    "balance": 0.0,
-                    "balance_sparks": 0,
-                })),
+                Some(w) => {
+                    let addr = w.address.to_string_full();
+                    let sparks = bals.get(&addr).copied().unwrap_or(0);
+                    let qc = sparks as f64 / 100_000_000.0;
+                    Json(serde_json::json!({
+                        "address": addr,
+                        "balance": qc,
+                        "balance_sparks": sparks,
+                    }))
+                },
                 None => Json(serde_json::json!({ "error": "no wallet" })),
             }
+        }))
+        .route("/api/balance/:address", get(move |axum::extract::Path(address): axum::extract::Path<String>| async move {
+            let bals = SHARED_BALANCES.lock().unwrap();
+            let sparks = bals.as_ref().and_then(|b| b.lock().ok()).and_then(|b| b.get(&address).copied()).unwrap_or(0);
+            let qc = sparks as f64 / 100_000_000.0;
+            Json(serde_json::json!({ "address": address, "balance": qc, "balance_sparks": sparks }))
         }))
         .route("/api/mempool", get(move || async move {
             let pool = mempool_list.lock().unwrap();
