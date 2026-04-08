@@ -391,16 +391,16 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("version")}</Text>
-            <Text style={dyn.rowValue}>1.0.0 build 93</Text>
+            <Text style={dyn.rowValue}>1.0.0 build 94</Text>
           </View>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("platform")}</Text>
             <Text style={dyn.rowValue}>SPEAQ Freely.</Text>
           </View>
-          <View style={dyn.row}>
+          <TouchableOpacity style={dyn.row} onPress={() => Linking.openURL("https://thespeaq.com")}>
             <Text style={dyn.rowLabel}>Website</Text>
             <Text style={st.rowValueMono}>thespeaq.com</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: 40 }} />
