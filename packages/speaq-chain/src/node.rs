@@ -898,9 +898,12 @@ async fn start_api_server_with_state(
     blocks_received: std::sync::Arc<std::sync::atomic::AtomicU64>,
     txs_received: std::sync::Arc<std::sync::atomic::AtomicU64>,
 ) {
-    use axum::{Router, Json, routing::get};
+    use axum::{Router, Json, routing::{get, post}, http::StatusCode};
     use tower_http::cors::CorsLayer;
     use std::sync::atomic::Ordering;
+    use std::sync::{Arc, Mutex};
+    use speaq_chain::crypto::dilithium;
+    use sha2::Digest;
 
     let data_dir_balance = data_dir.clone();
 
@@ -910,6 +913,11 @@ async fn start_api_server_with_state(
     let tr = txs_received.clone();
     let pid = peer_id.clone();
     let gh = genesis_hash.clone();
+
+    // Shared mempool for pending transactions
+    let mempool: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+    let mempool_submit = mempool.clone();
+    let mempool_list = mempool.clone();
 
     let app = Router::new()
         .route("/api/health", get(|| async {
@@ -937,6 +945,70 @@ async fn start_api_server_with_state(
                 })),
                 None => Json(serde_json::json!({ "error": "no wallet" })),
             }
+        }))
+        .route("/api/mempool", get(move || async move {
+            let pool = mempool_list.lock().unwrap();
+            Json(serde_json::json!({ "pending": pool.len(), "transactions": *pool }))
+        }))
+        .route("/api/transaction", post(move |Json(body): Json<serde_json::Value>| async move {
+            // Validate required fields
+            let from = body.get("from").and_then(|v| v.as_str()).unwrap_or("");
+            let to = body.get("to").and_then(|v| v.as_str()).unwrap_or("");
+            let amount = body.get("amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let public_key_hex = body.get("publicKey").and_then(|v| v.as_str()).unwrap_or("");
+            let signature_hex = body.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+            let message_hex = body.get("message").and_then(|v| v.as_str()).unwrap_or("");
+
+            // Basic validation
+            if from.is_empty() || to.is_empty() || amount <= 0.0 || public_key_hex.is_empty() || signature_hex.is_empty() || message_hex.is_empty() {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Missing required fields: from, to, amount, publicKey, signature, message" })));
+            }
+
+            if !from.starts_with("SQ1") || !to.starts_with("SQ1") {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Addresses must start with SQ1" })));
+            }
+
+            // Verify ML-DSA-65 signature
+            let pk_bytes = match hex::decode(public_key_hex) {
+                Ok(b) if b.len() == dilithium::PUBLIC_KEY_SIZE => b,
+                _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid public key" }))),
+            };
+            let sig_bytes = match hex::decode(signature_hex) {
+                Ok(b) if b.len() == dilithium::SIGNATURE_SIZE => b,
+                _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid signature" }))),
+            };
+            let msg_bytes = match hex::decode(message_hex) {
+                Ok(b) => b,
+                _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid message" }))),
+            };
+
+            let mut pk_arr = [0u8; dilithium::PUBLIC_KEY_SIZE];
+            pk_arr.copy_from_slice(&pk_bytes);
+            let sig = dilithium::SignatureBytes(sig_bytes);
+
+            if !dilithium::verify(&msg_bytes, &sig, &pk_arr) {
+                return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Invalid signature -- transaction rejected" })));
+            }
+
+            // Signature valid -- add to mempool
+            let tx_id = hex::encode(&sha2::Sha256::digest(msg_bytes.as_slice())[..16]);
+            let tx = serde_json::json!({
+                "id": tx_id,
+                "from": from,
+                "to": to,
+                "amount": amount,
+                "publicKey": public_key_hex,
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "status": "pending",
+            });
+
+            {
+                let mut pool = mempool_submit.lock().unwrap();
+                pool.push(tx.clone());
+                println!("  [TX] Accepted: {} -> {} | {:.8} QC | sig verified | mempool={}", from, to, amount, pool.len());
+            }
+
+            (StatusCode::OK, Json(serde_json::json!({ "status": "accepted", "txId": tx_id, "message": "Transaction verified and added to mempool" })))
         }))
         .layer(CorsLayer::permissive());
 
