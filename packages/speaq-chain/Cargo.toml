@@ -7,7 +7,10 @@ authors = ["Frank van Bokhorst - Plexaris"]
 
 [dependencies]
 # Post-Quantum Cryptography (NIST certified)
-pqcrypto-dilithium = "0.5"
+# ML-DSA-65 (FIPS 204 final) -- cross-compatible with @noble/post-quantum JS library
+fips204 = { version = "0.4", features = ["ml-dsa-65"] }
+# Legacy Dilithium-3 (kept for reference, not used in new code)
+# pqcrypto-dilithium = "0.5"
 pqcrypto-kyber = "0.8"
 pqcrypto-sphincsplus = "0.7"
 pqcrypto-traits = "0.3"

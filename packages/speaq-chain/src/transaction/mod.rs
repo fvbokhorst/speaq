@@ -215,8 +215,8 @@ impl Transaction {
         tx
     }
 
-    /// Verify the Dilithium-3 signature
-    pub fn verify_signature(&self, public_key: &pqcrypto_dilithium::dilithium3::PublicKey) -> bool {
+    /// Verify the ML-DSA-65 signature (FIPS 204)
+    pub fn verify_signature(&self, public_key: &[u8; dilithium::PUBLIC_KEY_SIZE]) -> bool {
         let tx_hash = self.hash();
         dilithium::verify(&tx_hash, &self.quantum_signature, public_key)
     }

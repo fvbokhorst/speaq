@@ -967,7 +967,7 @@ fn serialize_wallet(wallet: &Wallet) -> WalletData {
     WalletData {
         address: wallet.address.to_string_full(),
         signing_pk: hex::encode(&dilithium::export_public_key(&wallet.signing.public_key).0),
-        signing_sk: hex::encode(SignSecretKey::as_bytes(&wallet.signing.secret_key)),
+        signing_sk: hex::encode(&wallet.signing.secret_key),
         sphincs_pk: hex::encode(&sphincs::export_public_key(&wallet.sphincs.public_key).0),
         sphincs_sk: hex::encode(SignSecretKey::as_bytes(&wallet.sphincs.secret_key)),
         kem_pk: hex::encode(&kyber::export_public_key(&wallet.kem.public_key).0),
@@ -977,7 +977,6 @@ fn serialize_wallet(wallet: &Wallet) -> WalletData {
 }
 
 fn deserialize_wallet(data: &WalletData) -> Option<Wallet> {
-    use pqcrypto_dilithium::dilithium3;
     use pqcrypto_sphincsplus::sphincsshake256fsimple as sphincs_lib;
     use pqcrypto_kyber::kyber768;
     use pqcrypto_traits::sign::PublicKey as SignPubTrait;
@@ -993,15 +992,20 @@ fn deserialize_wallet(data: &WalletData) -> Option<Wallet> {
     let kem_pk_bytes = hex::decode(&data.kem_pk).ok()?;
     let kem_sk_bytes = hex::decode(&data.kem_sk).ok()?;
 
-    // Reconstruct keys from bytes
-    let signing_pk = dilithium3::PublicKey::from_bytes(&signing_pk_bytes).ok()?;
-    let signing_sk = dilithium3::SecretKey::from_bytes(&signing_sk_bytes).ok()?;
+    // Reconstruct ML-DSA-65 keys from bytes
+    if signing_pk_bytes.len() != dilithium::PUBLIC_KEY_SIZE { return None; }
+    if signing_sk_bytes.len() != dilithium::SECRET_KEY_SIZE { return None; }
+    let mut signing_pk = [0u8; dilithium::PUBLIC_KEY_SIZE];
+    signing_pk.copy_from_slice(&signing_pk_bytes);
+    let mut signing_sk = [0u8; dilithium::SECRET_KEY_SIZE];
+    signing_sk.copy_from_slice(&signing_sk_bytes);
+
+    // Reconstruct SPHINCS+ and Kyber keys
     let sphincs_pk = sphincs_lib::PublicKey::from_bytes(&sphincs_pk_bytes).ok()?;
     let sphincs_sk = sphincs_lib::SecretKey::from_bytes(&sphincs_sk_bytes).ok()?;
     let kem_pk = kyber768::PublicKey::from_bytes(&kem_pk_bytes).ok()?;
     let kem_sk = kyber768::SecretKey::from_bytes(&kem_sk_bytes).ok()?;
 
-    // Reconstruct address
     let address = WalletAddress::from_string(&data.address)?;
 
     Some(Wallet {

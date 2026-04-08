@@ -1,19 +1,25 @@
-//! Dilithium-3 Post-Quantum Digital Signatures (FIPS 204 / ML-DSA-65)
+//! ML-DSA-65 Post-Quantum Digital Signatures (FIPS 204)
 //!
 //! Used for signing ALL transactions on the SPEAQ Chain.
 //! Quantum-resistant: secure against both classical and quantum computers.
+//! Cross-compatible with @noble/post-quantum JavaScript library.
 //!
-//! Library: pqcrypto-dilithium (NIST reference implementation wrapper)
+//! Library: fips204 (pure Rust, NIST FIPS 204 final standard)
 
-use pqcrypto_dilithium::dilithium3;
-use pqcrypto_traits::sign::{PublicKey, SecretKey, SignedMessage, DetachedSignature};
+use fips204::ml_dsa_65;
+use fips204::traits::{SerDes, Signer, Verifier};
 use serde::{Deserialize, Serialize};
 
-/// A Dilithium-3 signing keypair
+/// ML-DSA-65 key sizes (FIPS 204)
+pub const PUBLIC_KEY_SIZE: usize = 1952;
+pub const SECRET_KEY_SIZE: usize = 4032;
+pub const SIGNATURE_SIZE: usize = 3309;
+
+/// A ML-DSA-65 signing keypair
 #[derive(Clone)]
 pub struct SigningKeyPair {
-    pub public_key: dilithium3::PublicKey,
-    pub secret_key: dilithium3::SecretKey,
+    pub public_key: [u8; PUBLIC_KEY_SIZE],
+    pub secret_key: [u8; SECRET_KEY_SIZE],
 }
 
 /// Serializable public key (for storage and transmission)
@@ -24,42 +30,56 @@ pub struct PublicKeyBytes(pub Vec<u8>);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureBytes(pub Vec<u8>);
 
-/// Generate a new Dilithium-3 signing keypair
+/// Generate a new ML-DSA-65 signing keypair (FIPS 204)
 pub fn generate_keypair() -> SigningKeyPair {
-    let (pk, sk) = dilithium3::keypair();
+    let (pk, sk) = ml_dsa_65::try_keygen().expect("ML-DSA-65 keygen failed");
     SigningKeyPair {
-        public_key: pk,
-        secret_key: sk,
+        public_key: pk.into_bytes(),
+        secret_key: sk.into_bytes(),
     }
 }
 
-/// Sign a message with Dilithium-3
-pub fn sign(message: &[u8], secret_key: &dilithium3::SecretKey) -> SignatureBytes {
-    let sig = dilithium3::detached_sign(message, secret_key);
-    SignatureBytes(sig.as_bytes().to_vec())
+/// Sign a message with ML-DSA-65
+pub fn sign(message: &[u8], secret_key: &[u8; SECRET_KEY_SIZE]) -> SignatureBytes {
+    let sk = ml_dsa_65::PrivateKey::try_from_bytes(*secret_key)
+        .expect("Invalid ML-DSA-65 secret key");
+    let sig = sk.try_sign(message, b"").expect("ML-DSA-65 signing failed");
+    SignatureBytes(sig.to_vec())
 }
 
-/// Verify a Dilithium-3 signature
+/// Verify a ML-DSA-65 signature
 pub fn verify(
     message: &[u8],
     signature: &SignatureBytes,
-    public_key: &dilithium3::PublicKey,
+    public_key: &[u8; PUBLIC_KEY_SIZE],
 ) -> bool {
-    let sig = match dilithium3::DetachedSignature::from_bytes(&signature.0) {
-        Ok(s) => s,
+    let pk = match ml_dsa_65::PublicKey::try_from_bytes(*public_key) {
+        Ok(k) => k,
         Err(_) => return false,
     };
-    dilithium3::verify_detached_signature(&sig, message, public_key).is_ok()
+    if signature.0.len() != SIGNATURE_SIZE {
+        return false;
+    }
+    let mut sig_array = [0u8; SIGNATURE_SIZE];
+    sig_array.copy_from_slice(&signature.0);
+    pk.verify(message, &sig_array, b"")
 }
 
 /// Export public key to bytes
-pub fn export_public_key(pk: &dilithium3::PublicKey) -> PublicKeyBytes {
-    PublicKeyBytes(pk.as_bytes().to_vec())
+pub fn export_public_key(pk: &[u8; PUBLIC_KEY_SIZE]) -> PublicKeyBytes {
+    PublicKeyBytes(pk.to_vec())
 }
 
 /// Import public key from bytes
-pub fn import_public_key(bytes: &PublicKeyBytes) -> Option<dilithium3::PublicKey> {
-    dilithium3::PublicKey::from_bytes(&bytes.0).ok()
+pub fn import_public_key(bytes: &PublicKeyBytes) -> Option<[u8; PUBLIC_KEY_SIZE]> {
+    if bytes.0.len() != PUBLIC_KEY_SIZE {
+        return None;
+    }
+    let mut arr = [0u8; PUBLIC_KEY_SIZE];
+    arr.copy_from_slice(&bytes.0);
+    // Verify it's a valid key
+    ml_dsa_65::PublicKey::try_from_bytes(arr).ok()?;
+    Some(arr)
 }
 
 #[cfg(test)]
@@ -70,8 +90,8 @@ mod tests {
     fn test_keygen() {
         let kp = generate_keypair();
         let pk_bytes = export_public_key(&kp.public_key);
-        assert!(!pk_bytes.0.is_empty());
-        println!("Dilithium-3 public key size: {} bytes", pk_bytes.0.len());
+        assert_eq!(pk_bytes.0.len(), PUBLIC_KEY_SIZE);
+        println!("ML-DSA-65 public key size: {} bytes", pk_bytes.0.len());
     }
 
     #[test]
@@ -80,8 +100,8 @@ mod tests {
         let message = b"SPEAQ Chain transaction: send 1.5 QC";
 
         let signature = sign(message, &kp.secret_key);
-        assert!(!signature.0.is_empty());
-        println!("Dilithium-3 signature size: {} bytes", signature.0.len());
+        assert_eq!(signature.0.len(), SIGNATURE_SIZE);
+        println!("ML-DSA-65 signature size: {} bytes", signature.0.len());
 
         // Valid signature should verify
         assert!(verify(message, &signature, &kp.public_key));
