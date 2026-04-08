@@ -24,14 +24,23 @@ interface Props {
 export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLightning }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
+  const [chainData, setChainData] = useState<{ chain_height: number; genesis_hash: string; connected_peers: number; version: string } | null>(null);
 
-  // Live refresh balance every 5 seconds (for mining rewards)
+  // Live refresh balance every 5 seconds (for mining rewards) + chain data every 30s
   useEffect(() => {
     const interval = setInterval(() => {
       setBalance(walletService.getBalance());
       setTransactions(walletService.getTransactions());
     }, 5000);
-    return () => clearInterval(interval);
+    const fetchChain = () => {
+      fetch("https://speaq-chain-244491980730.europe-west1.run.app/api/status")
+        .then((r) => r.json())
+        .then((d) => setChainData(d))
+        .catch(() => {});
+    };
+    fetchChain();
+    const chainInterval = setInterval(fetchChain, 30000);
+    return () => { clearInterval(interval); clearInterval(chainInterval); };
   }, []);
   const [projects, setProjects] = useState<Project[]>(walletService.getProjects());
   const [linkedWallets, setLinkedWallets] = useState<LinkedWallet[]>(walletService.getLinkedWallets());
@@ -210,6 +219,37 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             </TouchableOpacity>
           </View>
         </View>
+        {/* Blockchain Status */}
+        {chainData && (
+          <View style={st.chainCard}>
+            <Text style={st.chainLabel}>SPEAQ CHAIN</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+              <View>
+                <Text style={st.chainMetaLabel}>Block Height</Text>
+                <Text style={st.chainMetaValue}>{chainData.chain_height.toLocaleString()}</Text>
+              </View>
+              <View>
+                <Text style={st.chainMetaLabel}>Max Supply</Text>
+                <Text style={st.chainMetaValue}>21,000,000 QC</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+              <View>
+                <Text style={st.chainMetaLabel}>Version</Text>
+                <Text style={[st.chainMetaValue, { color: colors.quantum.teal }]}>{chainData.version}</Text>
+              </View>
+              <View>
+                <Text style={st.chainMetaLabel}>Network</Text>
+                <Text style={[st.chainMetaValue, { color: colors.quantum.teal }]}>{chainData.connected_peers} peers</Text>
+              </View>
+            </View>
+            <View style={{ borderTopWidth: 1, borderTopColor: colors.border.subtle, marginTop: 10, paddingTop: 8 }}>
+              <Text style={st.chainMetaLabel}>Genesis</Text>
+              <Text style={{ fontSize: 8, fontFamily: "Courier", color: colors.signal.steel }} numberOfLines={1}>{chainData.genesis_hash}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Projects */}
         <View style={st.sectionRow}>
           <Text style={st.sectionTitle}>{t("projects")}</Text>
@@ -498,6 +538,10 @@ const st = StyleSheet.create({
   header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
   title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
   headerSub: { fontSize: 11, color: colors.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },
+  chainCard: { marginHorizontal: 16, marginBottom: 16, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: "rgba(45, 212, 191, 0.2)" },
+  chainLabel: { fontSize: 10, fontFamily: "Courier", color: colors.quantum.teal, letterSpacing: 2, textTransform: "uppercase" },
+  chainMetaLabel: { fontSize: 10, color: colors.signal.steel },
+  chainMetaValue: { fontSize: 14, fontWeight: "700", color: colors.signal.white, fontFamily: "Georgia" },
 
   balanceCard: { margin: 16, padding: 24, backgroundColor: colors.depth.card, borderRadius: 20, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center" },
   balanceLabel: { color: colors.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
