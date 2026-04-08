@@ -14,7 +14,7 @@ import { getIdentity, sendQCPayment } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
 import { t } from "../services/i18n";
-import { getOrCreateOnChainWallet, type OnChainWallet } from "../services/onchain-wallet";
+import { getOrCreateOnChainWallet, sendOnChainTransaction, type OnChainWallet } from "../services/onchain-wallet";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -87,6 +87,13 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     walletService.send(sendTo.trim(), amount, sendNote.trim());
     // Send encrypted QC payment to recipient
     await sendQCPayment(sendTo.trim(), amount);
+    // Also submit on-chain transaction
+    if (onChainWallet) {
+      sendOnChainTransaction(onChainWallet, sendTo.trim(), amount).then((res) => {
+        if (res.success) console.log("[SPEAQ] On-chain TX:", res.txId);
+        else console.warn("[SPEAQ] On-chain TX failed:", res.error);
+      });
+    }
     setBalance(walletService.getBalance());
     setTransactions(walletService.getTransactions());
     setShowConfirm(false);

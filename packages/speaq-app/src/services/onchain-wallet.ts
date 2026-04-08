@@ -77,3 +77,35 @@ export function verifySignature(message: Uint8Array, signature: Uint8Array, publ
   const pk = fromHex(publicKeyHex);
   return ml_dsa65.verify(signature, message, pk);
 }
+
+const CHAIN_API = "https://speaq-chain-244491980730.europe-west1.run.app";
+
+export async function sendOnChainTransaction(
+  wallet: OnChainWallet,
+  toAddress: string,
+  amount: number
+): Promise<{ success: boolean; txId?: string; error?: string }> {
+  const txData = JSON.stringify({ from: wallet.address, to: toAddress, amount, timestamp: Date.now() });
+  const messageBytes = new TextEncoder().encode(txData);
+  const signature = signTransaction(messageBytes, wallet.secretKey);
+
+  try {
+    const res = await fetch(`${CHAIN_API}/api/transaction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: wallet.address,
+        to: toAddress,
+        amount,
+        publicKey: wallet.publicKey,
+        signature: toHex(signature),
+        message: toHex(messageBytes),
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) return { success: true, txId: data.txId };
+    return { success: false, error: data.error || "Transaction rejected" };
+  } catch {
+    return { success: false, error: "Failed to connect to blockchain node" };
+  }
+}
