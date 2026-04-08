@@ -131,11 +131,12 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               }
             }
             if (data.type === "message") {
-              // Save sender's contact photo if included
-              if (data.photo && data.senderId) {
+              // Save sender's contact photo if included (fallback to contactId)
+              const photoSenderId = data.senderId || contactId;
+              if (data.photo && photoSenderId) {
                 AsyncStorage.getItem("speaq_contact_photos").then((stored) => {
                   const photos = stored ? JSON.parse(stored) : {};
-                  photos[data.senderId] = data.photo;
+                  photos[photoSenderId] = data.photo;
                   AsyncStorage.setItem("speaq_contact_photos", JSON.stringify(photos));
                 });
               }

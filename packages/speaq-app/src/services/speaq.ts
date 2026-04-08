@@ -241,8 +241,8 @@ export function initiateKeyExchange(toSpeaqId: string): void {
   }));
 }
 
-// Track which contacts already received our photo this session
-const photoSentThisSession = new Set<string>();
+// Track which contacts already received our photo this session (max 3 per contact)
+const photoSentThisSession = new Map<string, number>();
 
 /**
  * Send a message to a contact
@@ -251,14 +251,15 @@ const photoSentThisSession = new Set<string>();
 export async function sendMessage(toSpeaqId: string, text: string): Promise<void> {
   if (!ws || !connected || !identity) return;
 
-  // Include profile photo with first message per session to each contact
+  // Include profile photo with first 3 messages per session to each contact
   let photo: string | undefined;
-  if (!photoSentThisSession.has(toSpeaqId)) {
+  const sentCount = photoSentThisSession.get(toSpeaqId) || 0;
+  if (sentCount < 3) {
     try {
       const storedPhoto = await AsyncStorage.getItem("speaq_profile_photo");
       if (storedPhoto) {
         photo = storedPhoto;
-        photoSentThisSession.add(toSpeaqId);
+        photoSentThisSession.set(toSpeaqId, sentCount + 1);
       }
     } catch (e) {}
   }
