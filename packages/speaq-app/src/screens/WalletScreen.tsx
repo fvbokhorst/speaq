@@ -35,7 +35,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
       setTransactions(walletService.getTransactions());
     }, 5000);
     const fetchChain = () => {
-      fetch("http://134.98.141.213:9334/api/status")
+      fetch("http://136.117.234.208:9334/api/status")
         .then((r) => r.json())
         .then((d) => setChainData(d))
         .catch(() => {});

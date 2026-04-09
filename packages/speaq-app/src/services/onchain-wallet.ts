@@ -78,7 +78,7 @@ export function verifySignature(message: Uint8Array, signature: Uint8Array, publ
   return ml_dsa65.verify(signature, message, pk);
 }
 
-const CHAIN_API = "http://134.98.141.213:9334";
+const CHAIN_API = "http://136.117.234.208:9334";
 
 export async function sendOnChainTransaction(
   wallet: OnChainWallet,
