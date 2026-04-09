@@ -1,0 +1,11 @@
+FROM --platform=linux/amd64 debian:12 AS builder
+RUN apt-get update && apt-get install -y gcc g++ clang cmake libssl-dev curl pkg-config
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src/ src/
+COPY tests/ tests/
+RUN cargo build --release
+FROM scratch
+COPY --from=builder /app/target/release/speaq-chain /speaq-chain

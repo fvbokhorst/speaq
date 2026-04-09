@@ -61,6 +61,7 @@ const rateLimitCounters = new Map<string, { count: number; resetAt: number }>();
 const ADMIN_PIN_HASH = crypto.createHash("sha256").update("555766").digest("hex");
 const ADMIN_SPEAQ_ID = process.env.ADMIN_SPEAQ_ID || "";
 const STATS_FILE = path.join(process.cwd(), "speaq-stats.json");
+const STATS_SERVER_URL = process.env.STATS_SERVER_URL || "http://136.117.234.208:9335/stats";
 
 interface UserRecord {
   firstSeen: number;
@@ -73,8 +74,27 @@ const allUsers = new Map<string, UserRecord>();
 let totalMiningReceipts = 0;
 let totalQCMined = 0;
 
-// Load persisted stats from disk
-function loadStats(): void {
+// Load persisted stats from remote server (Google VM), fallback to local disk
+async function loadStats(): Promise<void> {
+  // Try remote first
+  try {
+    const res = await fetch(STATS_SERVER_URL);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.users) {
+        for (const [id, record] of Object.entries(data.users)) {
+          allUsers.set(id, record as UserRecord);
+        }
+      }
+      if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
+      if (data.totalQCMined) totalQCMined = data.totalQCMined;
+      console.log(`  Stats loaded: ${allUsers.size} users from remote`);
+      return;
+    }
+  } catch (e) {
+    console.error("  Remote stats unavailable, trying local:", e);
+  }
+  // Fallback to local disk
   try {
     if (fs.existsSync(STATS_FILE)) {
       const data = JSON.parse(fs.readFileSync(STATS_FILE, "utf-8"));
@@ -92,28 +112,42 @@ function loadStats(): void {
   }
 }
 
-// Save stats to disk
-function saveStats(): void {
+// Save stats to remote server (Google VM) + local disk
+async function saveStats(): Promise<void> {
+  const data = {
+    users: Object.fromEntries(allUsers),
+    totalMiningReceipts,
+    totalQCMined,
+    savedAt: Date.now(),
+  };
+  const json = JSON.stringify(data);
+  // Save to remote
   try {
-    const data = {
-      users: Object.fromEntries(allUsers),
-      totalMiningReceipts,
-      totalQCMined,
-      savedAt: Date.now(),
-    };
-    fs.writeFileSync(STATS_FILE, JSON.stringify(data), "utf-8");
+    await fetch(STATS_SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+    });
   } catch (e) {
-    console.error("  Failed to save stats:", e);
+    console.error("  Failed to save stats to remote:", e);
+  }
+  // Also save locally as backup
+  try {
+    fs.writeFileSync(STATS_FILE, json, "utf-8");
+  } catch (e) {
+    console.error("  Failed to save stats to disk:", e);
   }
 }
 
-// Save stats every 5 minutes
-setInterval(saveStats, 5 * 60 * 1000);
+// Save stats every 2 minutes (more frequent since remote is reliable)
+setInterval(saveStats, 2 * 60 * 1000);
 
 // Track a user connection, returns true if NEW user
 function trackUser(speaqId: string): boolean {
   if (allUsers.has(speaqId)) return false;
   allUsers.set(speaqId, { firstSeen: Date.now() });
+  // Save immediately on new user (don't wait for interval)
+  saveStats();
   return true;
 }
 
