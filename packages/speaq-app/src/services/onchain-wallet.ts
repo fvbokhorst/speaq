@@ -78,7 +78,7 @@ export function verifySignature(message: Uint8Array, signature: Uint8Array, publ
   return ml_dsa65.verify(signature, message, pk);
 }
 
-const CHAIN_API = "https://speaq-chain-244491980730.europe-west1.run.app";
+const CHAIN_API = "http://134.98.141.213:9334";
 
 export async function sendOnChainTransaction(
   wallet: OnChainWallet,
