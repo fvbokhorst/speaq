@@ -1,4 +1,6 @@
 node_modules/
 packages/speaq-app/
+packages/speaq-chain/target/
+packages/speaq-chain/proofs/
 .git/
 *.md
