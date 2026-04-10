@@ -261,16 +261,16 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
           </View>
         )}
 
-        {/* Sovereign Wallet */}
+        {/* Secure Wallet */}
         {onChainWallet && (
           <View style={st.chainCard}>
-            <Text style={[st.chainLabel, { color: colors.voice.gold }]}>SOVEREIGN WALLET (FIPS 204)</Text>
+            <Text style={[st.chainLabel, { color: colors.voice.gold }]}>SECURE WALLET</Text>
             <View style={{ marginTop: 8 }}>
-              <Text style={st.chainMetaLabel}>On-Chain Address</Text>
+              <Text style={st.chainMetaLabel}>Wallet Address</Text>
               <Text style={{ fontSize: 9, fontFamily: "Courier", color: colors.voice.gold }} numberOfLines={1}>{onChainWallet.address}</Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 }}>
-              <Text style={{ fontSize: 9, fontFamily: "Courier", color: colors.quantum.teal }}>ML-DSA-65 -- Quantum Resistant</Text>
+              <Text style={{ fontSize: 9, fontFamily: "Courier", color: colors.quantum.teal }}>End-to-end encrypted</Text>
             </View>
           </View>
         )}
@@ -298,41 +298,8 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
           ))
         )}
 
-        {/* Lightning Network */}
-        <TouchableOpacity style={st.lightningCard} onPress={onOpenLightning}>
-          <Text style={st.lightningIcon}>L</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={st.lightningTitle}>Lightning Network</Text>
-            <Text style={st.lightningSub}>Bitcoin instant payments</Text>
-          </View>
-          <Text style={{ color: "#F7931A", fontSize: 14 }}>{">"}</Text>
-        </TouchableOpacity>
-
-        {/* Linked Wallets */}
-        <View style={st.sectionRow}>
-          <Text style={st.sectionTitle}>{t("linkedWallets")}</Text>
-          <TouchableOpacity onPress={() => setShowLinkWallet(true)}>
-            <Text style={st.sectionAdd}>{t("link")}</Text>
-          </TouchableOpacity>
-        </View>
-        {linkedWallets.length === 0 ? (
-          <View style={st.emptySmall}>
-            <Text style={st.emptySub}>{t("linkWalletHint")}</Text>
-          </View>
-        ) : (
-          linkedWallets.map((w) => (
-            <View key={w.id} style={st.walletCard}>
-              <View style={[st.walletDot, { backgroundColor: WALLET_TYPES.find((t) => t.key === w.type)?.color || colors.voice.gold }]} />
-              <View style={st.walletInfo}>
-                <Text style={st.walletLabel}>{w.label}</Text>
-                <Text style={st.walletAddr} numberOfLines={1}>{w.address}</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleUnlinkWallet(w.id)}>
-                <Text style={st.walletUnlink}>X</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
+        {/* Lightning Network - hidden for App Store (re-enable in future update) */}
+        {/* Linked Wallets - hidden for App Store (re-enable in future update) */}
 
         {/* Recent Transactions */}
         <View style={st.sectionRow}>
