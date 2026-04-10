@@ -1,0 +1,11 @@
+FROM --platform=linux/amd64 oraclelinux:9 AS builder
+RUN dnf install -y gcc gcc-c++ clang cmake openssl-devel curl
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src/ src/
+COPY tests/ tests/
+RUN cargo build --release
+FROM scratch
+COPY --from=builder /app/target/release/speaq-chain /speaq-chain

@@ -365,6 +365,31 @@ _(wordt ingevuld na afronding)_
 
 ---
 
+## Admin Dashboard (7 april 2026)
+
+### Part 1: Relay Server Stats Tracking
+- [x] 1. Added admin stats data structures (allUsers Map with firstSeen, mining counters)
+- [x] 2. Track new user connections in AUTH handler with trackUser()
+- [x] 3. Track mining receipt requests (totalMiningReceipts, totalQCMined)
+- [x] 4. Added GET /api/v1/admin/stats endpoint (PIN-protected via x-admin-pin header, SHA-256 verified)
+- [x] 5. Send notification message to admin (ADMIN_SPEAQ_ID env var) when new user joins
+- [x] 6. Periodic disk persistence (save every 5min, on SIGTERM/SIGINT)
+
+### Part 2: Admin Dashboard Page
+- [x] 1. Created /admin/page.tsx with PIN entry screen
+- [x] 2. Built 5 dashboard sections (Users, Miners, QC Economy, Blockchain, Network)
+- [x] 3. Fetches data from relay server stats endpoint with auto-refresh (30s)
+- [x] 4. SVG line charts, progress bars, stat cards
+- [x] 5. SPEAQ brand colors, dark theme, SVG line icons (no emoji)
+- [x] 6. Build passes (npx next build + tsc --noEmit)
+
+### Review
+- **server.ts**: New admin stats system. allUsers Map tracks every speaqId with firstSeen timestamp. Mining receipts increment totalMiningReceipts and totalQCMined counters. Stats persisted to speaq-stats.json every 5min and on shutdown. GET /api/v1/admin/stats returns users (total/active/new by period + 30-day growth), miners, economy (QC supply tracking), and network stats. Protected by SHA-256 PIN hash verification. New user notifications sent to ADMIN_SPEAQ_ID via WebSocket.
+- **admin/page.tsx**: Complete admin dashboard. PIN entry with SHA-256 verification (relay-first, local fallback). 5 sections with stat cards, SVG line charts, progress bar. Session auth via sessionStorage. Auto-refresh 30s. Blockchain section shows "Node not connected" placeholder. All SVG line icons, SPEAQ brand colors (#08090D, #D4A853, #2DD4BF), dark theme only.
+- **No external dependencies added. No breaking changes.**
+
+---
+
 ## PWA IN WEBSITE PLAN (volgende sessie)
 
 ### Wat te bouwen

@@ -1,0 +1,10 @@
+FROM rust:1.86-bookworm AS builder
+RUN apt-get update && apt-get install -y musl-tools librocksdb-dev clang cmake pkg-config libssl-dev
+RUN rustup target add x86_64-unknown-linux-musl
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src/ src/
+COPY tests/ tests/
+ENV ROCKSDB_STATIC=1
+RUN cargo build --release --target x86_64-unknown-linux-musl 2>&1 || cargo build --release
+CMD ["echo", "done"]

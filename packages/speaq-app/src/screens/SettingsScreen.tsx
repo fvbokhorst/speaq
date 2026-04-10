@@ -348,7 +348,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         <Text style={dyn.sectionLabel}>{t("advanced")}</Text>
         <View style={dyn.card}>
           <TouchableOpacity style={dyn.row} onPress={onOpenMining}>
-            <Text style={dyn.rowLabel}>Mining</Text>
+            <Text style={dyn.rowLabel}>Contributions</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={dyn.row} onPress={onOpenVault}>
@@ -391,7 +391,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("version")}</Text>
-            <Text style={dyn.rowValue}>1.0.0 build 105</Text>
+            <Text style={dyn.rowValue}>1.0.0 build 106</Text>
           </View>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("platform")}</Text>

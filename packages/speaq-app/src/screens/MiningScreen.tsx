@@ -21,13 +21,13 @@ interface Props {
 }
 
 const TYPE_INFO: Record<MiningType, { icon: string; name: string; desc: string }> = {
-  relay: { icon: "R", name: "Relay Mining", desc: "Relay encrypted messages for others" },
-  mesh: { icon: "M", name: "Mesh Mining", desc: "Act as Bluetooth/WiFi mesh node" },
-  bridge: { icon: "B", name: "Bridge Mining", desc: "Cash-to-Q-Credits agent" },
-  validation: { icon: "V", name: "Validation Mining", desc: "Validate transaction proofs" },
-  storage: { icon: "S", name: "Storage Mining", desc: "Store encrypted data fragments" },
-  translation: { icon: "T", name: "Translation Mining", desc: "Translate app to new language" },
-  onboarding: { icon: "O", name: "Onboarding Mining", desc: "Bring new active users" },
+  relay: { icon: "R", name: "Relay", desc: "Relay encrypted messages for others" },
+  mesh: { icon: "M", name: "Mesh", desc: "Act as Bluetooth/WiFi mesh node" },
+  bridge: { icon: "B", name: "Bridge", desc: "Network credits agent" },
+  validation: { icon: "V", name: "Validation", desc: "Validate transaction proofs" },
+  storage: { icon: "S", name: "Storage", desc: "Store encrypted data fragments" },
+  translation: { icon: "T", name: "Translation", desc: "Translate app to new language" },
+  onboarding: { icon: "O", name: "Onboarding", desc: "Bring new active users" },
 };
 
 export default function MiningScreen({ onBack }: Props) {
@@ -83,8 +83,8 @@ export default function MiningScreen({ onBack }: Props) {
           <Text style={st.backText}>{"<"}</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={st.title}>Mining</Text>
-          <Text style={st.subtitle}>Proof of Contribution</Text>
+          <Text style={st.title}>Contributions</Text>
+          <Text style={st.subtitle}>Earn QC by helping the network</Text>
         </View>
       </View>
 
@@ -93,8 +93,8 @@ export default function MiningScreen({ onBack }: Props) {
         <View style={st.toggleCard}>
           <View style={st.toggleRow}>
             <View>
-              <Text style={st.toggleLabel}>{active ? "Mining Active" : "Mining Paused"}</Text>
-              <Text style={st.toggleSub}>{active ? "Earning Q-Credits for the network" : "Tap to start earning"}</Text>
+              <Text style={st.toggleLabel}>{active ? "Contributing" : "Paused"}</Text>
+              <Text style={st.toggleSub}>{active ? "Earning QC for network contributions" : "Tap to start contributing"}</Text>
             </View>
             <Switch
               value={active}
@@ -106,7 +106,7 @@ export default function MiningScreen({ onBack }: Props) {
           {active && (
             <View style={st.pulseRow}>
               <View style={st.pulseDot} />
-              <Text style={st.pulseText}>Mining...</Text>
+              <Text style={st.pulseText}>Active...</Text>
             </View>
           )}
         </View>
@@ -131,7 +131,7 @@ export default function MiningScreen({ onBack }: Props) {
         <View style={st.levelRow}>
           <View style={st.levelCard}>
             <Text style={st.levelValue}>Lv {stats.level}</Text>
-            <Text style={st.levelLabel}>Miner Level</Text>
+            <Text style={st.levelLabel}>Level</Text>
             <View style={st.levelBar}>
               <View style={[st.levelFill, { width: `${Math.min(100, (stats.level / 10) * 100)}%` }]} />
             </View>
@@ -154,7 +154,7 @@ export default function MiningScreen({ onBack }: Props) {
             <Text style={st.networkValue}>1 QC = 0.01g Gold</Text>
           </View>
           <View style={st.networkRow}>
-            <Text style={st.networkLabel}>Network Mined</Text>
+            <Text style={st.networkLabel}>Network Distributed</Text>
             <Text style={st.networkValue}>{getSupplyInfo().totalMined.toFixed(2)} QC</Text>
           </View>
           <View style={st.networkRow}>
@@ -196,7 +196,7 @@ export default function MiningScreen({ onBack }: Props) {
         </View>
 
         {/* Mining Types */}
-        <Text style={st.sectionTitle}>Mining Types</Text>
+        <Text style={st.sectionTitle}>Contribution Types</Text>
         {(Object.keys(TYPE_INFO) as MiningType[]).map((type) => {
           const info = TYPE_INFO[type];
           const rate = rates[type];
@@ -221,7 +221,7 @@ export default function MiningScreen({ onBack }: Props) {
         {/* Recent Rewards */}
         <Text style={st.sectionTitle}>Recent Rewards</Text>
         {rewards.length === 0 ? (
-          <Text style={st.emptyText}>No rewards yet. Start mining to earn Q-Credits.</Text>
+          <Text style={st.emptyText}>No rewards yet. Start contributing to earn QC.</Text>
         ) : (
           rewards.slice(0, 20).map((r) => (
             <View key={r.id} style={st.rewardRow}>

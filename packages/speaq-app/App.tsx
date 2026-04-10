@@ -294,7 +294,7 @@ function App() {
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
           <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label={t("wallet")} active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
-          <Tab icon={<MiningIcon active={activeTab === "mining"} />} label="Mining" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
+          <Tab icon={<MiningIcon active={activeTab === "mining"} />} label="Earn" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
           <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label={t("settings")} active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
         </View>
       </View>

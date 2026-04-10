@@ -171,9 +171,10 @@ export async function startMining(): Promise<void> {
   await AsyncStorage.setItem(MINING_ACTIVE_KEY, "true");
   await saveStats();
 
-  // Simulate mining activity every 30 seconds
+  // Track network contributions (rewards assigned by server)
+  // No on-device computation - rewards come from relay server
   miningInterval = setInterval(() => {
-    simulateMiningCycle();
+    trackContributions();
   }, 30000);
 }
 
@@ -209,54 +210,33 @@ function isSupplyExhausted(): boolean {
   return totalNetworkMined >= MAX_SUPPLY;
 }
 
-function simulateMiningCycle(): void {
-  if (isSupplyExhausted()) return; // No more QC to mine
-  const halvingMult = getHalvingMultiplier();
-
-  for (const type of stats.activeTypes) {
-    const rate = REWARD_RATES[type];
-
-    // Check daily cap
-    const todayForType = rewards
-      .filter((r) => r.type === type && new Date(r.timestamp).toISOString().split("T")[0] === stats.todayDate)
-      .reduce((sum, r) => sum + r.amount, 0);
-
-    if (todayForType >= rate.dailyCap) continue;
-
-    // Random chance of reward per cycle (simulates actual network activity)
-    const chance = type === "relay" ? 0.6 : type === "validation" ? 0.4 : type === "storage" ? 0.3 : 0.1;
-    if (Math.random() > chance) continue;
-
-    const amount = Math.round(rate.perAction * halvingMult * 100) / 100;
-    if (amount <= 0) continue;
-
-    // Credit the reward
-    const reward: MiningReward = {
-      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 4),
-      type,
-      amount,
-      timestamp: Date.now(),
-      description: rate.description,
-    };
-
-    rewards.push(reward);
-    stats.totalEarned += amount;
-    stats.todayEarned += amount;
-    totalNetworkMined += amount;
-
-    // Update type-specific counters
-    if (type === "relay") stats.relayCount++;
-    if (type === "validation") stats.validationCount++;
-    if (type === "storage") stats.storageUsedMB += 0.1;
-    if (type === "mesh") stats.meshUptime += 0.5;
-
-    // Add to wallet
-    walletService.addMiningReward(amount, type);
-  }
-
+// Track network contributions - no on-device computation
+// Rewards are assigned by the relay server when the user contributes
+// (relaying messages, validating, etc). This function only updates stats.
+function trackContributions(): void {
   // Update level based on total earned
   stats.level = Math.min(10, Math.floor(stats.totalEarned / 5) + 1);
+  saveStats();
+}
 
+// Called when a relay mining receipt is received from the server
+export function creditServerReward(type: MiningType, amount: number, description: string): void {
+  if (isSupplyExhausted()) return;
+  const reward: MiningReward = {
+    id: Date.now().toString(36) + Math.random().toString(36).substring(2, 4),
+    type,
+    amount,
+    timestamp: Date.now(),
+    description,
+  };
+  rewards.push(reward);
+  stats.totalEarned += amount;
+  stats.todayEarned += amount;
+  totalNetworkMined += amount;
+  if (type === "relay") stats.relayCount++;
+  if (type === "validation") stats.validationCount++;
+  stats.level = Math.min(10, Math.floor(stats.totalEarned / 5) + 1);
+  walletService.addMiningReward(amount, type);
   saveStats();
   saveRewards();
 }
