@@ -230,13 +230,13 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             </TouchableOpacity>
           </View>
         </View>
-        {/* Blockchain Status */}
+        {/* Network Status */}
         {chainData && (
           <View style={st.chainCard}>
-            <Text style={st.chainLabel}>SPEAQ CHAIN</Text>
+            <Text style={st.chainLabel}>SPEAQ NETWORK</Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
               <View>
-                <Text style={st.chainMetaLabel}>Block Height</Text>
+                <Text style={st.chainMetaLabel}>Network Height</Text>
                 <Text style={st.chainMetaValue}>{chainData.chain_height.toLocaleString()}</Text>
               </View>
               <View>
