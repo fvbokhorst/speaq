@@ -29,7 +29,7 @@ export default {
     balance: "Saldo",
     send: "Versturen",
     receive: "Ontvangen",
-    mining: "Mining",
+    mining: "Verdien",
     comingSoon: "Binnenkort beschikbaar",
   },
   settings: {
