@@ -347,7 +347,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
           <View style={st.row}>
             <Text style={st.rowLabel}>{t("version")}</Text>
-            <Text style={st.rowValue}>0.1.0 (Phase 5)</Text>
+            <Text style={st.rowValue}>1.1.0 (Build 109)</Text>
           </View>
           <View style={st.row}>
             <Text style={st.rowLabel}>{t("platform")}</Text>
