@@ -42,7 +42,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
     setNewContactId("");
     setNewContactName("");
     setShowAddModal(false);
-    Alert.alert("Contact Added", `${newContactName.trim()} has been added. Quantum key exchange will happen on first message.`);
+    Alert.alert("Contact Added", `${newContactName.trim()} has been added. Encrypted connection will be established on first message.`);
   }
 
   function shareId() {

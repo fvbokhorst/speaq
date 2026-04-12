@@ -106,7 +106,7 @@ export default function MiningScreen({ onBack }: Props) {
           {active && (
             <View style={st.pulseRow}>
               <View style={st.pulseDot} />
-              <Text style={st.pulseText}>Mining...</Text>
+              <Text style={st.pulseText}>Earning...</Text>
             </View>
           )}
         </View>
@@ -195,8 +195,8 @@ export default function MiningScreen({ onBack }: Props) {
           </View>
         </View>
 
-        {/* Mining Types */}
-        <Text style={st.sectionTitle}>Mining Types</Text>
+        {/* Contribution Types */}
+        <Text style={st.sectionTitle}>Contribution Types</Text>
         {(Object.keys(TYPE_INFO) as MiningType[]).map((type) => {
           const info = TYPE_INFO[type];
           const rate = rates[type];

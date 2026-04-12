@@ -11,18 +11,18 @@ export default {
   },
   chat: {
     placeholder: "SPEAQ Freely...",
-    encrypted: "Quantum Encrypted",
-    secured: "Quantum Secured",
+    encrypted: "Encrypted",
+    secured: "Secure",
     newChat: "New Chat",
     noChats: "No conversations yet",
-    startChat: "Scan a QR code to start a quantum-encrypted chat",
+    startChat: "Scan a QR code to start an encrypted chat",
   },
   contacts: {
     title: "Contacts",
     add: "Add Contact",
     scan: "Scan QR Code",
     empty: "No contacts yet",
-    paired: "Quantum Secured",
+    paired: "Secure",
   },
   wallet: {
     title: "Wallet",

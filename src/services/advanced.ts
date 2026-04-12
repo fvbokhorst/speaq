@@ -1,6 +1,6 @@
 /**
  * SPEAQ Advanced Features
- * Ghost Groups, Witness Mode, Dead Man's Switch
+ * Private Groups, Witness Mode, Safety Check-in
  * Phase 5
  */
 

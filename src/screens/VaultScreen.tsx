@@ -1,7 +1,7 @@
 /**
- * SPEAQ - Quantum Vault Screen
- * Encrypted file storage with plausible deniability
- * Two layers: normal (visible) + hidden (secret PIN)
+ * SPEAQ - Private Storage Screen
+ * Encrypted file storage with PIN-protected layers
+ * Two layers: normal (visible) + hidden (separate PIN)
  */
 
 import React, { useState, useEffect, Suspense } from "react";
@@ -290,7 +290,7 @@ export default function VaultScreen({ onBack }: Props) {
           <Text style={st.backText}>{"<"}</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={st.title}>Quantum Vault</Text>
+          <Text style={st.title}>Private Storage</Text>
           <Text style={st.layerBadge}>{layer === "hidden" ? "HIDDEN LAYER" : "STANDARD"}</Text>
         </View>
         <TouchableOpacity style={st.backupBtn} onPress={handleBackup}>

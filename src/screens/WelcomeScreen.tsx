@@ -62,7 +62,7 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
       </Animated.View>
 
       <View style={styles.bottom}>
-        <Text style={styles.bottomText}>Quantum Encrypted  -  Uncensorable  -  No ID Required</Text>
+        <Text style={styles.bottomText}>Verified Encryption  -  Your Data, Your Control</Text>
       </View>
 
       {/* Name input modal - appears after tapping Create Your Identity */}

@@ -1,7 +1,7 @@
 /**
  * SPEAQ - Wallet Screen
  * Q-Credits: send, receive, transaction history
- * Phase 5: Quantum Pay
+ * Send Money
  */
 
 import React, { useState, useEffect } from "react";

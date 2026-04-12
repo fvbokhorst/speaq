@@ -138,7 +138,7 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
         {/* Top */}
         <View style={st.top}>
           <View style={st.encBadge}>
-            <Text style={st.encText}>Quantum Encrypted</Text>
+            <Text style={st.encText}>Encrypted Call</Text>
           </View>
         </View>
 

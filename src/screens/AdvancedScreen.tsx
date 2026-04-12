@@ -1,6 +1,6 @@
 /**
  * SPEAQ - Advanced Features
- * Ghost Groups, Witness Mode, Dead Man's Switch
+ * Private Groups, Witness Mode, Safety Check-in
  * Accessible from Settings
  */
 
@@ -49,7 +49,7 @@ export default function AdvancedScreen({ onBack }: Props) {
     });
   }, []);
 
-  // --- Ghost Groups ---
+  // --- Private Groups ---
   function handleCreateGhost() {
     if (!ghostName.trim()) return;
     advancedService.createGhostGroup(ghostName.trim(), ghostDesc.trim());
@@ -108,7 +108,7 @@ export default function AdvancedScreen({ onBack }: Props) {
     setShowPollCreate(false);
     setPollQuestion("");
     setPollOptions(["", ""]);
-    Alert.alert("Poll Created", "Anonymous poll is live in the ghost group.");
+    Alert.alert("Poll Created", "Anonymous poll is live in the private group.");
   }
 
   function handleVote(poll: GhostPoll, optionIndex: number) {
@@ -145,7 +145,7 @@ export default function AdvancedScreen({ onBack }: Props) {
     Alert.alert("Shareable Proof", JSON.stringify(proof, null, 2));
   }
 
-  // --- Dead Man's Switch ---
+  // --- Safety Check-in ---
   async function handleConfigureDms() {
     const hours = parseInt(dmsHours) || 24;
     if (!dmsMessage.trim() || !dmsRecipient.trim()) return;
@@ -156,7 +156,7 @@ export default function AdvancedScreen({ onBack }: Props) {
     );
     setDms(advancedService.getDeadManSwitch());
     setShowDmsConfig(false);
-    Alert.alert("Switch Active", `Check in every ${hours} hours or your message will be sent automatically.`);
+    Alert.alert("Safety Check-in Active", `Check in every ${hours} hours or your safety message will be sent automatically.`);
   }
 
   async function handleCheckIn() {
@@ -179,7 +179,7 @@ export default function AdvancedScreen({ onBack }: Props) {
       setGhostGroups(advancedService.getGhostGroups());
       setShowQRScanner(false);
       setPickerGroupId(null);
-      Alert.alert("Member Added", `${speaqId} added to ghost group via QR scan.`);
+      Alert.alert("Member Added", `${speaqId} added to private group via QR scan.`);
     }
   }
 
@@ -206,19 +206,19 @@ export default function AdvancedScreen({ onBack }: Props) {
       </View>
 
       <ScrollView style={st.scroll}>
-        {/* Ghost Groups */}
+        {/* Private Groups */}
         <View style={st.section}>
           <View style={st.sectionHeader}>
             <View>
-              <Text style={st.sectionTitle}>Ghost Groups</Text>
-              <Text style={st.sectionDesc}>Invisible groups. No member list. Stealth invites only.</Text>
+              <Text style={st.sectionTitle}>Private Groups</Text>
+              <Text style={st.sectionDesc}>Private groups with invite-only access. Members stay anonymous.</Text>
             </View>
             <TouchableOpacity onPress={() => setShowNewGhost(true)}>
               <Text style={st.addBtn}>+ New</Text>
             </TouchableOpacity>
           </View>
           {ghostGroups.length === 0 ? (
-            <Text style={st.emptyText}>No ghost groups. Create one to communicate invisibly.</Text>
+            <Text style={st.emptyText}>No private groups yet. Create one for secure group communication.</Text>
           ) : (
             ghostGroups.map((g) => (
               <TouchableOpacity key={g.id} style={st.itemCard} onPress={() => handleGhostAction(g)}>
@@ -276,18 +276,18 @@ export default function AdvancedScreen({ onBack }: Props) {
           )}
         </View>
 
-        {/* Dead Man's Switch */}
+        {/* Safety Check-in */}
         <View style={st.section}>
           <View style={st.sectionHeader}>
             <View>
-              <Text style={st.sectionTitle}>Dead Man's Switch</Text>
-              <Text style={st.sectionDesc}>Auto-sends a message if you don't check in on time.</Text>
+              <Text style={st.sectionTitle}>Safety Check-in</Text>
+              <Text style={st.sectionDesc}>Sends a safety message if you don't check in on time.</Text>
             </View>
           </View>
           {!dms || !dms.enabled ? (
             <TouchableOpacity style={st.dmsSetup} onPress={() => setShowDmsConfig(true)}>
-              <Text style={st.dmsSetupText}>Configure Switch</Text>
-              <Text style={st.dmsSetupSub}>Set a check-in interval and emergency message</Text>
+              <Text style={st.dmsSetupText}>Configure Check-in</Text>
+              <Text style={st.dmsSetupSub}>Set a check-in interval and safety message</Text>
             </TouchableOpacity>
           ) : (
             <View style={st.dmsActive}>
@@ -315,11 +315,11 @@ export default function AdvancedScreen({ onBack }: Props) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* New Ghost Group Modal */}
+      {/* New Private Group Modal */}
       <Modal visible={showNewGhost} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>New Ghost Group</Text>
+            <Text style={st.modalTitle}>New Private Group</Text>
             <TextInput style={st.input} value={ghostName} onChangeText={setGhostName}
               placeholder="Group name" placeholderTextColor={colors.signal.steel} autoFocus />
             <TextInput style={st.input} value={ghostDesc} onChangeText={setGhostDesc}
@@ -412,8 +412,8 @@ export default function AdvancedScreen({ onBack }: Props) {
       <Modal visible={showDmsConfig} transparent animationType="fade">
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
-            <Text style={st.modalTitle}>Dead Man's Switch</Text>
-            <Text style={st.modalSub}>If you don't check in within the interval, your message is sent automatically.</Text>
+            <Text style={st.modalTitle}>Safety Check-in</Text>
+            <Text style={st.modalSub}>Set a check-in interval. If you don't check in on time, your safety message is sent automatically.</Text>
             <TextInput style={st.input} value={dmsHours} onChangeText={setDmsHours}
               placeholder="Check-in interval (hours)" placeholderTextColor={colors.signal.steel}
               keyboardType="number-pad" />
@@ -422,7 +422,7 @@ export default function AdvancedScreen({ onBack }: Props) {
               autoCapitalize="none" />
             <TextInput style={[st.input, { height: 80, textAlignVertical: "top" }]}
               value={dmsMessage} onChangeText={setDmsMessage}
-              placeholder="Emergency message" placeholderTextColor={colors.signal.steel}
+              placeholder="Safety message" placeholderTextColor={colors.signal.steel}
               multiline />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowDmsConfig(false)}>

@@ -32,7 +32,7 @@ All data is stored locally on your device:
 - Wallet (Q-Credits balance, transaction history)
 - No data is stored on SPEAQ servers except temporarily queued encrypted messages (max 7 days, then auto-deleted)
 
-3. Relay Server (Zero Knowledge)
+3. Relay Server (Privacy-First)
 The SPEAQ relay server operates on a zero-knowledge principle:
 - It sees ONLY encrypted blobs
 - It cannot read messages, identify senders/receivers, or determine message content
@@ -86,7 +86,7 @@ Alle data wordt lokaal opgeslagen op je apparaat:
 - Portemonnee (Q-Credits saldo, transactiegeschiedenis)
 - Geen data wordt opgeslagen op SPEAQ servers behalve tijdelijk in wachtrij geplaatste versleutelde berichten (max 7 dagen, daarna automatisch verwijderd)
 
-3. Relay Server (Zero Knowledge)
+3. Relay Server (Privacy-First)
 De SPEAQ relay-server werkt op een zero-knowledge principe:
 - Ziet ALLEEN versleutelde blobs
 - Kan geen berichten lezen, afzenders/ontvangers identificeren of berichtinhoud bepalen

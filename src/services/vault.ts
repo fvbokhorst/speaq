@@ -1,6 +1,6 @@
 /**
- * SPEAQ Quantum Vault Service
- * Plausible deniability: two PINs, two data layers
+ * SPEAQ Private Storage Service
+ * PIN-protected layers: two PINs, two data layers
  *
  * PIN A (normal) = visible layer with innocent data
  * PIN B (hidden) = real encrypted data
