@@ -3,10 +3,11 @@
  * Show your QR code + scan others to pair
  */
 
-import React, { useState, Suspense } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Share } from "react-native";
+import React, { useState, useEffect, Suspense } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Share, Image } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { Camera } from "react-native-camera-kit";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, spacing, radius } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { contactsService, Contact } from "../services/contacts";
@@ -24,8 +25,15 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [newContactId, setNewContactId] = useState("");
   const [newContactName, setNewContactName] = useState("");
   const [showScanner, setShowScanner] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const identity = getIdentity();
-  const qrData = `speaq://${identity?.speaqId || "unknown"}`;
+  const qrData = `https://thespeaq.com/connect/${identity?.speaqId || "unknown"}`;
+
+  useEffect(() => {
+    AsyncStorage.getItem("speaq_profile_photo").then((uri) => {
+      if (uri) setProfilePhoto(uri);
+    });
+  }, []);
 
   function addContact() {
     if (!newContactId.trim() || !newContactName.trim()) return;
@@ -59,16 +67,23 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
         </View>
       </View>
 
-      {/* Your QR Code */}
+      {/* Profile Card: photo left, name + QR right */}
       <TouchableOpacity style={st.qrCard} onPress={() => setShowQRModal(true)} activeOpacity={0.8}>
         <View style={st.qrRow}>
-          <View style={st.qrSmall}>
-            <QRCode value={qrData} size={60} backgroundColor="transparent" color={colors.voice.gold} />
-          </View>
+          {profilePhoto ? (
+            <Image source={{ uri: profilePhoto }} style={st.profilePhoto} />
+          ) : (
+            <View style={st.profilePhotoPlaceholder}>
+              <Text style={st.profilePhotoInit}>{identity?.displayName?.charAt(0)?.toUpperCase() || "?"}</Text>
+            </View>
+          )}
           <View style={st.qrInfo}>
             <Text style={st.qrName}>{identity?.displayName || "You"}</Text>
             <Text style={st.qrId}>{identity?.speaqId || "No ID"}</Text>
             <Text style={st.qrHint}>Tap to enlarge or share</Text>
+          </View>
+          <View style={st.qrSmall}>
+            <QRCode value={qrData} size={52} backgroundColor="transparent" color={colors.voice.gold} />
           </View>
         </View>
       </TouchableOpacity>
@@ -89,7 +104,7 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
               <Text style={st.contactName}>{c.name}</Text>
               <Text style={st.contactId}>{c.id}</Text>
             </View>
-            <Text style={st.contactStatus}>Quantum Secured</Text>
+            <Text style={st.contactStatus}>Secure</Text>
           </TouchableOpacity>
         ))
       )}
@@ -100,10 +115,10 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
           <View style={st.qrModalBox}>
             <Text style={st.qrModalTitle}>Your SPEAQ QR Code</Text>
             <View style={st.qrBig}>
-              <QRCode value={qrData} size={200} backgroundColor={colors.depth.card} color={colors.voice.gold} />
+              <QRCode value={qrData} size={200} backgroundColor="#FFFFFF" color="#000000" />
             </View>
             <Text style={st.qrModalId}>{identity?.speaqId}</Text>
-            <Text style={st.qrModalSub}>Others scan this to start a quantum-encrypted chat with you</Text>
+            <Text style={st.qrModalSub}>Others scan this to start an encrypted chat with you</Text>
             <View style={st.qrModalBtns}>
               <TouchableOpacity style={st.qrShareBtn} onPress={shareId}>
                 <Text style={st.qrShareText}>Share ID</Text>
@@ -130,7 +145,9 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
               scanBarcode
               onReadCode={(event: any) => {
                 const value = event.nativeEvent?.codeStringValue || "";
-                const speaqId = value.startsWith("speaq://") ? value.replace("speaq://", "") : value;
+                let speaqId = value;
+                if (value.startsWith("https://thespeaq.com/connect/")) speaqId = value.replace("https://thespeaq.com/connect/", "");
+                else if (value.startsWith("speaq://")) speaqId = value.replace("speaq://", "");
                 if (speaqId) {
                   setShowScanner(false);
                   setNewContactId(speaqId);
@@ -191,7 +208,10 @@ const st = StyleSheet.create({
 
   qrCard: { margin: 16, padding: 16, backgroundColor: colors.depth.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.subtle },
   qrRow: { flexDirection: "row", alignItems: "center" },
-  qrSmall: { marginRight: 16 },
+  profilePhoto: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, borderColor: colors.voice.gold, marginRight: 12 },
+  profilePhotoPlaceholder: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.depth.elevated, borderWidth: 2, borderColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  profilePhotoInit: { color: colors.voice.gold, fontSize: 22, fontWeight: "700" },
+  qrSmall: { marginLeft: 12 },
   qrInfo: { flex: 1 },
   qrName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
   qrId: { color: colors.voice.gold, fontSize: 12, fontFamily: "Courier", marginTop: 2 },
@@ -212,7 +232,7 @@ const st = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
   qrModalBox: { width: 300, backgroundColor: colors.depth.card, borderRadius: 20, padding: 28, alignItems: "center", borderWidth: 1, borderColor: colors.border.subtle },
   qrModalTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 20 },
-  qrBig: { padding: 16, backgroundColor: colors.depth.elevated, borderRadius: 16 },
+  qrBig: { padding: 20, backgroundColor: "#FFFFFF", borderRadius: 16 },
   qrModalId: { color: colors.voice.gold, fontSize: 14, fontFamily: "Courier", marginTop: 16 },
   qrModalSub: { color: colors.signal.steel, fontSize: 11, textAlign: "center", marginTop: 8, lineHeight: 16 },
   qrModalBtns: { flexDirection: "row", gap: 12, marginTop: 20, width: "100%" },

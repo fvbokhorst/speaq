@@ -113,7 +113,7 @@ class WalletService {
 
   // Mining reward
   addMiningReward(amount: number, type: string): void {
-    this.receive("SPEAQ Network", amount, `Mining: ${type}`);
+    this.receive("SPEAQ Network", amount, `Earning: ${type}`);
   }
 
   // Initial bonus for new users

@@ -145,8 +145,22 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   const identity = getIdentity();
 
   useEffect(() => {
-    AsyncStorage.getItem("speaq_profile_photo").then((uri) => {
-      if (uri) setPhotoUri(uri);
+    AsyncStorage.getItem("speaq_profile_photo").then(async (uri) => {
+      if (uri) {
+        try {
+          const RNFS = require("react-native-fs");
+          const path = uri.replace("file://", "");
+          const exists = await RNFS.exists(path);
+          if (exists) {
+            setPhotoUri(uri);
+          } else {
+            // File gone, clear stale reference
+            await AsyncStorage.removeItem("speaq_profile_photo");
+          }
+        } catch {
+          setPhotoUri(uri);
+        }
+      }
     });
   }, []);
 
@@ -308,7 +322,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         <Text style={st.sectionLabel}>{t("advanced")}</Text>
         <View style={st.card}>
           <TouchableOpacity style={st.row} onPress={onOpenMining}>
-            <Text style={st.rowLabel}>Mining</Text>
+            <Text style={st.rowLabel}>Earn</Text>
             <Text style={st.rowAction}>{t("open")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={st.row} onPress={onOpenVault}>

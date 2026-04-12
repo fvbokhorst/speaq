@@ -29,7 +29,7 @@ export default {
     balance: "Balance",
     send: "Send",
     receive: "Receive",
-    mining: "Mining",
+    mining: "Earn",
     comingSoon: "Coming soon",
   },
   settings: {

@@ -21,13 +21,13 @@ interface Props {
 }
 
 const TYPE_INFO: Record<MiningType, { icon: string; name: string; desc: string }> = {
-  relay: { icon: "R", name: "Relay Mining", desc: "Relay encrypted messages for others" },
-  mesh: { icon: "M", name: "Mesh Mining", desc: "Act as Bluetooth/WiFi mesh node" },
-  bridge: { icon: "B", name: "Bridge Mining", desc: "Cash-to-Q-Credits agent" },
-  validation: { icon: "V", name: "Validation Mining", desc: "Validate transaction proofs" },
-  storage: { icon: "S", name: "Storage Mining", desc: "Store encrypted data fragments" },
-  translation: { icon: "T", name: "Translation Mining", desc: "Translate app to new language" },
-  onboarding: { icon: "O", name: "Onboarding Mining", desc: "Bring new active users" },
+  relay: { icon: "R", name: "Relay Contribution", desc: "Relay encrypted messages for others" },
+  mesh: { icon: "M", name: "Mesh Contribution", desc: "Act as Bluetooth/WiFi mesh node" },
+  bridge: { icon: "B", name: "Bridge Contribution", desc: "Cash-to-Q-Credits agent" },
+  validation: { icon: "V", name: "Validation Contribution", desc: "Validate transaction proofs" },
+  storage: { icon: "S", name: "Storage Contribution", desc: "Store encrypted data fragments" },
+  translation: { icon: "T", name: "Translation Contribution", desc: "Translate app to new language" },
+  onboarding: { icon: "O", name: "Onboarding Contribution", desc: "Bring new active users" },
 };
 
 export default function MiningScreen({ onBack }: Props) {
@@ -83,8 +83,8 @@ export default function MiningScreen({ onBack }: Props) {
           <Text style={st.backText}>{"<"}</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={st.title}>Mining</Text>
-          <Text style={st.subtitle}>Proof of Contribution</Text>
+          <Text style={st.title}>Earn</Text>
+          <Text style={st.subtitle}>Contribute & Earn Credits</Text>
         </View>
       </View>
 
@@ -93,8 +93,8 @@ export default function MiningScreen({ onBack }: Props) {
         <View style={st.toggleCard}>
           <View style={st.toggleRow}>
             <View>
-              <Text style={st.toggleLabel}>{active ? "Mining Active" : "Mining Paused"}</Text>
-              <Text style={st.toggleSub}>{active ? "Earning Q-Credits for the network" : "Tap to start earning"}</Text>
+              <Text style={st.toggleLabel}>{active ? "Earning Active" : "Earning Paused"}</Text>
+              <Text style={st.toggleSub}>{active ? "Earning credits for the network" : "Tap to start earning"}</Text>
             </View>
             <Switch
               value={active}
@@ -131,7 +131,7 @@ export default function MiningScreen({ onBack }: Props) {
         <View style={st.levelRow}>
           <View style={st.levelCard}>
             <Text style={st.levelValue}>Lv {stats.level}</Text>
-            <Text style={st.levelLabel}>Miner Level</Text>
+            <Text style={st.levelLabel}>Contributor Level</Text>
             <View style={st.levelBar}>
               <View style={[st.levelFill, { width: `${Math.min(100, (stats.level / 10) * 100)}%` }]} />
             </View>
@@ -154,7 +154,7 @@ export default function MiningScreen({ onBack }: Props) {
             <Text style={st.networkValue}>1 QC = 0.01g Gold</Text>
           </View>
           <View style={st.networkRow}>
-            <Text style={st.networkLabel}>Network Mined</Text>
+            <Text style={st.networkLabel}>Network Earned</Text>
             <Text style={st.networkValue}>{getSupplyInfo().totalMined.toFixed(2)} QC</Text>
           </View>
           <View style={st.networkRow}>

@@ -16,6 +16,7 @@ import {
   getOrCreateRatchet, initRatchetFromKeyExchange,
   ratchetEncrypt,
   KyberKeyPair,
+  setKeystorePin,
 } from "./crypto";
 import { generateDID, saveDID, loadDID } from "./identity-manager";
 
@@ -66,6 +67,10 @@ function generateSpeaqId(): string {
  * NOW: also generates a Kyber keypair for quantum key exchange
  */
 export async function createIdentity(displayName: string): Promise<typeof identity> {
+  // Set temporary keystore PIN for initial key generation
+  // Real PIN will be set during PIN setup phase
+  await setKeystorePin("temp-init-" + Date.now());
+
   // Generate Kyber keypair for quantum key exchange
   kyberKeys = generateKyberKeyPair();
   await saveKyberKeyPair(kyberKeys);
@@ -99,12 +104,19 @@ export async function loadIdentity(): Promise<typeof identity> {
     if (data) {
       identity = JSON.parse(data);
 
-      // Load Kyber keypair
-      kyberKeys = await loadKyberKeyPair();
+      // Load Kyber keypair (may fail if keystore PIN not yet set)
+      try {
+        kyberKeys = await loadKyberKeyPair();
+      } catch {
+        kyberKeys = null;
+      }
       if (!kyberKeys && identity) {
-        // Migration: existing identity without Kyber keys -- generate now
-        kyberKeys = generateKyberKeyPair();
-        await saveKyberKeyPair(kyberKeys);
+        // Generate new keys (will be re-encrypted when PIN is set)
+        try {
+          kyberKeys = generateKyberKeyPair();
+        } catch {
+          kyberKeys = null;
+        }
       }
 
       // Migration: existing identity without DID -- generate now

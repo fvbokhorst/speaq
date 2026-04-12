@@ -178,9 +178,13 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <WelcomeScreen onCreateIdentity={async (name: string) => {
-          const id = await createIdentity(name);
-          Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
-            [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
+          try {
+            const id = await createIdentity(name);
+            Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
+              [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
+          } catch (err: any) {
+            Alert.alert("Error", err?.message || String(err));
+          }
         }} />
       </SafeAreaProvider>
     );
@@ -209,10 +213,10 @@ function App() {
             {[0,1,2,3,4,5].map(i => <View key={i} style={[st.dot, i < pin.length && st.dotFull]} />)}
           </View>
           <View style={st.numpad}>
-            {["1","2","3","4","5","6","7","8","9","","0","del"].map(k => (
+            {["1","2","3","4","5","6","7","8","9","*","0","del"].map(k => (
               <TouchableOpacity key={k||"x"} style={[st.nk, !k && st.nkHide]} disabled={!k}
-                onPress={() => k === "del" ? handlePinDelete() : k ? handlePinDigit(k) : null} activeOpacity={0.6}>
-                <Text style={st.nkTxt}>{k === "del" ? "←" : k}</Text>
+                onPress={() => k === "del" ? handlePinDelete() : k === "*" ? null : k ? handlePinDigit(k) : null} activeOpacity={k === "*" ? 1 : 0.6}>
+                <Text style={[st.nkTxt, k === "*" && {}]}>{k === "del" ? "←" : k === "*" ? "✱" : k}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -268,6 +272,7 @@ function App() {
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
           <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label={t("wallet")} active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
+          <Tab icon={<WalletIcon active={activeTab === "mining"} />} label="Earn" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
           <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label={t("settings")} active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
         </View>
       </View>

@@ -90,20 +90,21 @@ export default function LockScreen({ onUnlock, isFirstTime }: Props) {
 
       {/* Numpad */}
       <View style={styles.numpad}>
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"].map((key) => (
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "del"].map((key) => (
           <TouchableOpacity
             key={key || "empty"}
             style={[styles.numKey, key === "" && styles.numKeyEmpty]}
             onPress={() => {
               if (key === "del") handleDelete();
               else if (key === "") return;
+              else if (key === "*") return;
               else handleDigit(key);
             }}
             activeOpacity={0.6}
             disabled={key === ""}
           >
-            <Text style={[styles.numKeyText, key === "del" && styles.numKeyDel]}>
-              {key === "del" ? "←" : key}
+            <Text style={[styles.numKeyText, key === "del" && styles.numKeyDel, key === "*" && { fontSize: 28, color: "#D4A853" }]}>
+              {key === "del" ? "←" : key === "*" ? "✱" : key}
             </Text>
           </TouchableOpacity>
         ))}
