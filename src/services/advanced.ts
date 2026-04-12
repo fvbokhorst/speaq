@@ -9,7 +9,7 @@ import CryptoJS from "crypto-js";
 import { relay } from "./relay";
 import { loadKyberKeyPair } from "./crypto";
 
-// --- Ghost Groups ---
+// --- Private Groups ---
 // Groups with no member list visible. Stealth invites only.
 // Members can't see who else is in the group.
 
@@ -37,12 +37,12 @@ export interface WitnessRecord {
   shared: boolean;
 }
 
-// --- Dead Man's Switch ---
+// --- Safety Check-in ---
 // If you don't check in within the configured interval,
 // pre-configured messages are automatically sent to chosen contacts.
 
 // --- Ghost Polls ---
-// Anonymous polling within Ghost Groups. No voter identity recorded.
+// Anonymous polling within Private Groups. No voter identity recorded.
 
 export interface GhostPoll {
   id: string;
@@ -94,7 +94,7 @@ class AdvancedService {
       if (dms) this.deadManSwitch = JSON.parse(dms);
       this.loaded = true;
 
-      // Check immediately if Dead Man's Switch is overdue
+      // Check immediately if Safety Check-in is overdue
       if (this.isOverdue()) {
         this.triggerDeadManSwitch();
         await this.disableDeadManSwitch();
@@ -107,7 +107,7 @@ class AdvancedService {
     }
   }
 
-  // --- Ghost Groups ---
+  // --- Private Groups ---
 
   getGhostGroups(): GhostGroup[] {
     return [...this.ghostGroups];
@@ -292,7 +292,7 @@ class AdvancedService {
     };
   }
 
-  // --- Dead Man's Switch ---
+  // --- Safety Check-in ---
 
   getDeadManSwitch(): DeadManSwitch | null {
     return this.deadManSwitch;

@@ -1,5 +1,5 @@
 /**
- * SPEAQ Quantum Crypto Service (React Native)
+ * SPEAQ Crypto Service (React Native)
  *
  * Real post-quantum encryption:
  * 1. Lattice-based Key Encapsulation (NTRU-like, quantum-resistant)
