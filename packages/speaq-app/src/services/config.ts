@@ -1,0 +1,51 @@
+/**
+ * SPEAQ App Configuration
+ * Central config for relay URLs, feature flags, tier limits
+ */
+
+export const config = {
+  // Relay server
+  relay: {
+    url: "wss://speaq-relay-244491980730.europe-west1.run.app",
+    healthUrl: "https://speaq-relay-244491980730.europe-west1.run.app/api/v1/health",
+    localUrl: "ws://localhost:8080", // For development
+  },
+
+  // App info
+  app: {
+    name: "SPEAQ",
+    version: "0.1.0",
+    tagline: "SPEAQ Freely.",
+    domain: "thespeaq.com",
+  },
+
+  // Encryption
+  crypto: {
+    kyberLevel: 768,
+    aesKeyBits: 256,
+    paddingBlockSize: 4096,
+  },
+
+  // Offline queue
+  offline: {
+    maxAgeDays: 7,
+  },
+
+  // Rate limits
+  rateLimit: {
+    messagesPerMinute: 100,
+  },
+
+  // Feature flags
+  features: {
+    voiceCalls: true,     // Phase 3 - ACTIVE
+    videoCalls: true,     // Phase 3 - ACTIVE
+    quantumPay: true,     // Phase 5 - ACTIVE
+    freedomBrowse: true,  // Phase 4 - ACTIVE
+    witnessMode: true,    // Phase 5 - ACTIVE
+    meshNetwork: false,   // Phase 4 - BLE not implemented yet
+    torRouting: true,     // Phase 4 - ACTIVE (transport layer)
+    lightning: true,      // Phase 8 - ACTIVE
+    mining: true,         // Phase 6 - ACTIVE
+  },
+};

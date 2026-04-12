@@ -1,0 +1,87 @@
+[package]
+name = "speaq-chain"
+version = "0.1.0"
+edition = "2021"
+description = "SPEAQ Chain - Quantum-Resistant Blockchain"
+authors = ["Frank van Bokhorst - Plexaris"]
+
+[dependencies]
+# Post-Quantum Cryptography (NIST certified)
+# ML-DSA-65 (FIPS 204 final) -- cross-compatible with @noble/post-quantum JS library
+fips204 = { version = "0.4", features = ["ml-dsa-65"] }
+# Legacy Dilithium-3 (kept for reference, not used in new code)
+# pqcrypto-dilithium = "0.5"
+pqcrypto-kyber = "0.8"
+pqcrypto-sphincsplus = "0.7"
+pqcrypto-traits = "0.3"
+
+# Elliptic Curve (for Pedersen commitments, ring signatures)
+curve25519-dalek = { version = "4", features = ["digest", "rand_core"] }
+
+# Hashing
+sha2 = "0.10"
+
+# Cryptographic random
+rand = "0.8"
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Hex encoding
+hex = "0.4"
+
+# Timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+# Range proofs (proves amount >= 0 without revealing it)
+bulletproofs = "5.0"
+merlin = "3"
+
+# P2P Networking (used by Polkadot, Filecoin, IPFS)
+libp2p = { version = "0.54", features = [
+    "tcp",
+    "noise",
+    "yamux",
+    "gossipsub",
+    "kad",
+    "identify",
+    "tokio",
+    "macros",
+] }
+tokio = { version = "1", features = ["full"] }
+
+# Persistent storage (used by Bitcoin, Ethereum, CockroachDB)
+rocksdb = "0.24"
+
+# Tor anonymity network (optional -- requires Rust nightly for latest versions)
+arti-client = { version = "0.41", default-features = false, optional = true }
+tor-rtcompat = { version = "0.41", features = ["tokio"], optional = true }
+
+# Error handling
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# REST API
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
+
+# Home directory
+dirs = "5"
+
+# Async streams
+futures = "0.3"
+[features]
+default = []
+tor = ["arti-client", "tor-rtcompat"]
+
+[dev-dependencies]
+tempfile = "3"

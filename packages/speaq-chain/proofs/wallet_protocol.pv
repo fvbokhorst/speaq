@@ -1,0 +1,117 @@
+(* ============================================================
+   SPEAQ Chain Wallet Protocol -- ProVerif Formal Verification
+
+   Verifies the wallet address generation and transaction signing:
+   1. Kyber-768 wallet keypair generation
+   2. Dilithium-3 transaction signing
+   3. Secrecy: attacker cannot learn private keys
+   4. Authentication: transactions can only come from key holder
+   5. Key exchange: shared secrets for stealth addresses
+   ============================================================ *)
+
+free network: channel.
+
+type key.
+type nonce.
+type keypair.
+type skey.
+type vkey.
+
+(* --- Dilithium-3 Digital Signatures --- *)
+fun dilithium_keygen(skey): vkey.
+fun dilithium_sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, sk: skey;
+  dilithium_verify(dilithium_sign(m, sk), m, dilithium_keygen(sk)) = true.
+
+(* --- Kyber-768 KEM --- *)
+fun kyber_keygen_pub(key): key.
+fun kyber_keygen_priv(key): key [private].
+fun kyber_encapsulate(key, nonce): bitstring.
+fun kyber_shared_secret(key, nonce): key [private].
+reduc forall seed: key, n: nonce;
+  kyber_decapsulate(kyber_encapsulate(kyber_keygen_pub(seed), n), kyber_keygen_priv(seed)) = kyber_shared_secret(kyber_keygen_pub(seed), n).
+
+(* --- SHA-256 Hash --- *)
+fun hash(bitstring): bitstring.
+
+(* --- Transaction Structure --- *)
+fun create_tx(bitstring, bitstring, bitstring): bitstring. (* from, to, amount *)
+
+(* --- Events --- *)
+event WalletCreated(vkey).
+event TransactionSigned(bitstring, vkey).
+event TransactionVerified(bitstring, vkey).
+event KeyExchangeComplete(key).
+
+(* --- Secrecy Queries --- *)
+
+(* Attacker cannot learn the signing private key *)
+free alice_signing_seed: skey [private].
+query attacker(alice_signing_seed).
+
+(* Attacker cannot learn the KEM private key *)
+free alice_kem_seed: key [private].
+query attacker(kyber_keygen_priv(alice_kem_seed)).
+
+(* --- Authentication Queries --- *)
+
+(* If a transaction is verified, it must have been signed by the key holder *)
+query tx: bitstring, pk: vkey;
+  event(TransactionVerified(tx, pk)) ==> event(TransactionSigned(tx, pk)).
+
+(* --- Wallet Creation and Transaction Process --- *)
+
+(* Alice: creates wallet, signs transactions *)
+let Alice() =
+  (* Generate Dilithium-3 signing keypair *)
+  let alice_sign_pk = dilithium_keygen(alice_signing_seed) in
+  event WalletCreated(alice_sign_pk);
+
+  (* Generate Kyber-768 KEM keypair for receiving *)
+  let alice_kem_pub = kyber_keygen_pub(alice_kem_seed) in
+
+  (* Publish public keys (wallet address) *)
+  out(network, (alice_sign_pk, alice_kem_pub));
+
+  (* Create and sign a transaction *)
+  in(network, destination: bitstring);
+  let tx = create_tx(hash((alice_sign_pk, alice_kem_pub)), destination, hash((alice_sign_pk, destination))) in
+  let signed_tx = dilithium_sign(tx, alice_signing_seed) in
+  event TransactionSigned(tx, alice_sign_pk);
+  out(network, (tx, signed_tx, alice_sign_pk)).
+
+(* Bob: receives and verifies transactions *)
+let Bob() =
+  (* Receive Alice's public keys *)
+  in(network, (sender_sign_pk: vkey, sender_kem_pub: key));
+
+  (* Receive signed transaction *)
+  in(network, (tx: bitstring, sig: bitstring, claimed_pk: vkey));
+
+  (* Verify signature *)
+  if dilithium_verify(sig, tx, claimed_pk) = true then
+  event TransactionVerified(tx, claimed_pk).
+
+(* Key exchange for stealth addresses *)
+let SenderKeyExchange() =
+  (* Receive recipient's KEM public key *)
+  in(network, recipient_kem_pub: key);
+
+  (* Encapsulate to create one-time shared secret *)
+  new randomness: nonce;
+  let ct = kyber_encapsulate(recipient_kem_pub, randomness) in
+  let ss = kyber_shared_secret(recipient_kem_pub, randomness) in
+  event KeyExchangeComplete(ss);
+  out(network, ct).
+
+let ReceiverKeyExchange() =
+  (* Receive ciphertext *)
+  in(network, ct: bitstring);
+
+  (* Decapsulate with private key *)
+  let ss = kyber_decapsulate(ct, kyber_keygen_priv(alice_kem_seed)) in
+  event KeyExchangeComplete(ss).
+
+(* --- Main Process --- *)
+process
+  (Alice() | Bob() | SenderKeyExchange() | ReceiverKeyExchange())

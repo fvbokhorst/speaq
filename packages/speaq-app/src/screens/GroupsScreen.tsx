@@ -1,0 +1,276 @@
+/**
+ * SPEAQ - Groups Screen
+ * Create and manage group chats
+ */
+
+import React, { useState, useEffect } from "react";
+import {
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Image,
+} from "react-native";
+import { launchImageLibrary } from "react-native-image-picker";
+import { colors } from "../theme/brand";
+import { contactsService, Contact } from "../services/contacts";
+import { loadGroups, getGroups, createGroup, deleteGroup, Group } from "../services/groups";
+import { getIdentity } from "../services/speaq";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import RNFS from "react-native-fs";
+
+interface Props {
+  onOpenGroupChat: (groupId: string, groupName: string) => void;
+}
+
+export default function GroupsScreen({ onOpenGroupChat }: Props) {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupPhoto, setGroupPhoto] = useState<string | null>(null);
+  const [selectedMembers, setSelectedMembers] = useState<Contact[]>([]);
+  const [groupPhotos, setGroupPhotos] = useState<Record<string, string>>({});
+  const contacts = contactsService.getContacts();
+
+  useEffect(() => {
+    loadGroups().then(() => setGroups(getGroups()));
+    AsyncStorage.getItem("speaq_group_photos").then((data) => {
+      if (data) setGroupPhotos(JSON.parse(data));
+    });
+  }, []);
+
+  async function handlePickGroupPhoto() {
+    try {
+      const result = await launchImageLibrary({ mediaType: "photo", selectionLimit: 1, quality: 0.5 });
+      if (result.assets && result.assets[0]?.uri) {
+        const destPath = `${RNFS.DocumentDirectoryPath}/group_photo_${Date.now()}.jpg`;
+        try {
+          await RNFS.copyFile(result.assets[0].uri, destPath);
+        } catch {
+          await RNFS.copyFile(result.assets[0].uri.replace("file://", ""), destPath);
+        }
+        setGroupPhoto(`file://${destPath}`);
+      }
+    } catch (e) {}
+  }
+
+  async function saveGroupPhoto(groupId: string, uri: string) {
+    const updated = { ...groupPhotos, [groupId]: uri };
+    setGroupPhotos(updated);
+    await AsyncStorage.setItem("speaq_group_photos", JSON.stringify(updated));
+  }
+
+  async function handleCreate() {
+    if (!groupName.trim()) return;
+    const myId = getIdentity()?.speaqId || "";
+    const group = await createGroup(
+      groupName.trim(),
+      selectedMembers.map((c) => ({ speaqId: c.id, name: c.name })),
+      myId
+    );
+    if (groupPhoto) {
+      await saveGroupPhoto(group.id, groupPhoto);
+    }
+    setGroups(getGroups());
+    setShowCreate(false);
+    setGroupName("");
+    setGroupPhoto(null);
+    setSelectedMembers([]);
+  }
+
+  function toggleMember(contact: Contact) {
+    if (selectedMembers.find((m) => m.id === contact.id)) {
+      setSelectedMembers(selectedMembers.filter((m) => m.id !== contact.id));
+    } else {
+      setSelectedMembers([...selectedMembers, contact]);
+    }
+  }
+
+  function handleGroupActions(group: Group) {
+    Alert.alert(group.name, `${group.members.length} members`, [
+      { text: "Rename", onPress: () => {
+        Alert.prompt("Rename Group", "New name:", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Save", onPress: async (newName) => {
+            if (newName && newName.trim()) {
+              // Update group name in storage
+              const allGroups = getGroups();
+              const g = allGroups.find((gr) => gr.id === group.id);
+              if (g) {
+                g.name = newName.trim();
+                await AsyncStorage.setItem("speaq_groups", JSON.stringify(allGroups));
+                setGroups(getGroups());
+              }
+            }
+          }},
+        ], "plain-text", group.name);
+      }},
+      { text: "Change Photo", onPress: async () => {
+        try {
+          const result = await launchImageLibrary({ mediaType: "photo", selectionLimit: 1, quality: 0.5 });
+          if (result.assets && result.assets[0]?.uri) {
+            const destPath = `${RNFS.DocumentDirectoryPath}/group_photo_${group.id}.jpg`;
+            try {
+              await RNFS.copyFile(result.assets[0].uri, destPath);
+            } catch {
+              await RNFS.copyFile(result.assets[0].uri.replace("file://", ""), destPath);
+            }
+            await saveGroupPhoto(group.id, `file://${destPath}`);
+          }
+        } catch (e) {}
+      }},
+      { text: "Remove Photo", onPress: async () => {
+        const updated = { ...groupPhotos };
+        delete updated[group.id];
+        setGroupPhotos(updated);
+        await AsyncStorage.setItem("speaq_group_photos", JSON.stringify(updated));
+      }},
+      { text: "Delete Group", style: "destructive", onPress: () => {
+        deleteGroup(group.id).then(() => setGroups(getGroups()));
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  return (
+    <View style={st.container}>
+      <View style={st.header}>
+        <Text style={st.title}>Groups</Text>
+        <TouchableOpacity style={st.createBtn} onPress={() => setShowCreate(true)}>
+          <Text style={st.createBtnText}>+ New</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={st.list} contentContainerStyle={{ paddingBottom: 100 }}>
+        {groups.length === 0 ? (
+          <View style={st.empty}>
+            <Text style={st.emptyTitle}>No groups yet</Text>
+            <Text style={st.emptySub}>Create a group to chat with multiple people at once</Text>
+          </View>
+        ) : (
+          groups.map((g) => (
+            <View key={g.id} style={st.groupRow}>
+              <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", flex: 1 }} onPress={() => onOpenGroupChat(g.id, g.name)}>
+                {groupPhotos[g.id] ? (
+                  <Image source={{ uri: groupPhotos[g.id] }} style={st.groupPhoto} />
+                ) : (
+                  <View style={st.groupIcon}>
+                    <Text style={st.groupIconText}>{g.name.charAt(0)}</Text>
+                  </View>
+                )}
+                <View style={st.groupInfo}>
+                  <Text style={st.groupName}>{g.name}</Text>
+                  <Text style={st.groupMembers}>{g.members.length} members</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.groupActionBtn} onPress={() => handleGroupActions(g)}>
+                <Text style={st.groupActionDots}>...</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      {/* Create Group Modal */}
+      <Modal visible={showCreate} animationType="slide">
+        <View style={st.createContainer}>
+          <View style={st.createHeader}>
+            <TouchableOpacity onPress={() => { setShowCreate(false); setGroupName(""); setSelectedMembers([]); }}>
+              <Text style={st.createCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={st.createTitle}>New Group</Text>
+            <TouchableOpacity onPress={handleCreate} disabled={!groupName.trim()}>
+              <Text style={[st.createDone, !groupName.trim() && { opacity: 0.3 }]}>Create</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Group Photo */}
+          <TouchableOpacity style={st.photoPicker} onPress={handlePickGroupPhoto}>
+            {groupPhoto ? (
+              <Image source={{ uri: groupPhoto }} style={st.photoPreview} />
+            ) : (
+              <View style={st.photoPlaceholder}>
+                <Text style={st.photoPlaceholderIcon}>+</Text>
+                <Text style={st.photoPlaceholderText}>Add Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TextInput
+            style={st.nameInput}
+            value={groupName}
+            onChangeText={setGroupName}
+            placeholder="Group name"
+            placeholderTextColor={colors.signal.steel}
+          />
+
+          <Text style={st.sectionLabel}>Add Members ({selectedMembers.length})</Text>
+
+          {contacts.length === 0 ? (
+            <Text style={st.emptyContacts}>Add contacts first to create a group.</Text>
+          ) : (
+            <ScrollView style={st.membersList}>
+              {contacts.map((c) => {
+                const selected = !!selectedMembers.find((m) => m.id === c.id);
+                return (
+                  <TouchableOpacity key={c.id} style={st.memberRow} onPress={() => toggleMember(c)}>
+                    <View style={[st.memberCheck, selected && st.memberChecked]}>
+                      {selected && <Text style={st.checkMark}>V</Text>}
+                    </View>
+                    <View style={st.memberAvatar}>
+                      <Text style={st.memberInit}>{c.name.charAt(0)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={st.memberName}>{c.name}</Text>
+                      <Text style={st.memberId}>{c.id}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.depth.void },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
+  createBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  createBtnText: { color: colors.depth.void, fontSize: 13, fontWeight: "600" },
+  list: { flex: 1 },
+  empty: { alignItems: "center", paddingTop: 60 },
+  emptyTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
+  emptySub: { color: colors.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
+  groupRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  groupPhoto: { width: 48, height: 48, borderRadius: 24, marginRight: 16, borderWidth: 1, borderColor: colors.voice.gold },
+  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 16, borderWidth: 1, borderColor: colors.voice.gold },
+  groupIconText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
+  groupInfo: { flex: 1 },
+  groupName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
+  groupMembers: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
+  groupActionBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  groupActionDots: { color: colors.signal.steel, fontSize: 20, fontWeight: "700" },
+
+  createContainer: { flex: 1, backgroundColor: colors.depth.void },
+  createHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  createCancel: { color: colors.signal.steel, fontSize: 16 },
+  createTitle: { color: colors.signal.white, fontSize: 17, fontWeight: "600" },
+  createDone: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  nameInput: { marginHorizontal: 20, marginTop: 20, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, color: colors.signal.white, fontSize: 16 },
+  sectionLabel: { color: colors.signal.steel, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, paddingHorizontal: 20, marginTop: 24, marginBottom: 12 },
+  emptyContacts: { color: colors.signal.steel, fontSize: 12, paddingHorizontal: 20 },
+  membersList: { flex: 1, paddingHorizontal: 20 },
+  memberRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  memberCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.border.subtle, marginRight: 12, alignItems: "center", justifyContent: "center" },
+  memberChecked: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
+  checkMark: { color: colors.depth.void, fontSize: 14, fontWeight: "700" },
+  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
+  memberInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  memberName: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
+  memberId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  photoPicker: { alignItems: "center", marginBottom: 16 },
+  photoPreview: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.voice.gold },
+  photoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.border.subtle },
+  photoPlaceholderIcon: { color: colors.voice.gold, fontSize: 28, fontWeight: "300" },
+  photoPlaceholderText: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+});

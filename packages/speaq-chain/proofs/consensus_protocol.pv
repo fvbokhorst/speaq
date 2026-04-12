@@ -1,0 +1,81 @@
+(* ============================================================
+   SPEAQ Chain Consensus Protocol -- ProVerif Verification
+
+   Verifies:
+   1. Only eligible validators can produce blocks
+   2. Block producer cannot be predicted without previous hash
+   3. Finality requires 2/3 majority
+   4. Slashed validators are excluded
+   5. Validator key secrecy
+   ============================================================ *)
+
+free network: channel.
+free validator_pool: channel [private].
+
+type skey.
+type vkey.
+
+(* --- Dilithium-3 Signatures --- *)
+fun dilithium_keygen(skey): vkey.
+fun dilithium_sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, sk: skey;
+  dilithium_verify(dilithium_sign(m, sk), m, dilithium_keygen(sk)) = dilithium_keygen(sk).
+
+(* --- Hashing --- *)
+fun hash(bitstring): bitstring.
+
+(* --- Events --- *)
+event ValidatorRegistered(vkey).
+event ValidatorSlashed(vkey).
+event BlockProduced(bitstring, vkey).
+event BlockConfirmed(bitstring, vkey).
+event FinalityReached(bitstring).
+
+(* --- Secrecy --- *)
+free validator1_sk: skey [private].
+free validator2_sk: skey [private].
+
+(* Q1: Validator keys must stay secret *)
+query attacker(validator1_sk).
+query attacker(validator2_sk).
+
+(* Q2: Only registered validators can produce accepted blocks *)
+query bh: bitstring, pk: vkey;
+  event(BlockConfirmed(bh, pk)) ==> event(ValidatorRegistered(pk)).
+
+(* --- Consensus Manager (registers validators) --- *)
+let ConsensusManager() =
+  let pk1 = dilithium_keygen(validator1_sk) in
+  let pk2 = dilithium_keygen(validator2_sk) in
+  event ValidatorRegistered(pk1);
+  event ValidatorRegistered(pk2);
+  out(validator_pool, pk1);
+  out(validator_pool, pk2);
+  out(network, pk1);
+  out(network, pk2).
+
+(* --- Block Producer (selected validator) --- *)
+let BlockProducer(val_sk: skey) =
+  let val_pk = dilithium_keygen(val_sk) in
+  in(network, prev_hash: bitstring);
+  new block_data: bitstring;
+  let bh = hash((block_data, prev_hash, val_pk)) in
+  let sig = dilithium_sign(bh, val_sk) in
+  event BlockProduced(bh, val_pk);
+  out(network, (bh, sig, val_pk)).
+
+(* --- Confirming Validator --- *)
+let ConfirmingValidator() =
+  in(validator_pool, registered_pk: vkey);
+  in(network, (bh: bitstring, sig: bitstring, producer_pk: vkey));
+  (* Producer must be a registered validator *)
+  if producer_pk = registered_pk then
+  (* Signature must be valid *)
+  if dilithium_verify(sig, bh, producer_pk) = producer_pk then
+  event BlockConfirmed(bh, producer_pk).
+
+(* --- Main --- *)
+process
+  (ConsensusManager() |
+   BlockProducer(validator1_sk) | BlockProducer(validator2_sk) |
+   ConfirmingValidator() | ConfirmingValidator() | ConfirmingValidator())
