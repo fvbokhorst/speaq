@@ -48,10 +48,13 @@ export default function MiningScreen({ onBack }: Props) {
     });
     // Fetch real on-chain supply data
     const fetchChain = () => {
-      fetch(`${CHAIN_API}/api/wallet/balance`, { signal: AbortSignal.timeout(5000) })
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      fetch(`${CHAIN_API}/api/wallet/balance`, { signal: controller.signal })
         .then((r) => r.ok ? r.json() : null)
         .then((d) => { if (d?.balance) setChainBalance(d.balance); })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => clearTimeout(timeout));
     };
     fetchChain();
     // Refresh stats every 10 seconds
@@ -167,11 +170,11 @@ export default function MiningScreen({ onBack }: Props) {
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Network Mined</Text>
-            <Text style={st.networkValue}>{chainBalance > 0 ? chainBalance.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "--"} QC</Text>
+            <Text style={st.networkValue}>{chainBalance > 0 ? chainBalance.toFixed(1) : "--"} QC</Text>
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Remaining</Text>
-            <Text style={st.networkValue}>{chainBalance > 0 ? (21000000 - chainBalance).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "--"} QC</Text>
+            <Text style={st.networkValue}>{chainBalance > 0 ? (21000000 - chainBalance).toFixed(1) : "--"} QC</Text>
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Your Earnings</Text>
