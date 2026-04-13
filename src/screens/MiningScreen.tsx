@@ -30,7 +30,7 @@ const TYPE_INFO: Record<MiningType, { icon: string; name: string; desc: string }
   onboarding: { icon: "O", name: "Onboarding Contribution", desc: "Bring new active users" },
 };
 
-const CHAIN_API = "http://136.109.120.222:9334";
+const CHAIN_API = "https://thespeaq.com";
 
 export default function MiningScreen({ onBack }: Props) {
   const [active, setActive] = useState(isMiningActive());
@@ -50,7 +50,7 @@ export default function MiningScreen({ onBack }: Props) {
     const fetchChain = () => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
-      fetch(`${CHAIN_API}/api/wallet/balance`, { signal: controller.signal })
+      fetch(`${CHAIN_API}/api/admin/chain`, { signal: controller.signal })
         .then((r) => r.ok ? r.json() : null)
         .then((d) => { if (d?.balance) setChainBalance(d.balance); })
         .catch(() => {})
