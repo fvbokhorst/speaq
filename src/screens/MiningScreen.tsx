@@ -30,11 +30,14 @@ const TYPE_INFO: Record<MiningType, { icon: string; name: string; desc: string }
   onboarding: { icon: "O", name: "Onboarding Contribution", desc: "Bring new active users" },
 };
 
+const CHAIN_API = "http://136.109.120.222:9334";
+
 export default function MiningScreen({ onBack }: Props) {
   const [active, setActive] = useState(isMiningActive());
   const [stats, setStats] = useState<MiningStats>(getMiningStats());
   const [rewards, setRewards] = useState<MiningReward[]>(getMiningRewards());
   const [estimated, setEstimated] = useState(getEstimatedDaily());
+  const [chainBalance, setChainBalance] = useState<number>(0);
 
   useEffect(() => {
     loadMining().then(() => {
@@ -43,11 +46,20 @@ export default function MiningScreen({ onBack }: Props) {
       setRewards(getMiningRewards());
       setEstimated(getEstimatedDaily());
     });
+    // Fetch real on-chain supply data
+    const fetchChain = () => {
+      fetch(`${CHAIN_API}/api/wallet/balance`, { signal: AbortSignal.timeout(5000) })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (d?.balance) setChainBalance(d.balance); })
+        .catch(() => {});
+    };
+    fetchChain();
     // Refresh stats every 10 seconds
     const interval = setInterval(() => {
       setStats(getMiningStats());
       setRewards(getMiningRewards());
       setEstimated(getEstimatedDaily());
+      fetchChain();
     }, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -154,23 +166,23 @@ export default function MiningScreen({ onBack }: Props) {
             <Text style={st.networkValue}>1 QC = 0.01g Gold</Text>
           </View>
           <View style={st.networkRow}>
-            <Text style={st.networkLabel}>Network Earned</Text>
-            <Text style={st.networkValue}>{getSupplyInfo().totalMined.toFixed(2)} QC</Text>
+            <Text style={st.networkLabel}>Network Mined</Text>
+            <Text style={st.networkValue}>{chainBalance > 0 ? chainBalance.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "--"} QC</Text>
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Remaining</Text>
-            <Text style={st.networkValue}>{(getSupplyInfo().remaining).toLocaleString()} QC</Text>
+            <Text style={st.networkValue}>{chainBalance > 0 ? (21000000 - chainBalance).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "--"} QC</Text>
           </View>
           <View style={st.networkRow}>
-            <Text style={st.networkLabel}>Current Halving</Text>
-            <Text style={st.networkValue}>#{getSupplyInfo().currentHalving}</Text>
+            <Text style={st.networkLabel}>Your Earnings</Text>
+            <Text style={[st.networkValue, { color: colors.quantum.teal }]}>{stats.totalEarned.toFixed(4)} QC</Text>
           </View>
           <View style={st.networkRow}>
-            <Text style={st.networkLabel}>Smallest Unit</Text>
-            <Text style={st.networkValue}>1 Spark = 0.00000001 QC</Text>
+            <Text style={st.networkLabel}>Halving</Text>
+            <Text style={st.networkValue}>#{chainBalance > 0 ? Math.floor(chainBalance / 2100000) : 0}</Text>
           </View>
           <View style={st.levelBar}>
-            <View style={[st.levelFill, { width: `${Math.min(100, (getSupplyInfo().totalMined / 21000000) * 100)}%` }]} />
+            <View style={[st.levelFill, { width: `${Math.min(100, Math.max(0.1, (chainBalance / 21000000) * 100))}%` }]} />
           </View>
         </View>
 
