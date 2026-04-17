@@ -1,97 +1,53 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# SPEAQ
 
-# Getting Started
+**Private messaging with community rewards. Source-available, privacy-first.**
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+SPEAQ is a next-generation messenger built on a simple principle: your conversations are yours. End-to-end encryption is the default. No logs. No servers holding your content. No data brokers.
 
-## Step 1: Start Metro
+This repository contains the SPEAQ native application (React Native, iOS and Android) together with supporting modules.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## What SPEAQ offers
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Private one-to-one and group messaging
+- Encrypted voice and video calls
+- Photo, voice note, document and location sharing
+- Personal on-device vault for notes and files
+- Community rewards programme: earn credits for active participation
+- Contact discovery via QR code, no phone number upload required
 
-```sh
-# Using npm
-npm start
+## Architecture overview
 
-# OR using Yarn
-yarn start
-```
+- Post-quantum cryptography: ML-KEM (FIPS 203) for key exchange, ML-DSA (FIPS 204) for signatures, AES-256-GCM for symmetric encryption
+- Local-first design: messages and contacts never leave your device unencrypted
+- No analytics, no tracking SDKs, no advertising identifiers
+- Rewards credits stored locally on device
 
-## Step 2: Build and run your app
+## Related repositories
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+- **SPEAQ Web and PWA:** [FvBokhorst/speaq-web](https://github.com/FvBokhorst/speaq-web)
 
-### Android
+## License
 
-```sh
-# Using npm
-npm run android
+SPEAQ is **source-available** under the **Polyform Noncommercial License 1.0.0**.
 
-# OR using Yarn
-yarn android
-```
+You can read, inspect, fork, and improve the code. You can propose changes via pull requests. You cannot sell SPEAQ, offer it as a paid service, or use it in a commercial product. See [LICENSE](./LICENSE) for full terms.
 
-### iOS
+For commercial licensing inquiries, contact `legal@thespeaq.com`.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+Note: this is a source-available license, not an OSI-approved open-source license. It is deliberately chosen to protect the community spirit of SPEAQ against commercial exploitation.
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+## Contributing
 
-```sh
-bundle install
-```
+Suggestions and improvements are welcome. Please open an issue first to discuss what you would like to change. Pull requests against the `main` branch are reviewed on a best-effort basis. By contributing, you agree that your contributions are licensed under the same Polyform Noncommercial License 1.0.0.
 
-Then, and every time you update your native dependencies, run:
+## Privacy
 
-```sh
-bundle exec pod install
-```
+SPEAQ does not collect any personal data from its users. See the full privacy policy at [thespeaq.com/privacy](https://thespeaq.com/privacy).
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Security disclosure
 
-```sh
-# Using npm
-npm run ios
+If you believe you have found a security vulnerability, please report it responsibly via `security@thespeaq.com`. Do not open a public issue for suspected vulnerabilities. We respond within three business days.
 
-# OR using Yarn
-yarn ios
-```
+---
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+By the people. For the people.
