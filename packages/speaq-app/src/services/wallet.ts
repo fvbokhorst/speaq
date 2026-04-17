@@ -241,8 +241,9 @@ class WalletService {
 
   /**
    * Convert Q-Credits to stablecoin.
-   * Rate: 1 QC = 1 USD equivalent (pegged to gold-backed value).
-   * In production, this would call a DEX or liquidity pool.
+   * Real peg: 1 QC = 0.01 gram gold (floor value via oracle, market price may exceed).
+   * MVP placeholder: 1:1 conversion rate until gold feed + DEX integration is live.
+   * In production, this would call a DEX or liquidity pool using the live oracle price.
    */
   convertQCtoStablecoin(amount: number, type: StablecoinWallet["type"]): boolean {
     if (amount <= 0 || amount > this.balance) return false;
