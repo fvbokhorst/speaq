@@ -959,6 +959,8 @@ async fn start_api_server_with_state(
     use sha2::Digest;
 
     let data_dir_balance = data_dir.clone();
+    #[cfg(feature = "testnet")]
+    let data_dir_for_faucet = data_dir.clone();
 
     let pc = peer_count.clone();
     let ch = chain_height.clone();
@@ -1080,8 +1082,124 @@ async fn start_api_server_with_state(
             }
 
             (StatusCode::OK, Json(serde_json::json!({ "status": "accepted", "txId": tx_id, "message": "Transaction verified and added to mempool" })))
-        }))
-        .layer(CorsLayer::permissive());
+        }));
+
+    // Testnet-only: public faucet endpoint. POST /api/faucet { "address": "SQ1..." }
+    // dispenses 100 QC from the node's own validator wallet. Rate limited to
+    // one claim per address per 24 hours, tracked in memory (resets on restart,
+    // which is acceptable for a developer testnet). Never compiled on mainnet.
+    #[cfg(feature = "testnet")]
+    let app = {
+        use speaq_chain::wallet::Wallet;
+
+        const FAUCET_AMOUNT_QC: f64 = 100.0;
+        const FAUCET_RATE_LIMIT_SECS: i64 = 24 * 60 * 60;
+
+        let faucet_limits: Arc<Mutex<std::collections::HashMap<String, i64>>> =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let data_dir_faucet = data_dir_for_faucet.clone();
+        let mempool_faucet = mempool.clone();
+
+        app.route(
+            "/api/faucet",
+            post(move |Json(body): Json<serde_json::Value>| {
+                let limits = faucet_limits.clone();
+                let data_dir = data_dir_faucet.clone();
+                let mempool_faucet = mempool_faucet.clone();
+                async move {
+                    let address = body.get("address").and_then(|v| v.as_str()).unwrap_or("");
+                    if !address.starts_with("SQ1") {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(serde_json::json!({ "error": "address must start with SQ1" })),
+                        );
+                    }
+
+                    let now = chrono::Utc::now().timestamp();
+                    {
+                        let mut map = limits.lock().unwrap();
+                        if let Some(&last) = map.get(address) {
+                            let wait = FAUCET_RATE_LIMIT_SECS - (now - last);
+                            if wait > 0 {
+                                return (
+                                    StatusCode::TOO_MANY_REQUESTS,
+                                    Json(serde_json::json!({
+                                        "error": "rate limited",
+                                        "retry_in_seconds": wait,
+                                    })),
+                                );
+                            }
+                        }
+                        map.insert(address.to_string(), now);
+                    }
+
+                    let wallet: Wallet = match load_wallet(&data_dir) {
+                        Some(w) => w,
+                        None => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(serde_json::json!({ "error": "faucet wallet not found" })),
+                            );
+                        }
+                    };
+
+                    let from = wallet.address.to_string_short();
+                    let msg_obj = serde_json::json!({
+                        "from": from,
+                        "to": address,
+                        "amount": FAUCET_AMOUNT_QC,
+                        "nonce": now,
+                    });
+                    let msg_bytes = serde_json::to_vec(&msg_obj).unwrap();
+                    let msg_hex = hex::encode(&msg_bytes);
+
+                    let sig = wallet.sign(&msg_bytes);
+                    let sig_hex = hex::encode(&sig.0);
+                    let pk_bytes =
+                        speaq_chain::crypto::dilithium::export_public_key(&wallet.signing.public_key);
+                    let pk_hex = hex::encode(pk_bytes.0);
+
+                    let tx_id = hex::encode(&sha2::Sha256::digest(msg_bytes.as_slice())[..16]);
+                    let tx = serde_json::json!({
+                        "id": tx_id,
+                        "from": from,
+                        "to": address,
+                        "amount": FAUCET_AMOUNT_QC,
+                        "publicKey": pk_hex,
+                        "signature": sig_hex,
+                        "message": msg_hex,
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                        "status": "pending",
+                        "source": "faucet",
+                    });
+
+                    {
+                        let mut pool = mempool_faucet.lock().unwrap();
+                        pool.push(tx.clone());
+                        println!(
+                            "  [FAUCET] {:.2} QC -> {} | mempool={}",
+                            FAUCET_AMOUNT_QC,
+                            address,
+                            pool.len()
+                        );
+                    }
+
+                    (
+                        StatusCode::OK,
+                        Json(serde_json::json!({
+                            "status": "success",
+                            "amount": FAUCET_AMOUNT_QC,
+                            "to": address,
+                            "tx_id": tx_id,
+                            "network": "testnet",
+                        })),
+                    )
+                }
+            }),
+        )
+    };
+
+    let app = app.layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.ok();
