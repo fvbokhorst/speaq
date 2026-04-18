@@ -24,9 +24,24 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-/// Topics for GossipSub
+/// libp2p identify protocol string. Mainnet and testnet use different
+/// strings; peers with mismatched strings fail the handshake.
+#[cfg(not(feature = "testnet"))]
+pub const LIBP2P_PROTOCOL: &str = "/speaq/1.0.0";
+#[cfg(feature = "testnet")]
+pub const LIBP2P_PROTOCOL: &str = "/speaq-testnet/1.0.0";
+
+/// Topics for GossipSub. Separate topics per network prevent cross-talk
+/// even if a peer somehow joins both networks.
+#[cfg(not(feature = "testnet"))]
 pub const TOPIC_BLOCKS: &str = "speaq/blocks/1.0";
+#[cfg(feature = "testnet")]
+pub const TOPIC_BLOCKS: &str = "speaq-testnet/blocks/1.0";
+
+#[cfg(not(feature = "testnet"))]
 pub const TOPIC_TRANSACTIONS: &str = "speaq/txs/1.0";
+#[cfg(feature = "testnet")]
+pub const TOPIC_TRANSACTIONS: &str = "speaq-testnet/txs/1.0";
 
 /// Network messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,9 +126,11 @@ pub fn create_swarm() -> Result<Swarm<SpeaqBehaviour>, Box<dyn std::error::Error
                 kad::store::MemoryStore::new(key.public().to_peer_id()),
             );
 
-            // Identify
+            // Identify. The protocol string is part of the libp2p handshake;
+            // peers with a different string will refuse to connect. Mainnet
+            // and testnet therefore cannot peer with each other.
             let identify = identify::Behaviour::new(identify::Config::new(
-                "/speaq/1.0.0".to_string(),
+                LIBP2P_PROTOCOL.to_string(),
                 key.public(),
             ));
 

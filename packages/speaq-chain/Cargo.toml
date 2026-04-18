@@ -82,6 +82,10 @@ futures = "0.3"
 [features]
 default = []
 tor = ["arti-client", "tor-rtcompat"]
+# Build a testnet binary. Changes the genesis motto and the libp2p
+# protocol string so a testnet node can never accept mainnet blocks
+# and never peer with mainnet nodes.
+testnet = []
 
 [dev-dependencies]
 tempfile = "3"

@@ -12,8 +12,17 @@ use crate::crypto::dilithium;
 use crate::transaction::Transaction;
 use crate::wallet::Wallet;
 
-/// The SPEAQ Chain motto, embedded in the genesis block
+/// The SPEAQ Chain motto, embedded in the genesis block.
+///
+/// Mainnet and testnet each embed a different motto, which flows into the
+/// coinbase `extra` field, the merkle root, and ultimately the genesis
+/// block hash. A testnet node therefore has a different genesis hash than
+/// a mainnet node, and neither will accept blocks that chain to the other.
+#[cfg(not(feature = "testnet"))]
 pub const GENESIS_MOTTO: &str = "By the people, for the people. - SPEAQ Chain Genesis, April 2026";
+
+#[cfg(feature = "testnet")]
+pub const GENESIS_MOTTO: &str = "SPEAQ Testnet Genesis - development only, tokens have no value. April 2026";
 
 /// Create the genesis block
 ///

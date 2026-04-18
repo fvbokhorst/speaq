@@ -1,0 +1,51 @@
+# SPEAQ Chain TESTNET Node - Docker build.
+#
+# Identical to the mainnet Dockerfile except the cargo build uses
+# `--features testnet`, which swaps the genesis motto, libp2p protocol
+# string, and GossipSub topics at compile time. A testnet binary can
+# never accept a mainnet block and never peer with a mainnet node.
+#
+# Keep this file in sync with Dockerfile for everything except the
+# cargo build line.
+FROM rust:1.86-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    librocksdb-dev \
+    libclang-dev \
+    clang \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src/ src/
+COPY tests/ tests/
+
+# Build with the testnet feature flag
+RUN cargo build --release --features testnet
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    librocksdb7.8 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/target/release/speaq-chain /app/speaq-chain
+
+ENV DATA_DIR=/app/data
+RUN mkdir -p /app/data
+
+ENV PORT=9334
+ENV SPEAQ_NETWORK=testnet
+
+COPY entrypoint.testnet.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+EXPOSE 9334
+
+CMD ["/app/entrypoint.sh"]
