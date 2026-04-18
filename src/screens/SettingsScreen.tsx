@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image, DevSettings } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme/brand";
+import { colors, getThemeMode, setThemeMode, ThemeMode } from "../theme/brand";
 import { getIdentity, getKyberPublicKey } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
@@ -139,6 +139,7 @@ interface Props {
 export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, onOpenMining, onOpenInfo, onOpenBrowser, onLanguageChange }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(getThemeMode());
   const [showExport, setShowExport] = useState(false);
   const [exportData, setExportData] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -302,6 +303,34 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
         </View>
 
+        {/* Appearance */}
+        <Text style={st.sectionLabel}>{t("appearance")}</Text>
+        <View style={st.card}>
+          <View style={st.themeRow}>
+            {(["system", "dark", "light"] as ThemeMode[]).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[st.themeBtn, themeMode === mode && st.themeBtnActive]}
+                onPress={async () => {
+                  if (mode === themeMode) return;
+                  await setThemeMode(mode);
+                  setThemeModeState(mode);
+                  try {
+                    DevSettings.reload();
+                  } catch {
+                    Alert.alert(t("appearance"), t("themeRestart"));
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[st.themeBtnTxt, themeMode === mode && st.themeBtnTxtActive]}>
+                  {mode === "system" ? t("themeSystem") : mode === "dark" ? t("themeDark") : t("themeLight")}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Language */}
         <Text style={st.sectionLabel}>{t("language")}</Text>
         <View style={st.card}>
@@ -434,6 +463,11 @@ const st = StyleSheet.create({
   rowValueMono: { color: colors.voice.gold, fontSize: 12, fontFamily: "Courier" },
   rowValueTeal: { color: colors.quantum.teal, fontSize: 12 },
   rowAction: { color: colors.voice.gold, fontSize: 14, fontWeight: "500" },
+  themeRow: { flexDirection: "row", padding: 6, gap: 6 },
+  themeBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center", backgroundColor: "transparent" },
+  themeBtnActive: { backgroundColor: "rgba(212,168,83,0.15)" },
+  themeBtnTxt: { color: colors.signal.steel, fontSize: 14, fontWeight: "500" },
+  themeBtnTxtActive: { color: colors.voice.gold, fontWeight: "600" },
   langRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle },
   langRowActive: { backgroundColor: "rgba(212,168,83,0.08)" },
   langNative: { color: colors.signal.white, fontSize: 14 },

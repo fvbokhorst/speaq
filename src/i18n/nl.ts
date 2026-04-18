@@ -35,7 +35,12 @@ export default {
   settings: {
     title: "Instellingen",
     speaqId: "Jouw SPEAQ ID",
+    appearance: "Weergave",
     theme: "Thema",
+    themeSystem: "Systeem",
+    themeDark: "Donker",
+    themeLight: "Licht",
+    themeRestart: "Herstart de app om het nieuwe thema toe te passen.",
     language: "Taal",
     privacy: "Privacy",
     about: "Over SPEAQ",

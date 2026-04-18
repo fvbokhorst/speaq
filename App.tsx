@@ -27,6 +27,7 @@ import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
 import Logo from "./src/components/Logo";
+import { consumeThemeReloadMarker } from "./src/theme/brand";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
@@ -74,7 +75,10 @@ function App() {
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
       if (storedPin) {
         setSavedPin(storedPin);
-        setPhase("pin-enter");
+        // Skip the lock screen if the reload was caused by an in-app
+        // theme switch in the last 10 seconds. Preserves session continuity.
+        const skip = await consumeThemeReloadMarker();
+        setPhase(skip ? "main" : "pin-enter");
       } else {
         const seen = await AsyncStorage.getItem("speaq_onboarding_done");
         setPhase(seen ? "welcome" : "onboarding");

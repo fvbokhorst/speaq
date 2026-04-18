@@ -35,7 +35,12 @@ export default {
   settings: {
     title: "Settings",
     speaqId: "Your SPEAQ ID",
+    appearance: "Appearance",
     theme: "Theme",
+    themeSystem: "System",
+    themeDark: "Dark",
+    themeLight: "Light",
+    themeRestart: "Restart the app to apply the new theme.",
     language: "Language",
     privacy: "Privacy",
     about: "About SPEAQ",
