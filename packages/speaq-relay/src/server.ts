@@ -70,6 +70,44 @@ interface UserRecord {
 // All users ever seen, keyed by speaqId
 const allUsers = new Map<string, UserRecord>();
 
+// Country stats: anonymous aggregate counters (timezone-derived, no IP)
+const countryStats = new Map<string, number>();
+
+const COUNTRY_NAMES: Record<string, string> = {
+  AF: "Afghanistan", AL: "Albania", DZ: "Algeria", AR: "Argentina",
+  AM: "Armenia", AU: "Australia", AT: "Austria", AZ: "Azerbaijan",
+  BH: "Bahrain", BD: "Bangladesh", BY: "Belarus", BE: "Belgium",
+  BO: "Bolivia", BA: "Bosnia & Herzegovina", BR: "Brazil", BG: "Bulgaria",
+  KH: "Cambodia", CM: "Cameroon", CA: "Canada", CL: "Chile",
+  CN: "China", CO: "Colombia", CR: "Costa Rica", HR: "Croatia",
+  CU: "Cuba", CY: "Cyprus", CZ: "Czechia", DK: "Denmark",
+  EC: "Ecuador", EG: "Egypt", SV: "El Salvador", EE: "Estonia",
+  ET: "Ethiopia", FI: "Finland", FR: "France", GE: "Georgia",
+  DE: "Germany", GH: "Ghana", GR: "Greece", GT: "Guatemala",
+  HN: "Honduras", HK: "Hong Kong", HU: "Hungary", IS: "Iceland",
+  IN: "India", ID: "Indonesia", IR: "Iran", IQ: "Iraq",
+  IE: "Ireland", IL: "Israel", IT: "Italy", JM: "Jamaica",
+  JP: "Japan", JO: "Jordan", KZ: "Kazakhstan", KE: "Kenya",
+  KW: "Kuwait", KG: "Kyrgyzstan", LV: "Latvia", LB: "Lebanon",
+  LY: "Libya", LT: "Lithuania", LU: "Luxembourg", MO: "Macau",
+  MY: "Malaysia", MV: "Maldives", MT: "Malta", MX: "Mexico",
+  MD: "Moldova", MN: "Mongolia", ME: "Montenegro", MA: "Morocco",
+  MZ: "Mozambique", MM: "Myanmar", NP: "Nepal", NL: "Netherlands",
+  NZ: "New Zealand", NI: "Nicaragua", NG: "Nigeria", KP: "North Korea",
+  MK: "North Macedonia", NO: "Norway", OM: "Oman", PK: "Pakistan",
+  PA: "Panama", PY: "Paraguay", PE: "Peru", PH: "Philippines",
+  PL: "Poland", PT: "Portugal", QA: "Qatar", RO: "Romania",
+  RU: "Russia", SA: "Saudi Arabia", RS: "Serbia", SG: "Singapore",
+  SK: "Slovakia", SI: "Slovenia", ZA: "South Africa", KR: "South Korea",
+  ES: "Spain", LK: "Sri Lanka", SD: "Sudan", SE: "Sweden",
+  CH: "Switzerland", SY: "Syria", TW: "Taiwan", TJ: "Tajikistan",
+  TZ: "Tanzania", TH: "Thailand", TN: "Tunisia", TR: "Turkey",
+  TM: "Turkmenistan", UA: "Ukraine", AE: "UAE", GB: "United Kingdom",
+  US: "United States", UY: "Uruguay", UZ: "Uzbekistan", VE: "Venezuela",
+  VN: "Vietnam", YE: "Yemen", ZM: "Zambia", ZW: "Zimbabwe",
+  XX: "Unknown",
+};
+
 // Mining stats
 let totalMiningReceipts = 0;
 let totalQCMined = 0;
@@ -88,7 +126,12 @@ async function loadStats(): Promise<void> {
       }
       if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
       if (data.totalQCMined) totalQCMined = data.totalQCMined;
-      console.log(`  Stats loaded: ${allUsers.size} users from remote`);
+      if (data.countryStats) {
+        for (const [code, count] of Object.entries(data.countryStats)) {
+          countryStats.set(code, count as number);
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from remote`);
       return;
     }
   } catch (e) {
@@ -105,7 +148,12 @@ async function loadStats(): Promise<void> {
       }
       if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
       if (data.totalQCMined) totalQCMined = data.totalQCMined;
-      console.log(`  Stats loaded: ${allUsers.size} users from disk`);
+      if (data.countryStats) {
+        for (const [code, count] of Object.entries(data.countryStats)) {
+          countryStats.set(code, count as number);
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from disk`);
     }
   } catch (e) {
     console.error("  Failed to load stats:", e);
@@ -118,6 +166,7 @@ async function saveStats(): Promise<void> {
     users: Object.fromEntries(allUsers),
     totalMiningReceipts,
     totalQCMined,
+    countryStats: Object.fromEntries(countryStats),
     savedAt: Date.now(),
   };
   const json = JSON.stringify(data);
@@ -377,6 +426,29 @@ app.get("/api/v1/admin/stats", (req, res) => {
   });
 });
 
+// --- Country Stats Endpoint (privacy-preserving) ---
+app.get("/api/v1/admin/country-stats", (req, res) => {
+  const pin = (req.query.pin as string) || (req.headers["x-admin-pin"] as string);
+  if (!pin) {
+    return res.status(401).json({ error: "PIN required" });
+  }
+  const pinHash = crypto.createHash("sha256").update(pin).digest("hex");
+  if (pinHash !== ADMIN_PIN_HASH) {
+    return res.status(403).json({ error: "Invalid PIN" });
+  }
+
+  // Sort by count descending
+  const countries = Array.from(countryStats.entries())
+    .map(([code, count]) => ({
+      code,
+      count,
+      name: COUNTRY_NAMES[code] || code,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  res.json({ countries });
+});
+
 // --- Mining Receipt System (C+) ---
 // Relay signs a receipt for each mining contribution it witnesses.
 // Double signature: miner signs + relay co-signs = unforgeable proof.
@@ -552,6 +624,12 @@ wss.on("connection", (ws: WebSocket) => {
           }
 
           clients.set(clientId, { speaqId: clientId, ws, connectedAt: Date.now() });
+
+          // Track country code (privacy-preserving: timezone-derived, no IP)
+          if (msg.cc && typeof msg.cc === "string" && msg.cc.length === 2) {
+            const cc = msg.cc.toUpperCase();
+            countryStats.set(cc, (countryStats.get(cc) || 0) + 1);
+          }
 
           // Track user for admin stats
           const isNewUser = trackUser(clientId);
