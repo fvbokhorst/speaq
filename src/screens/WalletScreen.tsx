@@ -14,6 +14,7 @@ import { getIdentity } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
 import { t } from "../services/i18n";
+import { fetchLiveGoldPrice, formatRelativeAge, GoldOracleSnapshot } from "../services/goldOracle";
 
 interface Props {
   onOpenChat: (contactId: string, contactName: string) => void;
@@ -24,6 +25,17 @@ interface Props {
 export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLightning }: Props) {
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
+  const [goldOracle, setGoldOracle] = useState<GoldOracleSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      fetchLiveGoldPrice().then((snap) => { if (!cancelled) setGoldOracle(snap); });
+    };
+    run();
+    const interval = setInterval(run, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   // Live refresh balance every 5 seconds (for mining rewards)
   useEffect(() => {
@@ -193,6 +205,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
           <Text style={st.balanceLabel}>{t("qCredits")}</Text>
           <Text style={st.balanceAmount}>{balance.toFixed(2)}</Text>
           <Text style={st.balanceUsd}>~ {(balance * 0.01).toFixed(4)} gram gold</Text>
+          <Text style={st.balanceOracle}>
+            {goldOracle
+              ? `Oracle: $${goldOracle.usdPerGram.toFixed(2)}/g · ${goldOracle.sourcesUsed.length} src · ${formatRelativeAge(goldOracle.timestamp)}`
+              : "Oracle: offline"}
+          </Text>
           <View style={st.balanceActions}>
             <TouchableOpacity style={st.actionBtn} onPress={() => setShowSend(true)}>
               <Text style={st.actionIcon}>S</Text>
@@ -501,6 +518,7 @@ const st = StyleSheet.create({
   balanceLabel: { color: colors.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
   balanceAmount: { color: colors.voice.gold, fontSize: 48, fontWeight: "700", fontFamily: "Georgia", marginTop: 8 },
   balanceUsd: { color: colors.signal.steel, fontSize: 14, marginTop: 4 },
+  balanceOracle: { color: colors.signal.steel, fontSize: 10, marginTop: 4, opacity: 0.7 },
   balanceActions: { flexDirection: "row", gap: 24, marginTop: 20 },
   actionBtn: { alignItems: "center", backgroundColor: colors.depth.elevated, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
   actionIcon: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
