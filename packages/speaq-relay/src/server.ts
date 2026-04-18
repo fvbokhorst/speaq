@@ -118,7 +118,7 @@ async function loadStats(): Promise<void> {
   try {
     const res = await fetch(STATS_SERVER_URL);
     if (res.ok) {
-      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number };
+      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, number> };
       if (data.users) {
         for (const [id, record] of Object.entries(data.users)) {
           allUsers.set(id, record as UserRecord);
