@@ -21,9 +21,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
-COPY tests/ tests/
 
-# Build with the testnet feature flag
+# Build with the testnet feature flag. tests/ is excluded from the
+# Cloud Build upload via .gcloudignore and is not needed for the
+# release binary.
 RUN cargo build --release --features testnet
 
 # Runtime stage

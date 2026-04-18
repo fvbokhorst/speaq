@@ -1,0 +1,48 @@
+# Cloud Build config for the SPEAQ testnet node.
+# Builds the testnet-flavored image (cargo --features testnet) and
+# deploys it to Cloud Run as `speaq-testnet-node` in europe-west1.
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/speaq-testnet-node:$BUILD_ID'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/speaq-testnet-node:latest'
+      - '-f'
+      - 'Dockerfile.testnet'
+      - '.'
+    timeout: 1800s
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/speaq-testnet-node:$BUILD_ID']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/speaq-testnet-node:latest']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'speaq-testnet-node'
+      - '--image=gcr.io/$PROJECT_ID/speaq-testnet-node:$BUILD_ID'
+      - '--region=europe-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--min-instances=1'
+      - '--max-instances=1'
+      - '--timeout=300s'
+      - '--set-env-vars=SPEAQ_NETWORK=testnet'
+
+images:
+  - 'gcr.io/$PROJECT_ID/speaq-testnet-node:$BUILD_ID'
+  - 'gcr.io/$PROJECT_ID/speaq-testnet-node:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: 2400s
