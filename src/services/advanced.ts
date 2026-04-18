@@ -6,7 +6,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CryptoJS from "crypto-js";
-import { relay } from "./relay";
+import { relay, safeWsSend } from "./relay";
 import { loadKyberKeyPair } from "./crypto";
 
 // --- Private Groups ---

@@ -19,6 +19,7 @@ import {
   setKeystorePin,
 } from "./crypto";
 import { generateDID, saveDID, loadDID } from "./identity-manager";
+import { safeWsSend } from "./relay";
 
 // State
 let identity: {
@@ -150,7 +151,7 @@ function connectRelay() {
   ws.onopen = () => {
     connected = true;
     // Send AUTH with Kyber public key so relay can distribute it
-    ws?.send(JSON.stringify({
+    safeWsSend(ws, JSON.stringify({
       type: "AUTH",
       speaqId: identity!.speaqId,
       kyberPublicKey: kyberKeys?.publicKey || null,
@@ -206,8 +207,8 @@ async function handleKeyExchange(msg: any) {
   );
 
   // Send ciphertext back so they can decapsulate
-  if (kyberCiphertext && ws && connected) {
-    ws.send(JSON.stringify({
+  if (kyberCiphertext) {
+    safeWsSend(ws, JSON.stringify({
       type: "KEY_EXCHANGE_RESPONSE",
       to: msg.from,
       kyberCiphertext,
@@ -245,7 +246,7 @@ async function handleKeyExchangeResponse(msg: any) {
 export function initiateKeyExchange(toSpeaqId: string): void {
   if (!ws || !connected || !identity || !kyberKeys) return;
 
-  ws.send(JSON.stringify({
+  safeWsSend(ws, JSON.stringify({
     type: "KEY_EXCHANGE",
     to: toSpeaqId,
     from: identity.speaqId,
@@ -279,7 +280,7 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
   // If this is the first message and we got a kyberCiphertext,
   // send key exchange first
   if (kyberCiphertext) {
-    ws.send(JSON.stringify({
+    safeWsSend(ws, JSON.stringify({
       type: "KEY_EXCHANGE_RESPONSE",
       to: toSpeaqId,
       kyberCiphertext,
@@ -292,7 +293,7 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
 
   // Send as SEND_SEALED -- no sender ID exposed to relay
   // Sender identity is encrypted inside the blob
-  ws.send(JSON.stringify({
+  safeWsSend(ws, JSON.stringify({
     type: "SEND_SEALED",
     to: toSpeaqId,
     blob: JSON.stringify(ratchetMsg),

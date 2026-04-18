@@ -7,6 +7,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert } from "react-native";
 import { colors, spacing, radius } from "../theme/brand";
+import Logo from "../components/Logo";
 
 interface Props {
   onUnlock: () => void;
@@ -69,13 +70,8 @@ export default function LockScreen({ onUnlock, isFirstTime }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Logo */}
-      <View style={styles.logoRow}>
-        <Text style={styles.spea}>SPEA</Text>
-        <View style={styles.qCircle}>
-          <Text style={styles.qLetter}>Q</Text>
-          <View style={styles.qBall} />
-        </View>
+      <View style={styles.logoWrap}>
+        <Logo />
       </View>
 
       <Text style={styles.title}>{title}</Text>
@@ -123,14 +119,7 @@ export default function LockScreen({ onUnlock, isFirstTime }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
 
-  logoRow: { flexDirection: "row", alignItems: "center", marginBottom: 32 },
-  spea: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia", color: colors.signal.white, letterSpacing: -1 },
-  qCircle: {
-    width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.voice.gold,
-    alignItems: "center", justifyContent: "center", marginLeft: 2,
-  },
-  qLetter: { fontSize: 22, fontWeight: "700", fontFamily: "Georgia", color: colors.voice.gold, marginTop: -1 },
-  qBall: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.quantum.teal, position: "absolute", bottom: 5, right: 7 },
+  logoWrap: { marginBottom: 32 },
 
   title: { color: colors.signal.white, fontSize: 20, fontWeight: "600", marginBottom: 6 },
   subtitle: { color: colors.signal.steel, fontSize: 12, marginBottom: 32 },

@@ -26,6 +26,7 @@ import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
+import Logo from "./src/components/Logo";
 import { colors } from "./src/theme/brand";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
@@ -150,9 +151,8 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <View style={st.lockContainer}>
-          <View style={st.lockLogo}>
-            <Text style={st.lockSpea}>SPEA</Text>
-            <View style={st.lockQC}><Text style={st.lockQL}>Q</Text><View style={st.lockQB} /></View>
+          <View style={st.lockLogoWrap}>
+            <Logo />
           </View>
         </View>
       </SafeAreaProvider>
@@ -203,9 +203,8 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <View style={st.lockContainer}>
-          <View style={st.lockLogo}>
-            <Text style={st.lockSpea}>SPEA</Text>
-            <View style={st.lockQC}><Text style={st.lockQL}>Q</Text><View style={st.lockQB} /></View>
+          <View style={st.lockLogoWrap}>
+            <Logo />
           </View>
           <Text style={st.lockTitle}>{title}</Text>
           <Text style={st.lockSub}>{sub}</Text>
@@ -296,11 +295,7 @@ function PH({ title }: { title: string }) {
 
 const st = StyleSheet.create({
   lockContainer: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
-  lockLogo: { flexDirection: "row", alignItems: "center", marginBottom: 32 },
-  lockSpea: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia", color: colors.signal.white },
-  lockQC: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginLeft: 2 },
-  lockQL: { fontSize: 22, fontWeight: "700", fontFamily: "Georgia", color: colors.voice.gold, marginTop: -1 },
-  lockQB: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.quantum.teal, position: "absolute", bottom: 5, right: 7 },
+  lockLogoWrap: { marginBottom: 32 },
   lockTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", marginBottom: 6 },
   lockSub: { color: colors.signal.steel, fontSize: 12, marginBottom: 32 },
   dots: { flexDirection: "row", gap: 12, marginBottom: 40 },

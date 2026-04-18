@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Image, Modal, TextInput, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme/brand";
+import { colors, fonts } from "../theme/brand";
 import { getIdentity } from "../services/speaq";
 import { contactsService } from "../services/contacts";
 import { getContactPhoto } from "../services/profile";
@@ -216,7 +216,7 @@ export default function ChatListScreen({ onOpenChat }: Props) {
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.depth.void },
   header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  logo: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
+  logo: { fontSize: 28, fontWeight: "700", fontFamily: fonts.display },
   logoS: { color: colors.signal.white },
   logoQ: { color: colors.voice.gold },
   headerSub: { fontSize: 11, color: colors.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },

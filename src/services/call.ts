@@ -11,7 +11,7 @@ import {
   mediaDevices,
   MediaStream,
 } from "react-native-webrtc";
-import { relay } from "./relay";
+import { relay, safeWsSend } from "./relay";
 
 export type CallState = "idle" | "calling" | "ringing" | "connected" | "ended";
 

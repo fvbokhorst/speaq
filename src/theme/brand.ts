@@ -49,8 +49,8 @@ export const colors = {
 };
 
 export const fonts = {
-  display: "PlayfairDisplay",     // 700 Bold headlines, brand name
-  displayMedium: "PlayfairDisplay-Medium", // 500 Medium subtitles
+  display: "Playfair Display",    // Variable font (400-900), PostScript: PlayfairDisplay-Regular
+  displayMedium: "Playfair Display",
   body: "DMSans",                 // 400 Regular body text
   bodyMedium: "DMSans-Medium",    // 500 Medium emphasis
   system: "JetBrainsMono",        // 400 Regular code, specs

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated, TextInput, Modal } from "react-native";
 import { colors, spacing, radius } from "../theme/brand";
+import Logo from "../components/Logo";
 
 interface Props {
   onCreateIdentity: (name: string) => void;
@@ -26,16 +27,7 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
     <View style={styles.container}>
       <Animated.View style={[styles.content, { opacity: fadeIn }]}>
 
-        {/* SPEAQ logo */}
-        <View style={styles.logoRow}>
-          <Text style={styles.spea}>SPEA</Text>
-          <Animated.View style={[styles.qCircle, {
-            shadowOpacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.1, 0.5] })
-          }]}>
-            <Text style={styles.qLetter}>Q</Text>
-            <View style={styles.qBall} />
-          </Animated.View>
-        </View>
+        <Logo glowAnim={glowAnim} />
 
         <Text style={styles.freely}>SPEAQ Freely.</Text>
 
@@ -103,17 +95,6 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
   content: { alignItems: "center" },
-
-  logoRow: { flexDirection: "row", alignItems: "center" },
-  spea: { fontSize: 48, fontWeight: "700", fontFamily: "Georgia", color: colors.signal.white, letterSpacing: -1 },
-  qCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    borderWidth: 1.5, borderColor: colors.voice.gold,
-    alignItems: "center", justifyContent: "center", marginLeft: 2,
-    shadowColor: colors.voice.gold, shadowOffset: { width: 0, height: 0 }, shadowRadius: 15,
-  },
-  qLetter: { fontSize: 36, fontWeight: "700", fontFamily: "Georgia", color: colors.voice.gold, marginTop: -2 },
-  qBall: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.quantum.teal, position: "absolute", bottom: 8, right: 12 },
 
   freely: { color: colors.voice.warm, fontSize: 13, fontStyle: "italic", fontFamily: "Georgia", marginTop: 12, letterSpacing: 1 },
 

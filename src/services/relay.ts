@@ -32,6 +32,12 @@ function randomDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
+/** Safe send: skips when socket is CONNECTING/CLOSING/CLOSED so send() never throws INVALID_STATE_ERR. */
+export function safeWsSend(ws: WebSocket | null | undefined, payload: string): boolean {
+  if (!ws || ws.readyState !== 1) return false;
+  try { ws.send(payload); return true; } catch { return false; }
+}
+
 class RelayService {
   private ws: WebSocket | null = null;
   private speaqId: string | null = null;
@@ -64,7 +70,7 @@ class RelayService {
 
     this.ws.onopen = () => {
       this.connected = true;
-      this.ws?.send(JSON.stringify({ type: "AUTH", speaqId }));
+      safeWsSend(this.ws, JSON.stringify({ type: "AUTH", speaqId }));
     };
 
     this.ws.onmessage = (event) => {
@@ -120,14 +126,14 @@ class RelayService {
       id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
     });
 
-    this.ws.send(payload);
+    safeWsSend(this.ws, payload);
   }
 
   async sendTyping(to: string): Promise<void> {
     if (!this.ws || !this.connected) return;
     // Random delay for typing indicators too (anti-timing)
     await randomDelay();
-    this.ws.send(JSON.stringify({ type: "TYPING", to }));
+    safeWsSend(this.ws, JSON.stringify({ type: "TYPING", to }));
   }
 
   on(event: string, handler: MessageHandler): void {
