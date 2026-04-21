@@ -57,13 +57,17 @@ export async function upsertSubscription(input: {
 
 async function enforcePerUserLimit(speaqId: string): Promise<void> {
   const db = getFirestore();
-  const snap = await db
-    .collection(PUSH_COLLECTION)
-    .where("speaqId", "==", speaqId)
-    .orderBy("lastSeenAt", "desc")
-    .get();
+  const snap = await db.collection(PUSH_COLLECTION).where("speaqId", "==", speaqId).get();
   if (snap.size <= MAX_SUBS_PER_USER) return;
-  const excess = snap.docs.slice(MAX_SUBS_PER_USER);
+  // Sort in-memory: Firestore composite index would need to be provisioned
+  // per-deployment; for max 5 subs per user the JS sort is trivial and
+  // avoids the index ceremony.
+  const sorted = snap.docs.slice().sort((a, b) => {
+    const aT = (a.data() as { lastSeenAt?: number }).lastSeenAt || 0;
+    const bT = (b.data() as { lastSeenAt?: number }).lastSeenAt || 0;
+    return bT - aT;
+  });
+  const excess = sorted.slice(MAX_SUBS_PER_USER);
   const batch = db.batch();
   for (const d of excess) batch.delete(d.ref);
   await batch.commit();
