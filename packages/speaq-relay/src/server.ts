@@ -19,6 +19,8 @@ import http from "http";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { configurePush, triggerSilentPush, isConfigured as isPushConfigured } from "./push/push-service";
+import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from "./push/push-store";
 
 // --- Types ---
 
@@ -264,6 +266,14 @@ function queueOfflineMessage(to: string, from: string, blob: string): void {
     expiresAt: Date.now() + OFFLINE_MAX_AGE_MS,
   });
   offlineQueue.set(to, messages);
+
+  // Fire silent push to wake the recipient's device. Never awaited: push
+  // failures must not block queue writes.
+  if (isPushConfigured()) {
+    triggerSilentPush(to).catch((err) => {
+      console.warn("[push] trigger failed for", to, err instanceof Error ? err.message : err);
+    });
+  }
 }
 
 function getOfflineMessages(speaqId: string): OfflineMessage[] {
@@ -345,6 +355,71 @@ app.get("/api/v1/offline/:speaqId", (req, res) => {
 app.delete("/api/v1/offline/:speaqId", (req, res) => {
   clearOfflineMessages(req.params.speaqId);
   res.json({ cleared: true });
+});
+
+// --- Push subscription routes ---
+// Rate limit subscribe to 3 per hour per SPEAQ ID (abuse protection).
+const subscribeCounters = new Map<string, { count: number; resetAt: number }>();
+const SUBSCRIBE_WINDOW_MS = 60 * 60 * 1000;
+const SUBSCRIBE_MAX_PER_WINDOW = 3;
+
+function allowSubscribe(speaqId: string): boolean {
+  const now = Date.now();
+  const entry = subscribeCounters.get(speaqId);
+  if (!entry || now > entry.resetAt) {
+    subscribeCounters.set(speaqId, { count: 1, resetAt: now + SUBSCRIBE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= SUBSCRIBE_MAX_PER_WINDOW) return false;
+  entry.count++;
+  return true;
+}
+
+app.post("/api/push/subscribe", async (req, res) => {
+  const { speaqId, subscription, platform } = req.body || {};
+  if (!speaqId || typeof speaqId !== "string") {
+    return res.status(400).json({ error: "speaqId required" });
+  }
+  if (!subscription || !subscription.endpoint || !subscription.keys?.auth || !subscription.keys?.p256dh) {
+    return res.status(400).json({ error: "subscription with endpoint + keys required" });
+  }
+  if (!platform || !["web", "ios", "android"].includes(platform)) {
+    return res.status(400).json({ error: "platform must be web|ios|android" });
+  }
+  if (!allowSubscribe(speaqId)) {
+    return res.status(429).json({ error: "Subscribe rate limit exceeded" });
+  }
+
+  try {
+    const result = await upsertSubscription({
+      speaqId,
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      platform,
+    });
+    res.status(result.created ? 201 : 200).json({ ok: true, created: result.created });
+  } catch (err) {
+    console.error("[push] subscribe failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Subscribe failed" });
+  }
+});
+
+app.post("/api/push/unsubscribe", async (req, res) => {
+  const { speaqId, endpoint } = req.body || {};
+  if (!speaqId && !endpoint) {
+    return res.status(400).json({ error: "speaqId or endpoint required" });
+  }
+  try {
+    if (endpoint) {
+      const removed = await removeByEndpoint(endpoint);
+      return res.json({ ok: true, removed });
+    }
+    const count = await removeAllFor(speaqId);
+    res.json({ ok: true, removed: count });
+  } catch (err) {
+    console.error("[push] unsubscribe failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Unsubscribe failed" });
+  }
 });
 
 // Network stats
@@ -930,7 +1005,36 @@ setInterval(() => {
 
 // --- Start ---
 
+// Never let a stray promise rejection crash the relay. In production with
+// Cloud Run a crash triggers a cold restart for every user. Push / Firestore
+// failures must stay contained to the failing request.
+process.on("unhandledRejection", (reason) => {
+  console.error("[relay] unhandledRejection:", reason instanceof Error ? reason.message : reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[relay] uncaughtException:", err instanceof Error ? err.message : err);
+});
+
 const PORT = parseInt(process.env.PORT || "8080", 10);
+
+// Configure web-push (VAPID). Skipped if env vars missing: push routes will
+// still accept subscribes but silent-push triggers become a no-op.
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:frank@plexaris.com";
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  configurePush({ publicKey: VAPID_PUBLIC, privateKey: VAPID_PRIVATE, subject: VAPID_SUBJECT });
+  console.log("[push] VAPID configured");
+} else {
+  console.warn("[push] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY missing -- push disabled");
+}
+
+// Daily cleanup of stale push subscriptions (30 days without use).
+setInterval(() => {
+  cleanupStale()
+    .then((n) => n > 0 && console.log(`[push] cleaned ${n} stale subscriptions`))
+    .catch((err) => console.warn("[push] cleanup failed:", err instanceof Error ? err.message : err));
+}, 24 * 60 * 60 * 1000);
 
 // Load persisted stats before starting
 loadStats();
