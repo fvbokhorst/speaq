@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Animated, TextInput, Modal } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Animated, TextInput, Modal, Keyboard, ActivityIndicator } from "react-native";
 import { colors, spacing, radius } from "../theme/brand";
 import Logo from "../components/Logo";
 
@@ -10,8 +10,24 @@ interface Props {
 export default function WelcomeScreen({ onCreateIdentity }: Props) {
   const [showNameModal, setShowNameModal] = useState(false);
   const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
+
+  // Close modal + dismiss keyboard before handing off to the parent -- so
+  // on iPad the subsequent phase transition isn't blocked by the Modal
+  // still being presented (iPadOS 26.5 regression: Alert presented while a
+  // RN Modal is visible can render beneath the modal overlay).
+  const submit = () => {
+    const trimmed = name.trim();
+    if (!trimmed || submitting) return;
+    setSubmitting(true);
+    Keyboard.dismiss();
+    setShowNameModal(false);
+    // Yield a frame so the modal unmount happens before the parent's
+    // async work (which may show its own UI).
+    setTimeout(() => onCreateIdentity(trimmed), 0);
+  };
 
   useEffect(() => {
     Animated.loop(
@@ -57,8 +73,18 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
         <Text style={styles.bottomText}>Verified Encryption  -  Your Data, Your Control</Text>
       </View>
 
-      {/* Name input modal - appears after tapping Create Your Identity */}
-      <Modal visible={showNameModal} transparent animationType="fade">
+      {/* Name input modal - appears after tapping Create Your Identity.
+          presentationStyle="overFullScreen" + statusBarTranslucent makes
+          iPad and iPhone render identically; default "fullScreen" opens
+          as a sheet on iPad which broke the flow for reviewers. */}
+      <Modal
+        visible={showNameModal}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={() => !submitting && setShowNameModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Your Identity</Text>
@@ -71,18 +97,27 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
               placeholderTextColor={colors.signal.steel}
               autoFocus
               returnKeyType="done"
-              onSubmitEditing={() => name.trim() && onCreateIdentity(name.trim())}
+              editable={!submitting}
+              onSubmitEditing={submit}
             />
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowNameModal(false)}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => !submitting && setShowNameModal(false)}
+                disabled={submitting}
+              >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirm, !name.trim() && styles.modalDisabled]}
-                onPress={() => name.trim() && onCreateIdentity(name.trim())}
-                disabled={!name.trim()}
+                style={[styles.modalConfirm, (!name.trim() || submitting) && styles.modalDisabled]}
+                onPress={submit}
+                disabled={!name.trim() || submitting}
               >
-                <Text style={styles.modalConfirmText}>Create</Text>
+                {submitting ? (
+                  <ActivityIndicator color={colors.depth.void} />
+                ) : (
+                  <Text style={styles.modalConfirmText}>Create</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

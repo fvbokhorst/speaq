@@ -183,11 +183,17 @@ function App() {
         <StatusBar barStyle="light-content" />
         <WelcomeScreen onCreateIdentity={async (name: string) => {
           try {
-            const id = await createIdentity(name);
-            Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
-              [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
-          } catch (err: any) {
-            Alert.alert("Error", err?.message || String(err));
+            await createIdentity(name);
+            // Direct phase transition -- no interstitial Alert. The old
+            // flow relied on an Alert button to advance, which on iPad
+            // could render behind the Modal and leave the app looking
+            // stuck to Apple reviewers. The pin-setup screen already
+            // tells the user "Set Your PIN / Secure your quantum identity".
+            setPhase("pin-setup");
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("[SPEAQ] createIdentity failed:", msg);
+            Alert.alert("Unable to create identity", msg);
           }
         }} />
       </SafeAreaProvider>
