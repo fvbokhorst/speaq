@@ -111,9 +111,9 @@ class WalletService {
     this.save();
   }
 
-  // Mining reward
+  // Contribution reward (Proof-of-Contribution, not cryptocurrency mining)
   addMiningReward(amount: number, type: string): void {
-    this.receive("SPEAQ Network", amount, `Mining: ${type}`);
+    this.receive("SPEAQ Network", amount, `Contribution: ${type}`);
   }
 
   // Initial bonus for new users
