@@ -72,8 +72,9 @@ interface UserRecord {
 // All users ever seen, keyed by speaqId
 const allUsers = new Map<string, UserRecord>();
 
-// Country stats: anonymous aggregate counters (timezone-derived, no IP)
-const countryStats = new Map<string, number>();
+// Country stats: unique users per country (timezone-derived, no IP)
+// Fix 2026-04-24: was aggregate message-count, now deduped by speaqId -> Set for accurate user count
+const countryStats = new Map<string, Set<string>>();
 
 const COUNTRY_NAMES: Record<string, string> = {
   AF: "Afghanistan", AL: "Albania", DZ: "Algeria", AR: "Argentina",
@@ -120,7 +121,7 @@ async function loadStats(): Promise<void> {
   try {
     const res = await fetch(STATS_SERVER_URL);
     if (res.ok) {
-      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, number> };
+      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number> };
       if (data.users) {
         for (const [id, record] of Object.entries(data.users)) {
           allUsers.set(id, record as UserRecord);
@@ -129,8 +130,9 @@ async function loadStats(): Promise<void> {
       if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
       if (data.totalQCMined) totalQCMined = data.totalQCMined;
       if (data.countryStats) {
-        for (const [code, count] of Object.entries(data.countryStats)) {
-          countryStats.set(code, count as number);
+        for (const [code, value] of Object.entries(data.countryStats)) {
+          // New format: Array<speaqId>. Old format (number) is legacy and ignored (stats refresh).
+          if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
       console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from remote`);
@@ -151,8 +153,8 @@ async function loadStats(): Promise<void> {
       if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
       if (data.totalQCMined) totalQCMined = data.totalQCMined;
       if (data.countryStats) {
-        for (const [code, count] of Object.entries(data.countryStats)) {
-          countryStats.set(code, count as number);
+        for (const [code, value] of Object.entries(data.countryStats)) {
+          if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
       console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from disk`);
@@ -168,7 +170,9 @@ async function saveStats(): Promise<void> {
     users: Object.fromEntries(allUsers),
     totalMiningReceipts,
     totalQCMined,
-    countryStats: Object.fromEntries(countryStats),
+    countryStats: Object.fromEntries(
+      Array.from(countryStats.entries()).map(([cc, ids]) => [cc, Array.from(ids)])
+    ),
     savedAt: Date.now(),
   };
   const json = JSON.stringify(data);
@@ -512,11 +516,11 @@ app.get("/api/v1/admin/country-stats", (req, res) => {
     return res.status(403).json({ error: "Invalid PIN" });
   }
 
-  // Sort by count descending
+  // Sort by count descending (count = unique speaqIds per country)
   const countries = Array.from(countryStats.entries())
-    .map(([code, count]) => ({
+    .map(([code, ids]) => ({
       code,
-      count,
+      count: ids.size,
       name: COUNTRY_NAMES[code] || code,
     }))
     .sort((a, b) => b.count - a.count);
@@ -703,7 +707,12 @@ wss.on("connection", (ws: WebSocket) => {
           // Track country code (privacy-preserving: timezone-derived, no IP)
           if (msg.cc && typeof msg.cc === "string" && msg.cc.length === 2) {
             const cc = msg.cc.toUpperCase();
-            countryStats.set(cc, (countryStats.get(cc) || 0) + 1);
+            let ids = countryStats.get(cc);
+            if (!ids) {
+              ids = new Set<string>();
+              countryStats.set(cc, ids);
+            }
+            ids.add(clientId);
           }
 
           // Track user for admin stats
