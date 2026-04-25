@@ -25,6 +25,13 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const push_service_1 = require("./push/push-service");
 const push_store_1 = require("./push/push-store");
+// Audit follow-up (2026-04-25): post-quantum AUTH. Server now accepts BOTH ECDSA P-256
+// (65-byte raw pubkey, the existing scheme used since C1) and ML-DSA-65 / FIPS 204
+// (1952-byte raw pubkey, the post-quantum scheme). The format is auto-detected from
+// the registered pubkey size in publicKeys.get(speaqId).signPublicKey. Existing users
+// keep working (ECDSA path), new users with PQ-capable clients can register an ML-DSA
+// pubkey via /api/v1/register and the AUTH challenge will use the PQ verify path.
+const ml_dsa_js_1 = require("@noble/post-quantum/ml-dsa.js");
 // --- State ---
 // In production: Redis for offline queue, PostgreSQL for public keys
 // For now: in-memory (sufficient for testing and small deployments)
@@ -86,6 +93,14 @@ let totalQCMined = 0;
 // While true, saveStats() refuses to overwrite the persisted file to avoid wiping a healthy
 // remote/disk copy with the in-memory zero-state from a fresh container.
 let statsLoadFailed = false;
+// Block list: per recipient, the set of speaqIds they have blocked.
+// On SEND/SEND_SEALED/CALL_*, if the recipient has the sender in their block-list, the relay drops
+// the message instead of forwarding (and instead of queuing offline). Persisted via stats remote+disk.
+const blockedByUser = new Map();
+const dmsConfigs = new Map();
+const witnessAnchors = [];
+const witnessAnchorByHash = new Map();
+const MAX_WITNESS_ANCHORS = 100_000; // soft cap to keep memory bounded
 // Load persisted stats from remote server (Google VM), fallback to local disk
 async function loadStats() {
     // Try remote first
@@ -109,7 +124,27 @@ async function loadStats() {
                         countryStats.set(code, new Set(value));
                 }
             }
-            console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from remote`);
+            if (data.blockedByUser) {
+                for (const [uid, blocked] of Object.entries(data.blockedByUser)) {
+                    if (Array.isArray(blocked))
+                        blockedByUser.set(uid, new Set(blocked));
+                }
+            }
+            if (data.dmsConfigs) {
+                for (const [uid, cfg] of Object.entries(data.dmsConfigs)) {
+                    if (cfg && typeof cfg === "object")
+                        dmsConfigs.set(uid, cfg);
+                }
+            }
+            if (Array.isArray(data.witnessAnchors)) {
+                for (const a of data.witnessAnchors) {
+                    if (a && typeof a.hash === "string") {
+                        witnessAnchors.push(a);
+                        witnessAnchorByHash.set(a.hash, a);
+                    }
+                }
+            }
+            console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs, ${witnessAnchors.length} witnessAnchors from remote`);
             return;
         }
     }
@@ -135,7 +170,27 @@ async function loadStats() {
                         countryStats.set(code, new Set(value));
                 }
             }
-            console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from disk`);
+            if (data.blockedByUser) {
+                for (const [uid, blocked] of Object.entries(data.blockedByUser)) {
+                    if (Array.isArray(blocked))
+                        blockedByUser.set(uid, new Set(blocked));
+                }
+            }
+            if (data.dmsConfigs) {
+                for (const [uid, cfg] of Object.entries(data.dmsConfigs)) {
+                    if (cfg && typeof cfg === "object")
+                        dmsConfigs.set(uid, cfg);
+                }
+            }
+            if (Array.isArray(data.witnessAnchors)) {
+                for (const a of data.witnessAnchors) {
+                    if (a && typeof a.hash === "string") {
+                        witnessAnchors.push(a);
+                        witnessAnchorByHash.set(a.hash, a);
+                    }
+                }
+            }
+            console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs, ${witnessAnchors.length} witnessAnchors from disk`);
         }
         else {
             console.warn("  No stats source available (remote + disk both failed). Counters START AT ZERO.");
@@ -172,6 +227,9 @@ async function saveStats() {
         totalMiningReceipts,
         totalQCMined,
         countryStats: Object.fromEntries(Array.from(countryStats.entries()).map(([cc, ids]) => [cc, Array.from(ids)])),
+        blockedByUser: Object.fromEntries(Array.from(blockedByUser.entries()).map(([uid, set]) => [uid, Array.from(set)])),
+        dmsConfigs: Object.fromEntries(dmsConfigs.entries()),
+        witnessAnchors: witnessAnchors.slice(-MAX_WITNESS_ANCHORS),
         savedAt: Date.now(),
     };
     const json = JSON.stringify(data);
@@ -509,12 +567,62 @@ app.get("/api/v1/admin/country-stats", (req, res) => {
 // --- Mining Receipt System (C+) ---
 // Relay signs a receipt for each mining contribution it witnesses.
 // Double signature: miner signs + relay co-signs = unforgeable proof.
-// Relay's own signing key (generated once at startup)
-const relaySigningKey = crypto_1.default.randomBytes(32).toString("hex");
+// Relay's own signing key for HMAC mining-receipts.
+// Persistent across restarts via env var RELAY_SIGNING_KEY (set as a Cloud Run secret). If absent,
+// we generate a one-shot dev key and warn loudly. Receipts issued under a one-shot dev key cannot be
+// verified after a redeploy, so production MUST set this env var.
+const relaySigningKey = (() => {
+    const fromEnv = process.env.RELAY_SIGNING_KEY;
+    if (fromEnv && fromEnv.length >= 32) {
+        console.log(`  Mining receipt key loaded from RELAY_SIGNING_KEY env (${fromEnv.length} chars). Receipts persist across restarts.`);
+        return fromEnv;
+    }
+    const generated = crypto_1.default.randomBytes(32).toString("hex");
+    console.error("=".repeat(80));
+    console.error("WARNING: RELAY_SIGNING_KEY env var not set. Generated a one-shot dev key.");
+    console.error("Receipts issued in this process cannot be verified after restart.");
+    console.error("For production: set RELAY_SIGNING_KEY as a Cloud Run secret (>=32 chars).");
+    console.error("=".repeat(80));
+    return generated;
+})();
 // Sign a mining receipt with the relay's key
 function relaySign(data) {
     return crypto_1.default.createHmac("sha256", relaySigningKey).update(data).digest("hex");
 }
+// --- Witness anchors -------------------------------------------------------
+// POST: client submits a SHA-256 hash of (description || deviceTs). Server records the
+// server-side anchor timestamp and HMAC-co-signs the tuple, then returns the anchor.
+// Anchors are persisted via the stats channel so they survive restarts.
+// GET: anyone can look up an anchor by hash to verify the (hash, anchorTs, signature) tuple.
+app.post("/api/v1/witness/anchor", (req, res) => {
+    const { speaqId, hash } = req.body || {};
+    if (!speaqId || typeof speaqId !== "string" || !hash || typeof hash !== "string") {
+        return res.status(400).json({ error: "speaqId and hash required" });
+    }
+    if (!/^[0-9a-f]{64}$/i.test(hash)) {
+        return res.status(400).json({ error: "hash must be 64 hex chars (SHA-256)" });
+    }
+    const existing = witnessAnchorByHash.get(hash);
+    if (existing)
+        return res.json({ existing: true, anchor: existing });
+    const anchorTs = Date.now();
+    const signature = relaySign(`anchor:${hash}:${speaqId}:${anchorTs}`);
+    const anchor = { hash, speaqId, anchorTs, signature };
+    witnessAnchors.push(anchor);
+    witnessAnchorByHash.set(hash, anchor);
+    if (witnessAnchors.length > MAX_WITNESS_ANCHORS) {
+        const dropped = witnessAnchors.shift();
+        if (dropped)
+            witnessAnchorByHash.delete(dropped.hash);
+    }
+    return res.json({ existing: false, anchor });
+});
+app.get("/api/v1/witness/anchor/:hash", (req, res) => {
+    const a = witnessAnchorByHash.get(req.params.hash.toLowerCase());
+    if (!a)
+        return res.status(404).json({ error: "Anchor not found" });
+    return res.json({ anchor: a });
+});
 // Issue a mining receipt
 app.post("/api/v1/mining/receipt", (req, res) => {
     const { speaqId, miningType, amount, timestamp, minerSignature } = req.body;
@@ -571,7 +679,13 @@ app.get("/api/v1/mining/network-stats", (_req, res) => {
         serverStartedAt,
     });
 });
-const dmsConfigs = new Map();
+// --- Dead Man's Switch (Server-Side) ---
+// DMSConfig interface and dmsConfigs Map are forward-declared near the top of this file so
+// loadStats() can populate them during startup. They are persisted via the same stats-server
+// channel as other relay state, so they survive Cloud Run cold-starts and deploys. The server
+// checks every 60 seconds. If a user is overdue, the server delivers their pre-prepared
+// encrypted message to all configured recipients. The encryptedMessage field is opaque to the
+// server - it is encrypted by the user's device before registration.
 // Register a DMS config
 app.post("/api/v1/dms/register", (req, res) => {
     const { speaqId, intervalMs, recipientIds, encryptedMessage } = req.body;
@@ -639,42 +753,154 @@ const server = http_1.default.createServer(app);
 const wss = new ws_1.WebSocketServer({ server });
 wss.on("connection", (ws) => {
     let clientId = null;
+    // Per-connection challenge state. When the client claims a speaqId for which we have a
+    // registered ECDSA public key, we issue a random nonce and require the next message to be
+    // an AUTH_RESPONSE with a valid signature over that nonce. The challenge expires after
+    // CHALLENGE_TTL_MS or after one attempt.
+    let pendingChallenge = null;
+    const CHALLENGE_TTL_MS = 30_000;
+    // Helper: complete authentication once identity has been established (either via verified
+    // signature, or via TOFU on first contact for users without a registered key).
+    const completeAuth = (sid, cc, mode) => {
+        clientId = sid;
+        clients.set(sid, { speaqId: sid, ws, connectedAt: Date.now() });
+        if (cc && typeof cc === "string" && cc.length === 2) {
+            const upper = cc.toUpperCase();
+            let ids = countryStats.get(upper);
+            if (!ids) {
+                ids = new Set();
+                countryStats.set(upper, ids);
+            }
+            ids.add(sid);
+        }
+        const isNewUser = trackUser(sid);
+        if (isNewUser)
+            notifyAdmin(`[SYSTEM] New user joined: ${sid.substring(0, 8)} (${mode})`);
+        const offline = getOfflineMessages(sid);
+        for (const m of offline) {
+            ws.send(JSON.stringify({ type: "RECEIVE", from: m.from, blob: m.blob, id: m.id }));
+        }
+        if (offline.length > 0)
+            clearOfflineMessages(sid);
+        ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length, authMode: mode }));
+    };
+    // Helper: verify the challenge signature.
+    // Hybrid scheme - the registered pubkey size determines the algorithm:
+    //   65 bytes  -> ECDSA P-256 raw uncompressed (NIST, pre-quantum, the original scheme).
+    //   1952 bytes -> ML-DSA-65 (FIPS 204 Dilithium, post-quantum).
+    // Other lengths (e.g. base64 of a JWK) are treated as ECDSA via Web Crypto subtle.importKey
+    // with format="jwk" parsed from the b64 payload, for compatibility with PWA clients that
+    // registered a JWK-encoded pubkey before the raw-format change.
+    const verifyChallengeSignature = async (signPublicKeyB64, nonce, signatureB64) => {
+        try {
+            const pub = Buffer.from(signPublicKeyB64, "base64");
+            const sig = Buffer.from(signatureB64, "base64");
+            // Path 1: ML-DSA-65 (post-quantum)
+            if (pub.length === 1952) {
+                try {
+                    return ml_dsa_js_1.ml_dsa65.verify(pub, Buffer.from(nonce, "utf-8"), sig);
+                }
+                catch (e) {
+                    console.warn("[auth] ML-DSA verify error:", e);
+                    return false;
+                }
+            }
+            // Path 2: ECDSA P-256 raw (65 byte uncompressed)
+            if (pub.length === 65) {
+                const key = await crypto_1.default.webcrypto.subtle.importKey("raw", pub, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+                return await crypto_1.default.webcrypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8"));
+            }
+            // Path 3: legacy JWK fallback - older PWA registered base64-of-JWK as pubkey.
+            // Try to parse as JSON, importKey with format="jwk". Use a minimal local interface
+            // because lib.dom is not in the relay tsconfig (Node-only build).
+            try {
+                const jwk = JSON.parse(pub.toString("utf-8"));
+                if (jwk.kty === "EC" && jwk.crv === "P-256") {
+                    const key = await crypto_1.default.webcrypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+                    return await crypto_1.default.webcrypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8"));
+                }
+            }
+            catch {
+                // not JWK, fall through
+            }
+            console.warn(`[auth] unrecognized signPublicKey format: length=${pub.length}`);
+            return false;
+        }
+        catch (e) {
+            console.error("[auth] verifyChallengeSignature error:", e);
+            return false;
+        }
+    };
     ws.on("message", (raw) => {
         try {
             const msg = JSON.parse(raw.toString());
             switch (msg.type) {
-                // AUTH: Client identifies itself
+                // AUTH: Client identifies itself.
+                // If we have a registered ECDSA public key for the claimed speaqId, we issue a
+                // challenge nonce and require an AUTH_RESPONSE with a valid signature before granting
+                // access. If we do not have a registered key yet, we fall back to TOFU (Trust On First
+                // Use): the client is admitted, but a future /api/v1/register call by that client
+                // locks the speaqId so all future AUTHs require a signature.
                 case "AUTH": {
-                    clientId = msg.speaqId;
-                    if (!clientId) {
+                    const sid = msg.speaqId;
+                    const cc = msg.cc;
+                    if (!sid || typeof sid !== "string") {
                         ws.send(JSON.stringify({ type: "ERROR", error: "speaqId required" }));
                         return;
                     }
-                    clients.set(clientId, { speaqId: clientId, ws, connectedAt: Date.now() });
-                    // Track country code (privacy-preserving: timezone-derived, no IP)
-                    if (msg.cc && typeof msg.cc === "string" && msg.cc.length === 2) {
-                        const cc = msg.cc.toUpperCase();
-                        let ids = countryStats.get(cc);
-                        if (!ids) {
-                            ids = new Set();
-                            countryStats.set(cc, ids);
+                    const known = publicKeys.get(sid);
+                    if (known && known.signPublicKey) {
+                        // Identity is registered - require challenge-response.
+                        const nonce = crypto_1.default.randomBytes(32).toString("base64");
+                        pendingChallenge = { speaqId: sid, nonce, expiresAt: Date.now() + CHALLENGE_TTL_MS, cc };
+                        ws.send(JSON.stringify({ type: "AUTH_CHALLENGE", nonce, expiresAt: pendingChallenge.expiresAt }));
+                        return;
+                    }
+                    // No registered key for this speaqId - admit on TOFU. The client is expected to call
+                    // /api/v1/register shortly after to register its keys; once registered, future AUTHs
+                    // for this speaqId will require a signature.
+                    completeAuth(sid, cc, "tofu");
+                    break;
+                }
+                // AUTH_RESPONSE: Client signs the previously issued challenge nonce with its ECDSA
+                // private key. Server verifies against the registered public key.
+                case "AUTH_RESPONSE": {
+                    if (!pendingChallenge) {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "No pending challenge" }));
+                        return;
+                    }
+                    if (Date.now() > pendingChallenge.expiresAt) {
+                        pendingChallenge = null;
+                        ws.send(JSON.stringify({ type: "ERROR", error: "Challenge expired" }));
+                        return;
+                    }
+                    const sid = pendingChallenge.speaqId;
+                    const nonce = pendingChallenge.nonce;
+                    const cc = pendingChallenge.cc;
+                    // Single-use: clear before verify so a failed attempt does not leave the challenge
+                    // available for a retry from a different signature attempt.
+                    pendingChallenge = null;
+                    const sig = msg.signature;
+                    if (!sig || typeof sig !== "string") {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "signature required" }));
+                        return;
+                    }
+                    const known = publicKeys.get(sid);
+                    if (!known || !known.signPublicKey) {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "No registered key for this speaqId" }));
+                        return;
+                    }
+                    (async () => {
+                        const ok = await verifyChallengeSignature(known.signPublicKey, nonce, sig);
+                        if (!ok) {
+                            ws.send(JSON.stringify({ type: "ERROR", error: "Signature verification failed" }));
+                            return;
                         }
-                        ids.add(clientId);
-                    }
-                    // Track user for admin stats
-                    const isNewUser = trackUser(clientId);
-                    if (isNewUser) {
-                        notifyAdmin(`[SYSTEM] New user joined: ${clientId.substring(0, 8)}`);
-                    }
-                    // Deliver any offline messages
-                    const offline = getOfflineMessages(clientId);
-                    for (const m of offline) {
-                        ws.send(JSON.stringify({ type: "RECEIVE", from: m.from, blob: m.blob, id: m.id }));
-                    }
-                    if (offline.length > 0) {
-                        clearOfflineMessages(clientId);
-                    }
-                    ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length }));
+                        completeAuth(sid, cc, "verified");
+                    })().catch((e) => {
+                        console.error("[auth] verify failed:", e);
+                        ws.send(JSON.stringify({ type: "ERROR", error: "Verification error" }));
+                    });
                     break;
                 }
                 // SEND: Relay encrypted blob to recipient
@@ -691,6 +917,15 @@ wss.on("connection", (ws) => {
                     if (!to || !blob) {
                         ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
                         return;
+                    }
+                    // Server-side block enforcement: if recipient has the sender in their blocklist,
+                    // drop silently to the sender (return same shape ACK as a normal delivery so the
+                    // sender cannot probe whether they are blocked) and do not deliver/queue.
+                    const recipientBlocks = blockedByUser.get(to);
+                    if (recipientBlocks && recipientBlocks.has(clientId)) {
+                        const messageId = id || crypto_1.default.randomUUID();
+                        ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+                        break;
                     }
                     const messageId = id || crypto_1.default.randomUUID();
                     totalMessagesRelayed++;
@@ -744,7 +979,17 @@ wss.on("connection", (ws) => {
                     totalMessagesRelayed++;
                     const recipient = clients.get(msg.to);
                     if (recipient && recipient.ws.readyState === ws_1.WebSocket.OPEN) {
-                        recipient.ws.send(JSON.stringify({ type: "CALL_OFFER", from: clientId, sdp: msg.sdp, callId: msg.callId, video: msg.video }));
+                        // C2 (audit fix 25-04-2026): forward encrypted blob if present.
+                        // Legacy plaintext sdp/video fields kept for backwards-compat with
+                        // pre-C2 clients. Server is zero-knowledge either way.
+                        const out = { type: "CALL_OFFER", from: clientId, callId: msg.callId };
+                        if (msg.blob)
+                            out.blob = msg.blob;
+                        if (msg.sdp)
+                            out.sdp = msg.sdp;
+                        if (typeof msg.video !== "undefined")
+                            out.video = msg.video;
+                        recipient.ws.send(JSON.stringify(out));
                     }
                     else {
                         ws.send(JSON.stringify({ type: "CALL_UNAVAILABLE", to: msg.to, callId: msg.callId }));
@@ -761,7 +1006,12 @@ wss.on("connection", (ws) => {
                     totalMessagesRelayed++;
                     const recipient = clients.get(msg.to);
                     if (recipient && recipient.ws.readyState === ws_1.WebSocket.OPEN) {
-                        recipient.ws.send(JSON.stringify({ type: "CALL_ANSWER", from: clientId, sdp: msg.sdp, callId: msg.callId }));
+                        const out = { type: "CALL_ANSWER", from: clientId, callId: msg.callId };
+                        if (msg.blob)
+                            out.blob = msg.blob;
+                        if (msg.sdp)
+                            out.sdp = msg.sdp;
+                        recipient.ws.send(JSON.stringify(out));
                     }
                     break;
                 }
@@ -775,7 +1025,12 @@ wss.on("connection", (ws) => {
                     totalMessagesRelayed++;
                     const recipient = clients.get(msg.to);
                     if (recipient && recipient.ws.readyState === ws_1.WebSocket.OPEN) {
-                        recipient.ws.send(JSON.stringify({ type: "ICE_CANDIDATE", from: clientId, candidate: msg.candidate, callId: msg.callId }));
+                        const out = { type: "ICE_CANDIDATE", from: clientId, callId: msg.callId };
+                        if (msg.blob)
+                            out.blob = msg.blob;
+                        if (msg.candidate)
+                            out.candidate = msg.candidate;
+                        recipient.ws.send(JSON.stringify(out));
                     }
                     break;
                 }
@@ -892,6 +1147,15 @@ wss.on("connection", (ws) => {
                         ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
                         return;
                     }
+                    // Server-side block enforcement on sealed sends: the relay knows the sender clientId
+                    // (the sealed-sender protection only hides the sender from OTHER recipients, the relay
+                    // still authenticates the connection). So the same block check applies.
+                    const sealedRecipientBlocks = blockedByUser.get(to);
+                    if (sealedRecipientBlocks && sealedRecipientBlocks.has(clientId)) {
+                        const messageId = id || crypto_1.default.randomUUID();
+                        ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+                        break;
+                    }
                     const messageId = id || crypto_1.default.randomUUID();
                     totalMessagesRelayed++;
                     const recipient = clients.get(to);
@@ -909,6 +1173,58 @@ wss.on("connection", (ws) => {
                         queueOfflineMessage(to, "sealed", blob);
                         ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
                     }
+                    break;
+                }
+                // BLOCK: client tells the relay that they want messages from `targetSpeaqId` to be dropped.
+                // Stored server-side so the block survives the sender being offline and applies to future
+                // SEND/SEND_SEALED/CALL_OFFER from that sender.
+                case "BLOCK": {
+                    if (!clientId) {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+                        return;
+                    }
+                    const target = msg.targetSpeaqId;
+                    if (!target || typeof target !== "string") {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "targetSpeaqId required" }));
+                        return;
+                    }
+                    let set = blockedByUser.get(clientId);
+                    if (!set) {
+                        set = new Set();
+                        blockedByUser.set(clientId, set);
+                    }
+                    set.add(target);
+                    ws.send(JSON.stringify({ type: "BLOCK_OK", targetSpeaqId: target, count: set.size }));
+                    break;
+                }
+                // UNBLOCK: remove a sender from the recipient's block list.
+                case "UNBLOCK": {
+                    if (!clientId) {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+                        return;
+                    }
+                    const target = msg.targetSpeaqId;
+                    if (!target || typeof target !== "string") {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "targetSpeaqId required" }));
+                        return;
+                    }
+                    const set = blockedByUser.get(clientId);
+                    if (set) {
+                        set.delete(target);
+                        if (set.size === 0)
+                            blockedByUser.delete(clientId);
+                    }
+                    ws.send(JSON.stringify({ type: "UNBLOCK_OK", targetSpeaqId: target, count: set?.size ?? 0 }));
+                    break;
+                }
+                // BLOCK_LIST: client asks the relay for their current block list (for sync after relogin).
+                case "BLOCK_LIST": {
+                    if (!clientId) {
+                        ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+                        return;
+                    }
+                    const set = blockedByUser.get(clientId);
+                    ws.send(JSON.stringify({ type: "BLOCK_LIST_OK", blocked: set ? Array.from(set) : [] }));
                     break;
                 }
                 default:

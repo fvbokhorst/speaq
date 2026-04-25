@@ -1093,7 +1093,14 @@ wss.on("connection", (ws: WebSocket) => {
           totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-            recipient.ws.send(JSON.stringify({ type: "CALL_OFFER", from: clientId, sdp: msg.sdp, callId: msg.callId, video: msg.video }));
+            // C2 (audit fix 25-04-2026): forward encrypted blob if present.
+            // Legacy plaintext sdp/video fields kept for backwards-compat with
+            // pre-C2 clients. Server is zero-knowledge either way.
+            const out: Record<string, unknown> = { type: "CALL_OFFER", from: clientId, callId: msg.callId };
+            if (msg.blob) out.blob = msg.blob;
+            if (msg.sdp) out.sdp = msg.sdp;
+            if (typeof msg.video !== "undefined") out.video = msg.video;
+            recipient.ws.send(JSON.stringify(out));
           } else {
             ws.send(JSON.stringify({ type: "CALL_UNAVAILABLE", to: msg.to, callId: msg.callId }));
           }
@@ -1109,7 +1116,10 @@ wss.on("connection", (ws: WebSocket) => {
           totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-            recipient.ws.send(JSON.stringify({ type: "CALL_ANSWER", from: clientId, sdp: msg.sdp, callId: msg.callId }));
+            const out: Record<string, unknown> = { type: "CALL_ANSWER", from: clientId, callId: msg.callId };
+            if (msg.blob) out.blob = msg.blob;
+            if (msg.sdp) out.sdp = msg.sdp;
+            recipient.ws.send(JSON.stringify(out));
           }
           break;
         }
@@ -1123,7 +1133,10 @@ wss.on("connection", (ws: WebSocket) => {
           totalMessagesRelayed++;
           const recipient = clients.get(msg.to);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-            recipient.ws.send(JSON.stringify({ type: "ICE_CANDIDATE", from: clientId, candidate: msg.candidate, callId: msg.callId }));
+            const out: Record<string, unknown> = { type: "ICE_CANDIDATE", from: clientId, callId: msg.callId };
+            if (msg.blob) out.blob = msg.blob;
+            if (msg.candidate) out.candidate = msg.candidate;
+            recipient.ws.send(JSON.stringify(out));
           }
           break;
         }
