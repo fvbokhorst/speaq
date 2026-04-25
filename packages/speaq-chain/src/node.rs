@@ -289,6 +289,45 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
     let shared_balances: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>> =
         std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
 
+    // Reconstruct balances from chain history. Without this, every restart starts the wallet
+    // balance at 0 and then only credits new mining rewards going forward; persisted chain data
+    // is effectively ignored for balance accounting. Audit fix C7 (2026-04-25).
+    {
+        use speaq_chain::transaction::TxType;
+        let mut credited: u64 = 0;
+        let mut blocks_seen: u64 = 0;
+        let mut bal = shared_balances.lock().unwrap();
+        for h in 1..=tip_height {
+            if let Ok(Some(block)) = db.get_block(h) {
+                blocks_seen += 1;
+                for tx in &block.transactions {
+                    if matches!(tx.tx_type, TxType::Mining) {
+                        // Mining coinbase: amount is in encrypted_amount (8 LE bytes), recipient
+                        // is the first output's stealth_address (the miner wallet address bytes).
+                        if let Some(out) = tx.outputs.first() {
+                            if out.encrypted_amount.len() >= 8 {
+                                let amount_bytes: [u8; 8] = out.encrypted_amount[..8].try_into().unwrap_or([0u8; 8]);
+                                let amount = u64::from_le_bytes(amount_bytes);
+                                let addr = format!("SQ1{}", hex::encode(out.stealth_address));
+                                let entry = bal.entry(addr).or_insert(0);
+                                *entry = entry.saturating_add(amount);
+                                credited = credited.saturating_add(amount);
+                            }
+                        }
+                    }
+                    // NOTE: regular Q-Credit transfers (TxType other than Mining) currently flow
+                    // through a JSON mempool path in this node and modify shared_balances at
+                    // mining time. Reconstructing those would require parsing each tx's inputs
+                    // and outputs against UTXO state - postponed to a follow-up because the
+                    // immediate audit issue (wallet balance reset on every restart) is fixed by
+                    // crediting the coinbase outputs alone.
+                }
+            }
+        }
+        println!("  Balances rebuilt: scanned {} blocks, credited {:.8} QC across {} addresses",
+            blocks_seen, credited as f64 / 100_000_000.0, bal.len());
+    }
+
     // Pass shared mempool and balances to API server
     SHARED_MEMPOOL.lock().unwrap().replace(shared_mempool.clone());
     SHARED_BALANCES.lock().unwrap().replace(shared_balances.clone());

@@ -17,9 +17,10 @@ export type CallState = "idle" | "calling" | "ringing" | "connected" | "ended";
 
 type CallEventHandler = (data: any) => void;
 
+// SPEAQ-operated STUN/TURN. coturn on the speaq-node VM. No Google data exposure.
 const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.thespeaq.com:3478" },
+  { urls: "stun:136.109.120.222:3478" },
 ];
 
 class CallService {

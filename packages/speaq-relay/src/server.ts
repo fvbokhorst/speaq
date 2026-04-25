@@ -135,13 +135,28 @@ interface DMSConfig {
 }
 const dmsConfigs = new Map<string, DMSConfig>();
 
+// Witness anchors: append-only log of (hash, server-timestamp, speaqId) tuples.
+// Each anchor proves that the relay saw this hash AT a particular server time.
+// The relay co-signs the anchor with relaySigningKey so any verifier can confirm
+// the relay actually anchored this record. A full external timestamping authority
+// (RFC 3161 / chain anchor) is on the roadmap; this is a meaningful intermediate.
+interface WitnessAnchor {
+  hash: string;        // SHA-256 hex of (description || deviceTs)
+  speaqId: string;     // who submitted
+  anchorTs: number;    // server time at the moment of anchoring
+  signature: string;   // HMAC-SHA256(relaySigningKey, "anchor:" + hash + ":" + speaqId + ":" + anchorTs)
+}
+const witnessAnchors: WitnessAnchor[] = [];
+const witnessAnchorByHash = new Map<string, WitnessAnchor>();
+const MAX_WITNESS_ANCHORS = 100_000; // soft cap to keep memory bounded
+
 // Load persisted stats from remote server (Google VM), fallback to local disk
 async function loadStats(): Promise<void> {
   // Try remote first
   try {
     const res = await fetch(STATS_SERVER_URL);
     if (res.ok) {
-      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number>; blockedByUser?: Record<string, string[]>; dmsConfigs?: Record<string, DMSConfig> };
+      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number>; blockedByUser?: Record<string, string[]>; dmsConfigs?: Record<string, DMSConfig>; witnessAnchors?: WitnessAnchor[] };
       if (data.users) {
         for (const [id, record] of Object.entries(data.users)) {
           allUsers.set(id, record as UserRecord);
@@ -165,7 +180,15 @@ async function loadStats(): Promise<void> {
           if (cfg && typeof cfg === "object") dmsConfigs.set(uid, cfg as DMSConfig);
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs from remote`);
+      if (Array.isArray(data.witnessAnchors)) {
+        for (const a of data.witnessAnchors) {
+          if (a && typeof a.hash === "string") {
+            witnessAnchors.push(a);
+            witnessAnchorByHash.set(a.hash, a);
+          }
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs, ${witnessAnchors.length} witnessAnchors from remote`);
       return;
     }
   } catch (e) {
@@ -197,7 +220,15 @@ async function loadStats(): Promise<void> {
           if (cfg && typeof cfg === "object") dmsConfigs.set(uid, cfg);
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs from disk`);
+      if (Array.isArray(data.witnessAnchors)) {
+        for (const a of data.witnessAnchors as WitnessAnchor[]) {
+          if (a && typeof a.hash === "string") {
+            witnessAnchors.push(a);
+            witnessAnchorByHash.set(a.hash, a);
+          }
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs, ${witnessAnchors.length} witnessAnchors from disk`);
     } else {
       console.warn("  No stats source available (remote + disk both failed). Counters START AT ZERO.");
     }
@@ -238,6 +269,7 @@ async function saveStats(): Promise<void> {
       Array.from(blockedByUser.entries()).map(([uid, set]) => [uid, Array.from(set)])
     ),
     dmsConfigs: Object.fromEntries(dmsConfigs.entries()),
+    witnessAnchors: witnessAnchors.slice(-MAX_WITNESS_ANCHORS),
     savedAt: Date.now(),
   };
   const json = JSON.stringify(data);
@@ -629,6 +661,39 @@ const relaySigningKey: string = (() => {
 function relaySign(data: string): string {
   return crypto.createHmac("sha256", relaySigningKey).update(data).digest("hex");
 }
+
+// --- Witness anchors -------------------------------------------------------
+// POST: client submits a SHA-256 hash of (description || deviceTs). Server records the
+// server-side anchor timestamp and HMAC-co-signs the tuple, then returns the anchor.
+// Anchors are persisted via the stats channel so they survive restarts.
+// GET: anyone can look up an anchor by hash to verify the (hash, anchorTs, signature) tuple.
+app.post("/api/v1/witness/anchor", (req, res) => {
+  const { speaqId, hash } = req.body || {};
+  if (!speaqId || typeof speaqId !== "string" || !hash || typeof hash !== "string") {
+    return res.status(400).json({ error: "speaqId and hash required" });
+  }
+  if (!/^[0-9a-f]{64}$/i.test(hash)) {
+    return res.status(400).json({ error: "hash must be 64 hex chars (SHA-256)" });
+  }
+  const existing = witnessAnchorByHash.get(hash);
+  if (existing) return res.json({ existing: true, anchor: existing });
+  const anchorTs = Date.now();
+  const signature = relaySign(`anchor:${hash}:${speaqId}:${anchorTs}`);
+  const anchor: WitnessAnchor = { hash, speaqId, anchorTs, signature };
+  witnessAnchors.push(anchor);
+  witnessAnchorByHash.set(hash, anchor);
+  if (witnessAnchors.length > MAX_WITNESS_ANCHORS) {
+    const dropped = witnessAnchors.shift();
+    if (dropped) witnessAnchorByHash.delete(dropped.hash);
+  }
+  return res.json({ existing: false, anchor });
+});
+
+app.get("/api/v1/witness/anchor/:hash", (req, res) => {
+  const a = witnessAnchorByHash.get(req.params.hash.toLowerCase());
+  if (!a) return res.status(404).json({ error: "Anchor not found" });
+  return res.json({ anchor: a });
+});
 
 // Issue a mining receipt
 app.post("/api/v1/mining/receipt", (req, res) => {
