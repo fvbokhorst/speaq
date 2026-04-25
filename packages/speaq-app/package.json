@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.2.0",
     "@noble/hashes": "^2.0.1",
     "@noble/post-quantum": "^0.6.0",
     "@react-native-async-storage/async-storage": "^2.1.2",

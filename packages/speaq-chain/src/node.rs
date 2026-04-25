@@ -292,40 +292,80 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
     // Reconstruct balances from chain history. Without this, every restart starts the wallet
     // balance at 0 and then only credits new mining rewards going forward; persisted chain data
     // is effectively ignored for balance accounting. Audit fix C7 (2026-04-25).
-    {
+    //
+    // Defensive design (post-sandbox-test 25 april):
+    // - Wrap every block read + tx iteration in catch_unwind so a single bad block cannot
+    //   crash the whole process silently. Log + continue instead.
+    // - Progress log every 5000 blocks so we can see scan in real-time and spot a hang/OOM.
+    // - Explicit start/end log so the operator knows reconstruction has run.
+    // - Optionally skip the entire reconstruction via env SPEAQ_SKIP_BALANCE_REBUILD=1 as an
+    //   emergency escape hatch if a chaindata corruption is found in field.
+    println!("  [c7] Reconstructing balances from {} blocks of chain history...", tip_height);
+    if std::env::var("SPEAQ_SKIP_BALANCE_REBUILD").unwrap_or_default() == "1" {
+        println!("  [c7] SKIP: SPEAQ_SKIP_BALANCE_REBUILD=1 set, balances stay at zero (emergency mode)");
+    } else {
         use speaq_chain::transaction::TxType;
+        use std::panic::AssertUnwindSafe;
+
         let mut credited: u64 = 0;
         let mut blocks_seen: u64 = 0;
+        let mut blocks_missing: u64 = 0;
+        let mut blocks_panicked: u64 = 0;
         let mut bal = shared_balances.lock().unwrap();
+
         for h in 1..=tip_height {
-            if let Ok(Some(block)) = db.get_block(h) {
-                blocks_seen += 1;
-                for tx in &block.transactions {
-                    if matches!(tx.tx_type, TxType::Mining) {
-                        // Mining coinbase: amount is in encrypted_amount (8 LE bytes), recipient
-                        // is the first output's stealth_address (the miner wallet address bytes).
-                        if let Some(out) = tx.outputs.first() {
-                            if out.encrypted_amount.len() >= 8 {
-                                let amount_bytes: [u8; 8] = out.encrypted_amount[..8].try_into().unwrap_or([0u8; 8]);
-                                let amount = u64::from_le_bytes(amount_bytes);
-                                let addr = format!("SQ1{}", hex::encode(out.stealth_address));
-                                let entry = bal.entry(addr).or_insert(0);
-                                *entry = entry.saturating_add(amount);
-                                credited = credited.saturating_add(amount);
+            if h % 5000 == 0 {
+                println!("  [c7] ... scanning block {}/{} (credited {:.4} QC so far)",
+                    h, tip_height, credited as f64 / 100_000_000.0);
+            }
+            // Defensive: if a single block fails to deserialize or contains an unexpected
+            // shape, log and skip that block instead of crashing the node startup.
+            let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                match db.get_block(h) {
+                    Ok(Some(block)) => {
+                        let mut local_credited: u64 = 0;
+                        for tx in &block.transactions {
+                            if matches!(tx.tx_type, TxType::Mining) {
+                                if let Some(out) = tx.outputs.first() {
+                                    if out.encrypted_amount.len() >= 8 {
+                                        let mut amount_bytes = [0u8; 8];
+                                        amount_bytes.copy_from_slice(&out.encrypted_amount[..8]);
+                                        let amount = u64::from_le_bytes(amount_bytes);
+                                        let addr = format!("SQ1{}", hex::encode(out.stealth_address));
+                                        let entry = bal.entry(addr).or_insert(0);
+                                        *entry = entry.saturating_add(amount);
+                                        local_credited = local_credited.saturating_add(amount);
+                                    }
+                                }
                             }
                         }
+                        Some(local_credited)
                     }
-                    // NOTE: regular Q-Credit transfers (TxType other than Mining) currently flow
-                    // through a JSON mempool path in this node and modify shared_balances at
-                    // mining time. Reconstructing those would require parsing each tx's inputs
-                    // and outputs against UTXO state - postponed to a follow-up because the
-                    // immediate audit issue (wallet balance reset on every restart) is fixed by
-                    // crediting the coinbase outputs alone.
+                    Ok(None) => None,
+                    Err(e) => {
+                        eprintln!("  [c7] block {} read error: {:?} (skipping)", h, e);
+                        None
+                    }
+                }
+            }));
+
+            match result {
+                Ok(Some(local_credited)) => {
+                    blocks_seen += 1;
+                    credited = credited.saturating_add(local_credited);
+                }
+                Ok(None) => {
+                    blocks_missing += 1;
+                }
+                Err(_) => {
+                    blocks_panicked += 1;
+                    eprintln!("  [c7] block {} caused a panic during scan (skipping)", h);
                 }
             }
         }
-        println!("  Balances rebuilt: scanned {} blocks, credited {:.8} QC across {} addresses",
-            blocks_seen, credited as f64 / 100_000_000.0, bal.len());
+        println!("  [c7] Balances rebuilt: scanned {} blocks, missing {}, panicked {}, credited {:.8} QC across {} addresses",
+            blocks_seen, blocks_missing, blocks_panicked,
+            credited as f64 / 100_000_000.0, bal.len());
     }
 
     // Pass shared mempool and balances to API server

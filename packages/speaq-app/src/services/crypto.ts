@@ -13,6 +13,79 @@
 import "react-native-get-random-values";
 import CryptoJS from "crypto-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// E11 audit fix (2026-04-25): native crypto stack upgrade.
+// Before: CryptoJS.AES.encrypt(plain, keyString) used OpenSSL-style EVP_BytesToKey + AES-CBC
+// without authentication. That is NOT AEAD, vulnerable to padding-oracle, and used the weak
+// OpenSSL key-derivation (MD5 iterations). We now standardize on AES-256-GCM (NIST AEAD)
+// via @noble/ciphers (pure-JS, no native build needed).
+//
+// Migration: outgoing messages always use AES-GCM. Incoming messages auto-detect: if the
+// ciphertext starts with "U2FsdGVkX1" (base64 of "Salted__") it is legacy CryptoJS CBC -
+// decrypt via CryptoJS for backwards-compat. Otherwise treat as AES-GCM. This lets old
+// peers continue to be readable while new messages are AEAD-protected.
+import { gcm } from "@noble/ciphers/aes";
+import { sha256 as nobleSha256 } from "@noble/hashes/sha2";
+
+function _strToBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
+function _bytesToStr(b: Uint8Array): string { return new TextDecoder().decode(b); }
+function _bytesToB64(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return globalThis.btoa(s);
+}
+function _b64ToBytes(s: string): Uint8Array {
+  const bin = globalThis.atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _deriveAesKey(keyString: string): Uint8Array {
+  // 256-bit key derived deterministically from the messageKey/keystore string.
+  // SHA-256 is appropriate here because the input is already high-entropy
+  // (ratchet message keys are 256 bits of HMAC output).
+  return nobleSha256(_strToBytes(keyString));
+}
+
+function aesGcmEncrypt(plaintext: string, keyString: string): string {
+  const key = _deriveAesKey(keyString);
+  const iv = new Uint8Array(12);
+  // Use crypto.getRandomValues (polyfilled by react-native-get-random-values).
+  globalThis.crypto.getRandomValues(iv);
+  const cipher = gcm(key, iv);
+  const ct = cipher.encrypt(_strToBytes(plaintext));
+  // Wire format: base64 JSON { v: 2, iv, ct }. v:2 distinguishes from CryptoJS legacy.
+  return _bytesToB64(_strToBytes(JSON.stringify({ v: 2, iv: _bytesToB64(iv), ct: _bytesToB64(ct) })));
+}
+
+function aesGcmDecrypt(envelope: string, keyString: string): string {
+  // Envelope is either:
+  //   - new format: base64 of JSON {v:2, iv, ct}  (AES-256-GCM)
+  //   - legacy:    CryptoJS OpenSSL "U2FsdGVkX1..." string (AES-CBC).
+  // Try new first.
+  if (envelope.startsWith("U2FsdGVkX1")) {
+    // Legacy CryptoJS path - keep readable so old peers still work.
+    const bytes = CryptoJS.AES.decrypt(envelope, keyString);
+    const plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    if (!plaintext) throw new Error("Legacy decrypt failed");
+    return plaintext;
+  }
+  try {
+    const wrapped = JSON.parse(_bytesToStr(_b64ToBytes(envelope))) as { v?: number; iv: string; ct: string };
+    if (wrapped.v === 2 && wrapped.iv && wrapped.ct) {
+      const key = _deriveAesKey(keyString);
+      const cipher = gcm(key, _b64ToBytes(wrapped.iv));
+      const pt = cipher.decrypt(_b64ToBytes(wrapped.ct));
+      return _bytesToStr(pt);
+    }
+    throw new Error("Unknown envelope version");
+  } catch {
+    // Fall back to legacy CryptoJS in case envelope was an unprefixed legacy string.
+    const bytes = CryptoJS.AES.decrypt(envelope, keyString);
+    const plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    if (!plaintext) throw new Error("AES decrypt failed (both AEAD and legacy paths)");
+    return plaintext;
+  }
+}
 
 // ============================================================
 // SECTION 1: Utility Functions
@@ -457,8 +530,9 @@ function advanceChain(chainKey: string): { nextChainKey: string; messageKey: str
 export async function ratchetEncrypt(state: RatchetState, plaintext: string, contactId?: string): Promise<RatchetMessage> {
   const { nextChainKey, messageKey } = advanceChain(state.chainKeySend);
 
-  // Encrypt with AES-256 using the one-time message key
-  const ciphertext = CryptoJS.AES.encrypt(plaintext, messageKey).toString();
+  // Encrypt with AES-256-GCM (NIST AEAD) using the one-time message key.
+  // E11 audit fix: was CryptoJS AES-CBC (no auth, weak KDF). Now @noble/ciphers AES-GCM.
+  const ciphertext = aesGcmEncrypt(plaintext, messageKey);
 
   const msg: RatchetMessage = {
     messageNumber: state.sendCount,
@@ -500,10 +574,14 @@ export async function ratchetDecrypt(state: RatchetState, message: RatchetMessag
   // Get the message key for this specific message
   const { nextChainKey, messageKey } = advanceChain(chainKey);
 
-  // Decrypt
-  const bytes = CryptoJS.AES.decrypt(message.ciphertext, messageKey);
-  const plaintext = bytes.toString(CryptoJS.enc.Utf8);
-
+  // Decrypt - try AES-GCM first, fall back to legacy CryptoJS CBC for old peers.
+  // E11 audit fix.
+  let plaintext: string;
+  try {
+    plaintext = aesGcmDecrypt(message.ciphertext, messageKey);
+  } catch {
+    plaintext = "";
+  }
   if (!plaintext) {
     throw new Error("Ratchet decryption failed -- key mismatch or corrupted message");
   }
@@ -555,21 +633,25 @@ export async function setKeystorePin(pin: string): Promise<void> {
   }).toString(CryptoJS.enc.Hex);
 }
 
-/** Encrypt data for storage using the PIN-derived key */
+/** Encrypt data for storage using the PIN-derived key (AES-256-GCM, E11 audit fix) */
 function keystoreEncrypt(data: string): string {
   if (!keystoreDerivedKey) {
     throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
   }
-  return CryptoJS.AES.encrypt(data, keystoreDerivedKey).toString();
+  return aesGcmEncrypt(data, keystoreDerivedKey);
 }
 
-/** Decrypt data from storage using the PIN-derived key */
+/** Decrypt data from storage using the PIN-derived key (auto-detects v2 AEAD vs legacy CryptoJS) */
 function keystoreDecrypt(data: string): string {
   if (!keystoreDerivedKey) {
     throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
   }
-  const bytes = CryptoJS.AES.decrypt(data, keystoreDerivedKey);
-  const result = bytes.toString(CryptoJS.enc.Utf8);
+  let result: string;
+  try {
+    result = aesGcmDecrypt(data, keystoreDerivedKey);
+  } catch {
+    result = "";
+  }
   if (!result) {
     throw new Error("[Crypto] Keystore decryption failed -- wrong PIN or corrupted data");
   }
@@ -731,18 +813,20 @@ export function getContactKey(myId: string, contactId: string): string {
 }
 
 /**
- * Encrypt message -- legacy API for backwards compatibility
- * Used only when ratchet is not yet initialized
+ * Encrypt message -- AES-256-GCM (E11 audit fix). Used when ratchet is not yet initialized.
+ * Wire format auto-detects on decrypt so the receiver tolerates legacy CryptoJS CBC.
  */
 export function encryptMessage(key: string, plaintext: string): string {
-  return CryptoJS.AES.encrypt(plaintext, key).toString();
+  return aesGcmEncrypt(plaintext, key);
 }
 
 /**
- * Decrypt message -- legacy API for backwards compatibility
- * Used only when ratchet is not yet initialized
+ * Decrypt message -- tries AES-GCM first, falls back to legacy CryptoJS CBC for old peers.
  */
 export function decryptMessage(key: string, ciphertext: string): string {
-  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  return bytes.toString(CryptoJS.enc.Utf8);
+  try {
+    return aesGcmDecrypt(ciphertext, key);
+  } catch {
+    return "";
+  }
 }
