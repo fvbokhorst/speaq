@@ -303,7 +303,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
         <View style={dyn.card}>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("encryption")}</Text>
-            <Text style={st.rowValueTeal}>Kyber-768 + AES-256-GCM</Text>
+            <Text style={st.rowValueTeal}>AES-256-GCM + lattice KX (custom)</Text>
           </View>
           <View style={dyn.row}>
             <Text style={dyn.rowLabel}>{t("forwardSecrecy")}</Text>

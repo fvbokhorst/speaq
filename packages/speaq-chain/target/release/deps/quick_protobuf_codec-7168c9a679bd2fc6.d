@@ -1,0 +1,9 @@
+/Users/f.a.vanbokhorst/speaq-build/packages/speaq-chain/target/release/deps/quick_protobuf_codec-7168c9a679bd2fc6.d: /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/lib.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/mod.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/test.rs
+
+/Users/f.a.vanbokhorst/speaq-build/packages/speaq-chain/target/release/deps/libquick_protobuf_codec-7168c9a679bd2fc6.rlib: /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/lib.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/mod.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/test.rs
+
+/Users/f.a.vanbokhorst/speaq-build/packages/speaq-chain/target/release/deps/libquick_protobuf_codec-7168c9a679bd2fc6.rmeta: /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/lib.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/mod.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/test.rs
+
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/lib.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/mod.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quick-protobuf-codec-0.3.1/src/generated/test.rs:

@@ -119,13 +119,18 @@ let totalQCMined = 0;
 // remote/disk copy with the in-memory zero-state from a fresh container.
 let statsLoadFailed = false;
 
+// Block list: per recipient, the set of speaqIds they have blocked.
+// On SEND/SEND_SEALED/CALL_*, if the recipient has the sender in their block-list, the relay drops
+// the message instead of forwarding (and instead of queuing offline). Persisted via stats remote+disk.
+const blockedByUser = new Map<string, Set<string>>();
+
 // Load persisted stats from remote server (Google VM), fallback to local disk
 async function loadStats(): Promise<void> {
   // Try remote first
   try {
     const res = await fetch(STATS_SERVER_URL);
     if (res.ok) {
-      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number> };
+      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number>; blockedByUser?: Record<string, string[]> };
       if (data.users) {
         for (const [id, record] of Object.entries(data.users)) {
           allUsers.set(id, record as UserRecord);
@@ -139,7 +144,12 @@ async function loadStats(): Promise<void> {
           if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from remote`);
+      if (data.blockedByUser) {
+        for (const [uid, blocked] of Object.entries(data.blockedByUser)) {
+          if (Array.isArray(blocked)) blockedByUser.set(uid, new Set(blocked));
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists from remote`);
       return;
     }
   } catch (e) {
@@ -161,7 +171,12 @@ async function loadStats(): Promise<void> {
           if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from disk`);
+      if (data.blockedByUser) {
+        for (const [uid, blocked] of Object.entries(data.blockedByUser as Record<string, string[]>)) {
+          if (Array.isArray(blocked)) blockedByUser.set(uid, new Set(blocked));
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists from disk`);
     } else {
       console.warn("  No stats source available (remote + disk both failed). Counters START AT ZERO.");
     }
@@ -197,6 +212,9 @@ async function saveStats(): Promise<void> {
     totalQCMined,
     countryStats: Object.fromEntries(
       Array.from(countryStats.entries()).map(([cc, ids]) => [cc, Array.from(ids)])
+    ),
+    blockedByUser: Object.fromEntries(
+      Array.from(blockedByUser.entries()).map(([uid, set]) => [uid, Array.from(set)])
     ),
     savedAt: Date.now(),
   };
@@ -566,8 +584,24 @@ app.get("/api/v1/admin/country-stats", (req, res) => {
 // Relay signs a receipt for each mining contribution it witnesses.
 // Double signature: miner signs + relay co-signs = unforgeable proof.
 
-// Relay's own signing key (generated once at startup)
-const relaySigningKey = crypto.randomBytes(32).toString("hex");
+// Relay's own signing key for HMAC mining-receipts.
+// Persistent across restarts via env var RELAY_SIGNING_KEY (set as a Cloud Run secret). If absent,
+// we generate a one-shot dev key and warn loudly. Receipts issued under a one-shot dev key cannot be
+// verified after a redeploy, so production MUST set this env var.
+const relaySigningKey: string = (() => {
+  const fromEnv = process.env.RELAY_SIGNING_KEY;
+  if (fromEnv && fromEnv.length >= 32) {
+    console.log(`  Mining receipt key loaded from RELAY_SIGNING_KEY env (${fromEnv.length} chars). Receipts persist across restarts.`);
+    return fromEnv;
+  }
+  const generated = crypto.randomBytes(32).toString("hex");
+  console.error("=".repeat(80));
+  console.error("WARNING: RELAY_SIGNING_KEY env var not set. Generated a one-shot dev key.");
+  console.error("Receipts issued in this process cannot be verified after restart.");
+  console.error("For production: set RELAY_SIGNING_KEY as a Cloud Run secret (>=32 chars).");
+  console.error("=".repeat(80));
+  return generated;
+})();
 
 // Sign a mining receipt with the relay's key
 function relaySign(data: string): string {
@@ -793,6 +827,16 @@ wss.on("connection", (ws: WebSocket) => {
             return;
           }
 
+          // Server-side block enforcement: if recipient has the sender in their blocklist,
+          // drop silently to the sender (return same shape ACK as a normal delivery so the
+          // sender cannot probe whether they are blocked) and do not deliver/queue.
+          const recipientBlocks = blockedByUser.get(to);
+          if (recipientBlocks && recipientBlocks.has(clientId)) {
+            const messageId = id || crypto.randomUUID();
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+            break;
+          }
+
           const messageId = id || crypto.randomUUID();
           totalMessagesRelayed++;
           const recipient = clients.get(to);
@@ -1004,6 +1048,16 @@ wss.on("connection", (ws: WebSocket) => {
             return;
           }
 
+          // Server-side block enforcement on sealed sends: the relay knows the sender clientId
+          // (the sealed-sender protection only hides the sender from OTHER recipients, the relay
+          // still authenticates the connection). So the same block check applies.
+          const sealedRecipientBlocks = blockedByUser.get(to);
+          if (sealedRecipientBlocks && sealedRecipientBlocks.has(clientId)) {
+            const messageId = id || crypto.randomUUID();
+            ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
+            break;
+          }
+
           const messageId = id || crypto.randomUUID();
           totalMessagesRelayed++;
           const recipient = clients.get(to);
@@ -1021,6 +1075,57 @@ wss.on("connection", (ws: WebSocket) => {
             queueOfflineMessage(to, "sealed", blob);
             ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
           }
+          break;
+        }
+
+        // BLOCK: client tells the relay that they want messages from `targetSpeaqId` to be dropped.
+        // Stored server-side so the block survives the sender being offline and applies to future
+        // SEND/SEND_SEALED/CALL_OFFER from that sender.
+        case "BLOCK": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+          const target = msg.targetSpeaqId as string | undefined;
+          if (!target || typeof target !== "string") {
+            ws.send(JSON.stringify({ type: "ERROR", error: "targetSpeaqId required" }));
+            return;
+          }
+          let set = blockedByUser.get(clientId);
+          if (!set) { set = new Set<string>(); blockedByUser.set(clientId, set); }
+          set.add(target);
+          ws.send(JSON.stringify({ type: "BLOCK_OK", targetSpeaqId: target, count: set.size }));
+          break;
+        }
+
+        // UNBLOCK: remove a sender from the recipient's block list.
+        case "UNBLOCK": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+          const target = msg.targetSpeaqId as string | undefined;
+          if (!target || typeof target !== "string") {
+            ws.send(JSON.stringify({ type: "ERROR", error: "targetSpeaqId required" }));
+            return;
+          }
+          const set = blockedByUser.get(clientId);
+          if (set) {
+            set.delete(target);
+            if (set.size === 0) blockedByUser.delete(clientId);
+          }
+          ws.send(JSON.stringify({ type: "UNBLOCK_OK", targetSpeaqId: target, count: set?.size ?? 0 }));
+          break;
+        }
+
+        // BLOCK_LIST: client asks the relay for their current block list (for sync after relogin).
+        case "BLOCK_LIST": {
+          if (!clientId) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "Not authenticated" }));
+            return;
+          }
+          const set = blockedByUser.get(clientId);
+          ws.send(JSON.stringify({ type: "BLOCK_LIST_OK", blocked: set ? Array.from(set) : [] }));
           break;
         }
 

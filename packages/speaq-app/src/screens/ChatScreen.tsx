@@ -443,7 +443,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
       <View style={st.encBanner}>
         <Text style={st.encText}>
-          Kyber-768 + AES-256-GCM + Double Ratchet
+          AES-256-GCM + lattice key exchange (custom) + Double Ratchet
           {disappearTimer !== "off" ? ` -- ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label}` : ""}
         </Text>
       </View>

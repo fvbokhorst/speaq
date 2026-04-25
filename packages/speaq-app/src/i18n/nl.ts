@@ -42,8 +42,8 @@ export default {
     version: "Versie",
   },
   security: {
-    banner: "Kyber-768 + AES-256-GCM + Double Ratchet",
-    quantumSafe: "Post-quantum versleuteld",
+    banner: "AES-256-GCM + lattice sleuteluitwisseling (eigen) + Double Ratchet",
+    quantumSafe: "Lattice-gebaseerde sleuteluitwisseling (pre-NIST)",
     forwardSecrecy: "Forward secrecy ingeschakeld",
   },
 };

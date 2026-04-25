@@ -1,0 +1,9 @@
+/Users/f.a.vanbokhorst/speaq-build/packages/speaq-chain/target/release/deps/base_x-46978ca869a9c9c8.d: /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs
+
+/Users/f.a.vanbokhorst/speaq-build/packages/speaq-chain/target/release/deps/libbase_x-46978ca869a9c9c8.rmeta: /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs /Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs
+
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/lib.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/alphabet.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/bigint.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/decoder.rs:
+/Users/f.a.vanbokhorst/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base-x-0.2.11/src/encoder.rs:
