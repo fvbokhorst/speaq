@@ -1,8 +1,11 @@
+# Cache-bust: 2026-04-25T15:35 (PQ-AUTH hybrid + @noble deps).
+# Cloud Build was reusing a stale layer; minor edit forces rebuild.
 FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY packages/speaq-core/package.json packages/speaq-core/
 COPY packages/speaq-relay/package.json packages/speaq-relay/
+COPY packages/speaq-relay/package-lock.json packages/speaq-relay/
 
 RUN cd packages/speaq-core && npm install
 RUN cd /app/packages/speaq-relay && npm install
