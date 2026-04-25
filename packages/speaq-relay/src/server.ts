@@ -124,13 +124,24 @@ let statsLoadFailed = false;
 // the message instead of forwarding (and instead of queuing offline). Persisted via stats remote+disk.
 const blockedByUser = new Map<string, Set<string>>();
 
+// Dead Man's Switch state. Forward-declared here so loadStats() can populate it on startup.
+// The full register/checkin/sweep handlers live further down in the file.
+interface DMSConfig {
+  speaqId: string;
+  intervalMs: number;
+  lastCheckIn: number;
+  recipientIds: string[];
+  encryptedMessage: string; // Server never decrypts this
+}
+const dmsConfigs = new Map<string, DMSConfig>();
+
 // Load persisted stats from remote server (Google VM), fallback to local disk
 async function loadStats(): Promise<void> {
   // Try remote first
   try {
     const res = await fetch(STATS_SERVER_URL);
     if (res.ok) {
-      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number>; blockedByUser?: Record<string, string[]> };
+      const data = await res.json() as { users?: Record<string, UserRecord>; totalMiningReceipts?: number; totalQCMined?: number; countryStats?: Record<string, string[] | number>; blockedByUser?: Record<string, string[]>; dmsConfigs?: Record<string, DMSConfig> };
       if (data.users) {
         for (const [id, record] of Object.entries(data.users)) {
           allUsers.set(id, record as UserRecord);
@@ -149,7 +160,12 @@ async function loadStats(): Promise<void> {
           if (Array.isArray(blocked)) blockedByUser.set(uid, new Set(blocked));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists from remote`);
+      if (data.dmsConfigs) {
+        for (const [uid, cfg] of Object.entries(data.dmsConfigs)) {
+          if (cfg && typeof cfg === "object") dmsConfigs.set(uid, cfg as DMSConfig);
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs from remote`);
       return;
     }
   } catch (e) {
@@ -176,7 +192,12 @@ async function loadStats(): Promise<void> {
           if (Array.isArray(blocked)) blockedByUser.set(uid, new Set(blocked));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists from disk`);
+      if (data.dmsConfigs) {
+        for (const [uid, cfg] of Object.entries(data.dmsConfigs as Record<string, DMSConfig>)) {
+          if (cfg && typeof cfg === "object") dmsConfigs.set(uid, cfg);
+        }
+      }
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts}, ${blockedByUser.size} blockLists, ${dmsConfigs.size} dmsConfigs from disk`);
     } else {
       console.warn("  No stats source available (remote + disk both failed). Counters START AT ZERO.");
     }
@@ -216,6 +237,7 @@ async function saveStats(): Promise<void> {
     blockedByUser: Object.fromEntries(
       Array.from(blockedByUser.entries()).map(([uid, set]) => [uid, Array.from(set)])
     ),
+    dmsConfigs: Object.fromEntries(dmsConfigs.entries()),
     savedAt: Date.now(),
   };
   const json = JSON.stringify(data);
@@ -675,18 +697,12 @@ app.get("/api/v1/mining/network-stats", (_req, res) => {
 });
 
 // --- Dead Man's Switch (Server-Side) ---
-// Server stores DMS configs in-memory. Checks every 60 seconds.
-// If a user is overdue, sends their encrypted message to all recipients.
-
-interface DMSConfig {
-  speaqId: string;
-  intervalMs: number;
-  lastCheckIn: number;
-  recipientIds: string[];
-  encryptedMessage: string; // Server never decrypts this
-}
-
-const dmsConfigs = new Map<string, DMSConfig>();
+// DMSConfig interface and dmsConfigs Map are forward-declared near the top of this file so
+// loadStats() can populate them during startup. They are persisted via the same stats-server
+// channel as other relay state, so they survive Cloud Run cold-starts and deploys. The server
+// checks every 60 seconds. If a user is overdue, the server delivers their pre-prepared
+// encrypted message to all configured recipients. The encryptedMessage field is opaque to the
+// server - it is encrypted by the user's device before registration.
 
 // Register a DMS config
 app.post("/api/v1/dms/register", (req, res) => {
