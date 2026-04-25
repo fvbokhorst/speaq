@@ -300,6 +300,11 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
     // - Explicit start/end log so the operator knows reconstruction has run.
     // - Optionally skip the entire reconstruction via env SPEAQ_SKIP_BALANCE_REBUILD=1 as an
     //   emergency escape hatch if a chaindata corruption is found in field.
+    // C7-cache (2026-04-25): try to load a cached balance snapshot first. If the cache
+    // exists and corresponds to a chain height <= tip_height, restore from it and only
+    // scan the (small) tail of new blocks. If the cache is absent or stale, full scan.
+    // The cache writes to db.metadata under key "c7_balance_cache" with payload format
+    // [u64 LE: cached_height][u64 LE: addr_count][repeating: u8 addr_len + addr_bytes + u64 LE balance].
     println!("  [c7] Reconstructing balances from {} blocks of chain history...", tip_height);
     if std::env::var("SPEAQ_SKIP_BALANCE_REBUILD").unwrap_or_default() == "1" {
         println!("  [c7] SKIP: SPEAQ_SKIP_BALANCE_REBUILD=1 set, balances stay at zero (emergency mode)");
@@ -313,13 +318,51 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
         let mut blocks_panicked: u64 = 0;
         let mut bal = shared_balances.lock().unwrap();
 
-        for h in 1..=tip_height {
-            if h % 5000 == 0 {
+        // Cache deserialize: try to populate bal from cached snapshot. start_height becomes
+        // cached_height + 1 if successful, else 1 (full scan).
+        let mut start_height: u64 = 1;
+        if let Ok(Some(cache_bytes)) = db.get_metadata("c7_balance_cache") {
+            if cache_bytes.len() >= 16 {
+                let cached_height = u64::from_le_bytes(cache_bytes[0..8].try_into().unwrap_or([0u8; 8]));
+                let addr_count = u64::from_le_bytes(cache_bytes[8..16].try_into().unwrap_or([0u8; 8]));
+                if cached_height > 0 && cached_height <= tip_height {
+                    let mut offset: usize = 16;
+                    let mut loaded: u64 = 0;
+                    let mut ok = true;
+                    while loaded < addr_count && offset < cache_bytes.len() {
+                        if offset + 1 > cache_bytes.len() { ok = false; break; }
+                        let alen = cache_bytes[offset] as usize;
+                        offset += 1;
+                        if offset + alen + 8 > cache_bytes.len() { ok = false; break; }
+                        let addr = match std::str::from_utf8(&cache_bytes[offset..offset+alen]) {
+                            Ok(s) => s.to_string(),
+                            Err(_) => { ok = false; break; }
+                        };
+                        offset += alen;
+                        let amount = u64::from_le_bytes(cache_bytes[offset..offset+8].try_into().unwrap_or([0u8; 8]));
+                        offset += 8;
+                        bal.insert(addr, amount);
+                        loaded += 1;
+                    }
+                    if ok && loaded == addr_count {
+                        start_height = cached_height + 1;
+                        let total: u64 = bal.values().copied().sum();
+                        println!("  [c7] Cache HIT at height {}: {} addresses, {:.8} QC. Tail-scanning {}..{} ({} blocks).",
+                            cached_height, bal.len(), total as f64 / 100_000_000.0,
+                            start_height, tip_height, tip_height.saturating_sub(start_height) + 1);
+                    } else {
+                        bal.clear();
+                        println!("  [c7] Cache CORRUPT (truncated/invalid utf-8). Full scan.");
+                    }
+                }
+            }
+        }
+
+        for h in start_height..=tip_height {
+            if (h - start_height) % 5000 == 0 && h > start_height {
                 println!("  [c7] ... scanning block {}/{} (credited {:.4} QC so far)",
                     h, tip_height, credited as f64 / 100_000_000.0);
             }
-            // Defensive: if a single block fails to deserialize or contains an unexpected
-            // shape, log and skip that block instead of crashing the node startup.
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
                 match db.get_block(h) {
                     Ok(Some(block)) => {
@@ -363,8 +406,30 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
                 }
             }
         }
-        println!("  [c7] Balances rebuilt: scanned {} blocks, missing {}, panicked {}, credited {:.8} QC across {} addresses",
-            blocks_seen, blocks_missing, blocks_panicked,
+
+        // Cache serialize: write the new (height, balances) snapshot to db.metadata.
+        // Skipped on empty bal so the cache cannot be silently overwritten with garbage.
+        if !bal.is_empty() && tip_height > 0 {
+            let mut buf: Vec<u8> = Vec::with_capacity(16 + bal.len() * 80);
+            buf.extend_from_slice(&tip_height.to_le_bytes());
+            buf.extend_from_slice(&(bal.len() as u64).to_le_bytes());
+            for (addr, amount) in bal.iter() {
+                let bytes = addr.as_bytes();
+                if bytes.len() > 255 { continue; }
+                buf.push(bytes.len() as u8);
+                buf.extend_from_slice(bytes);
+                buf.extend_from_slice(&amount.to_le_bytes());
+            }
+            if let Err(e) = db.put_metadata("c7_balance_cache", &buf) {
+                eprintln!("  [c7] Failed to write balance cache: {}", e);
+            } else {
+                println!("  [c7] Cache WRITTEN at height {}: {} addresses ({} bytes).",
+                    tip_height, bal.len(), buf.len());
+            }
+        }
+
+        println!("  [c7] Balances rebuilt: scanned {} blocks (from {}), missing {}, panicked {}, credited {:.8} QC across {} addresses",
+            blocks_seen, start_height, blocks_missing, blocks_panicked,
             credited as f64 / 100_000_000.0, bal.len());
     }
 
@@ -444,6 +509,24 @@ pub async fn handle_start_api_only(data_dir: &Path, api_port: u16) {
                         current_prev_hash = block.hash();
                         current_height = next;
                         chain_height_mine.store(next, std::sync::atomic::Ordering::Relaxed);
+                        // C7-cache: re-snapshot every 1000 blocks so a sudden restart doesn't
+                        // throw away the gradually built balance map. Cheap (~kilobytes).
+                        if next % 1000 == 0 {
+                            let bals = shared_balances.lock().unwrap();
+                            if !bals.is_empty() {
+                                let mut buf: Vec<u8> = Vec::with_capacity(16 + bals.len() * 80);
+                                buf.extend_from_slice(&next.to_le_bytes());
+                                buf.extend_from_slice(&(bals.len() as u64).to_le_bytes());
+                                for (addr, amount) in bals.iter() {
+                                    let bytes = addr.as_bytes();
+                                    if bytes.len() > 255 { continue; }
+                                    buf.push(bytes.len() as u8);
+                                    buf.extend_from_slice(bytes);
+                                    buf.extend_from_slice(&amount.to_le_bytes());
+                                }
+                                db.put_metadata("c7_balance_cache", &buf).ok();
+                            }
+                        }
                         if tx_count > 0 {
                             println!("  [MINE] Block {} | {:.8} QC | {} txs | total {:.8} QC",
                                 next, reward as f64 / 100_000_000.0, tx_count, current_mined as f64 / 100_000_000.0);

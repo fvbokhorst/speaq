@@ -2,7 +2,7 @@
 # Cloud Build was reusing a 2026-04-18 layer where workspaces was absent.
 # Single `npm ci` resolves all workspace deps when root package.json has
 # "workspaces": ["packages/*"] - simpler and avoids the explicit --workspace flag.
-FROM node:22-alpine AS builder
+FROM node:22.13-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/speaq-core/package.json packages/speaq-core/
@@ -13,7 +13,7 @@ COPY packages/speaq-relay/ packages/speaq-relay/
 RUN npm run build --workspace=packages/speaq-core
 RUN npm run build --workspace=packages/speaq-relay
 
-FROM node:22-alpine
+FROM node:22.13-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080

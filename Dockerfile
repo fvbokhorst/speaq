@@ -1,6 +1,7 @@
-# Cache-bust: 2026-04-25T15:35 (PQ-AUTH hybrid + @noble deps).
-# Cloud Build was reusing a stale layer; minor edit forces rebuild.
-FROM node:22-alpine AS builder
+# Cache-bust 2026-04-25T16:30 (PQ-AUTH hybrid). Switched FROM image from
+# node:22-alpine to node:22.13-alpine to force a fresh layer chain - the
+# 18-april cached image was being reused by Cloud Build despite our edits.
+FROM node:22.13-alpine AS builder
 WORKDIR /app
 
 COPY packages/speaq-core/package.json packages/speaq-core/
@@ -16,7 +17,7 @@ COPY packages/speaq-relay/ packages/speaq-relay/
 RUN cd packages/speaq-core && npm run build
 RUN cd /app/packages/speaq-relay && npm run build
 
-FROM node:22-alpine
+FROM node:22.13-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
