@@ -324,135 +324,85 @@ export interface KyberEncapsulation {
 }
 
 /**
- * Generate a Kyber/lattice keypair
+ * D1 audit fix (2026-04-25): replaced custom ring-LWE scheme with NIST FIPS 203
+ * ML-KEM-768 from @noble/post-quantum, the same library and algorithm now used
+ * by the PWA. Native and PWA users share an identical, peer-reviewed key
+ * exchange path.
  *
- * Ring-LWE key generation:
- * - Choose random polynomial a (from seed for compactness)
- * - Choose secret s, error e from CBD
- * - Public key: (seed, b = a*s + e)
- * - Private key: s
+ * Public key:  1184 bytes (ML-KEM-768 encapsulation key)
+ * Private key: 2400 bytes (ML-KEM-768 decapsulation key)
+ * Ciphertext:  1088 bytes
+ * Shared secret: 32 bytes (returned as 64-char hex for ratchet compat)
+ *
+ * MIGRATION: existing AsyncStorage entries from the old homemade scheme are
+ * NOT compatible (different key format). identity-manager / loadKyberKeyPair
+ * detects malformed/old keys via isLegacyKyberKey() and triggers regeneration.
+ * Existing per-contact ratchet states stay valid because they store the
+ * sharedSecret directly, not the Kyber keypair.
  */
+import { ml_kem768 as _ml_kem768 } from "@noble/post-quantum/ml-kem.js";
+
+function _b64ToBytesNative(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _bytesToB64Native(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i += 8192) {
+    s += String.fromCharCode.apply(null, Array.from(b.subarray(i, i + 8192)));
+  }
+  return btoa(s);
+}
+
 export function generateKyberKeyPair(): KyberKeyPair {
-  const seed = randomHex(32);
-  const a = polyFromSeed(seed);
-  const s = sampleCBD(3);
-  const e = sampleCBD(3);
-
-  // b = a*s + e mod q
-  const b = polyAdd(polyMul(a, s), e);
-
-  // Public key: seed (for regenerating a) + b
-  const pubData = seed + ":" + polyToBase64(b);
-  const privData = polyToBase64(s);
-
+  const seed = new Uint8Array(64);
+  // Polyfilled by react-native-get-random-values at the top of this file.
+  globalThis.crypto.getRandomValues(seed);
+  const kp = _ml_kem768.keygen(seed);
   return {
-    publicKey: btoa(pubData),
-    privateKey: btoa(privData),
+    publicKey: _bytesToB64Native(kp.publicKey),
+    privateKey: _bytesToB64Native(kp.secretKey),
   };
 }
 
-/**
- * Encapsulate: create a shared secret using recipient's public key
- *
- * Ring-LWE encapsulation:
- * - Parse public key to get (a, b)
- * - Choose random r, e1, e2 from CBD
- * - u = a*r + e1
- * - v = b*r + e2 + encode(message)
- * - Shared secret = SHA-256(message)
- */
 export function kyberEncapsulate(publicKeyB64: string): KyberEncapsulation {
-  // Parse public key
-  const pubData = atob(publicKeyB64);
-  const sepIdx = pubData.indexOf(":");
-  const seed = pubData.substring(0, sepIdx);
-  const b = polyFromBase64(pubData.substring(sepIdx + 1));
-  const a = polyFromSeed(seed);
-
-  // Sample randomness
-  const r = sampleCBD(3);
-  const e1 = sampleCBD(3);
-  const e2 = sampleCBD(3);
-
-  // Generate random message (32 bytes as polynomial coefficients 0 or q/2)
-  const msgBytes = randomBytes(32);
-  const msgPoly = new Int16Array(LATTICE_N);
-  for (let i = 0; i < 256; i++) {
-    const bit = (msgBytes[i >> 3] >> (i & 7)) & 1;
-    msgPoly[i] = bit ? Math.round(LATTICE_Q / 2) : 0;
+  const pub = _b64ToBytesNative(publicKeyB64);
+  if (pub.length !== 1184) {
+    throw new Error(`kyberEncapsulate: expected 1184-byte ML-KEM-768 public key, got ${pub.length} (legacy peer needs to regenerate)`);
   }
+  const enc = _ml_kem768.encapsulate(pub);
+  return {
+    ciphertext: _bytesToB64Native(enc.cipherText),
+    sharedSecret: toHex(enc.sharedSecret),
+  };
+}
 
-  // u = a*r + e1
-  const u = polyAdd(polyMul(a, r), e1);
-
-  // v = b*r + e2 + msgPoly
-  const v = polyAdd(polyAdd(polyMul(b, r), e2), msgPoly);
-
-  // Compress u and v for ciphertext
-  const uCompressed = compressToBytes(u, 10);
-  const vCompressed = compressToBytes(v, 4);
-
-  // Combine into ciphertext
-  const ctBytes = new Uint8Array(uCompressed.length + vCompressed.length);
-  ctBytes.set(uCompressed);
-  ctBytes.set(vCompressed, uCompressed.length);
-
-  const ctWordArray = CryptoJS.lib.WordArray.create(ctBytes as any);
-  const ciphertext = CryptoJS.enc.Base64.stringify(ctWordArray);
-
-  // Shared secret = SHA-256 of the random message
-  const sharedSecret = sha256(toHex(msgBytes));
-
-  return { ciphertext, sharedSecret };
+export function kyberDecapsulate(ciphertextB64: string, privateKeyB64: string): string {
+  const sk = _b64ToBytesNative(privateKeyB64);
+  const ct = _b64ToBytesNative(ciphertextB64);
+  if (sk.length !== 2400) {
+    throw new Error(`kyberDecapsulate: expected 2400-byte ML-KEM-768 private key, got ${sk.length} (regenerate locally)`);
+  }
+  if (ct.length !== 1088) {
+    throw new Error(`kyberDecapsulate: expected 1088-byte ML-KEM-768 ciphertext, got ${ct.length} (sender used incompatible scheme)`);
+  }
+  const ss = _ml_kem768.decapsulate(ct, sk);
+  return toHex(ss);
 }
 
 /**
- * Decapsulate: recover shared secret using own private key
- *
- * Ring-LWE decapsulation:
- * - Compute v - s*u to recover noisy message
- * - Round to decode message bits
- * - Shared secret = SHA-256(message)
+ * Detects legacy (homemade ring-LWE) Kyber keys so identity-manager can trigger
+ * regeneration. New format is exactly 1184 bytes raw; anything else is legacy.
  */
-export function kyberDecapsulate(ciphertextB64: string, privateKeyB64: string): string {
-  const s = polyFromBase64(atob(privateKeyB64));
-
-  // Parse ciphertext
-  const ctWordArray = CryptoJS.enc.Base64.parse(ciphertextB64);
-  const ctBytes = new Uint8Array(ctWordArray.words.length * 4);
-  for (let i = 0; i < ctWordArray.words.length; i++) {
-    ctBytes[i * 4] = (ctWordArray.words[i] >> 24) & 0xff;
-    ctBytes[i * 4 + 1] = (ctWordArray.words[i] >> 16) & 0xff;
-    ctBytes[i * 4 + 2] = (ctWordArray.words[i] >> 8) & 0xff;
-    ctBytes[i * 4 + 3] = ctWordArray.words[i] & 0xff;
+export function isLegacyKyberKey(publicKeyB64: string): boolean {
+  try {
+    const bytes = _b64ToBytesNative(publicKeyB64);
+    return bytes.length !== 1184;
+  } catch {
+    return true;
   }
-
-  const uSize = LATTICE_N * 10 / 8; // 320 bytes
-  const uCompressed = ctBytes.slice(0, uSize);
-  const vCompressed = ctBytes.slice(uSize, uSize + LATTICE_N * 4 / 8);
-
-  const u = decompressFromBytes(uCompressed, 10);
-  const v = decompressFromBytes(vCompressed, 4);
-
-  // Recover noisy message: v - s*u
-  const su = polyMul(s, u);
-  const noisy = polySub(v, su);
-
-  // Decode message bits by rounding
-  const msgBytes = new Uint8Array(32);
-  for (let i = 0; i < 256; i++) {
-    const coeff = noisy[i];
-    // Closer to q/2 than to 0 means bit=1
-    const dist0 = Math.min(coeff, LATTICE_Q - coeff);
-    const halfQ = Math.round(LATTICE_Q / 2);
-    const distHalf = Math.abs(coeff - halfQ);
-    if (dist0 > distHalf) {
-      msgBytes[i >> 3] |= 1 << (i & 7);
-    }
-  }
-
-  // Shared secret = SHA-256 of decoded message
-  return sha256(toHex(msgBytes));
 }
 
 // ============================================================

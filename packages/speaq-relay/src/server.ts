@@ -27,7 +27,7 @@ import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from
 // the registered pubkey size in publicKeys.get(speaqId).signPublicKey. Existing users
 // keep working (ECDSA path), new users with PQ-capable clients can register an ML-DSA
 // pubkey via /api/v1/register and the AUTH challenge will use the PQ verify path.
-import { ml_dsa65 } from "@noble/post-quantum/ml-dsa";
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 // --- Types ---
 
@@ -912,9 +912,11 @@ wss.on("connection", (ws: WebSocket) => {
       }
 
       // Path 3: legacy JWK fallback - older PWA registered base64-of-JWK as pubkey.
-      // Try to parse as JSON, importKey with format="jwk".
+      // Try to parse as JSON, importKey with format="jwk". Use a minimal local interface
+      // because lib.dom is not in the relay tsconfig (Node-only build).
       try {
-        const jwk = JSON.parse(pub.toString("utf-8")) as JsonWebKey;
+        type JwkLite = { kty?: string; crv?: string; x?: string; y?: string; d?: string };
+        const jwk = JSON.parse(pub.toString("utf-8")) as JwkLite;
         if (jwk.kty === "EC" && jwk.crv === "P-256") {
           const key = await crypto.webcrypto.subtle.importKey(
             "jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]

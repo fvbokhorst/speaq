@@ -12,7 +12,7 @@ import { config } from "./config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   encryptMessage, decryptMessage, getContactKey, generateSecureId,
-  generateKyberKeyPair, saveKyberKeyPair, loadKyberKeyPair,
+  generateKyberKeyPair, saveKyberKeyPair, loadKyberKeyPair, isLegacyKyberKey,
   getOrCreateRatchet, initRatchetFromKeyExchange,
   ratchetEncrypt,
   KyberKeyPair,
@@ -99,10 +99,18 @@ export async function loadIdentity(): Promise<typeof identity> {
     if (data) {
       identity = JSON.parse(data);
 
-      // Load Kyber keypair
+      // Load Kyber keypair. D1 audit fix: detect legacy (homemade ring-LWE) keys
+      // and regenerate with FIPS 203 ML-KEM-768. Existing ratchet states retain
+      // their sharedSecret so old conversations remain readable; only NEW key
+      // exchanges with contacts use the upgraded keys.
       kyberKeys = await loadKyberKeyPair();
+      if (kyberKeys && isLegacyKyberKey(kyberKeys.publicKey)) {
+        console.warn("[SPEAQ] Legacy Kyber keys detected - regenerating with FIPS 203 ML-KEM-768");
+        kyberKeys = generateKyberKeyPair();
+        await saveKyberKeyPair(kyberKeys);
+      }
       if (!kyberKeys && identity) {
-        // Migration: existing identity without Kyber keys -- generate now
+        // Migration: existing identity without Kyber keys -- generate now (FIPS 203)
         kyberKeys = generateKyberKeyPair();
         await saveKyberKeyPair(kyberKeys);
       }
