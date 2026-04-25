@@ -114,6 +114,10 @@ const COUNTRY_NAMES: Record<string, string> = {
 // Mining stats
 let totalMiningReceipts = 0;
 let totalQCMined = 0;
+// Set to true if loadStats finished but counters are 0 while users > 0 (stale-state guard).
+// While true, saveStats() refuses to overwrite the persisted file to avoid wiping a healthy
+// remote/disk copy with the in-memory zero-state from a fresh container.
+let statsLoadFailed = false;
 
 // Load persisted stats from remote server (Google VM), fallback to local disk
 async function loadStats(): Promise<void> {
@@ -127,15 +131,15 @@ async function loadStats(): Promise<void> {
           allUsers.set(id, record as UserRecord);
         }
       }
-      if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
-      if (data.totalQCMined) totalQCMined = data.totalQCMined;
+      if (typeof data.totalMiningReceipts === "number") totalMiningReceipts = data.totalMiningReceipts;
+      if (typeof data.totalQCMined === "number") totalQCMined = data.totalQCMined;
       if (data.countryStats) {
         for (const [code, value] of Object.entries(data.countryStats)) {
           // New format: Array<speaqId>. Old format (number) is legacy and ignored (stats refresh).
           if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from remote`);
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from remote`);
       return;
     }
   } catch (e) {
@@ -150,22 +154,43 @@ async function loadStats(): Promise<void> {
           allUsers.set(id, record as UserRecord);
         }
       }
-      if (data.totalMiningReceipts) totalMiningReceipts = data.totalMiningReceipts;
-      if (data.totalQCMined) totalQCMined = data.totalQCMined;
+      if (typeof data.totalMiningReceipts === "number") totalMiningReceipts = data.totalMiningReceipts;
+      if (typeof data.totalQCMined === "number") totalQCMined = data.totalQCMined;
       if (data.countryStats) {
         for (const [code, value] of Object.entries(data.countryStats)) {
           if (Array.isArray(value)) countryStats.set(code, new Set(value));
         }
       }
-      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries from disk`);
+      console.log(`  Stats loaded: ${allUsers.size} users, ${countryStats.size} countries, totalQCMined=${totalQCMined}, totalMiningReceipts=${totalMiningReceipts} from disk`);
+    } else {
+      console.warn("  No stats source available (remote + disk both failed). Counters START AT ZERO.");
     }
   } catch (e) {
     console.error("  Failed to load stats:", e);
+  }
+  // Loud-fail safety: if we have known users from previous saves but counters are 0, log very visibly.
+  // This catches the silent-reset bug observed 2026-04-25 where Cloud Run cold start + dead fallback URL
+  // would silently start counters at 0 and overwrite the persisted value on next save.
+  if (allUsers.size > 0 && totalMiningReceipts === 0 && totalQCMined === 0) {
+    console.error("=".repeat(80));
+    console.error(`STATS WARNING: ${allUsers.size} known users but counters are 0.`);
+    console.error("This may indicate state was lost. Refusing to overwrite persistent state until counters > 0.");
+    console.error("=".repeat(80));
+    statsLoadFailed = true;
+  } else {
+    statsLoadFailed = false;
   }
 }
 
 // Save stats to remote server (Google VM) + local disk
 async function saveStats(): Promise<void> {
+  // Stale-state guard: if loadStats flagged a likely silent-reset, do not overwrite the persisted
+  // copy with our in-memory zero state. The healthy values stay safe on remote/disk until either
+  // (a) counters grow above 0 from real activity, or (b) an operator force-resets statsLoadFailed.
+  if (statsLoadFailed && totalMiningReceipts === 0 && totalQCMined === 0) {
+    console.warn("  saveStats SKIPPED: stale-state guard active (counters 0 with known users). Manual recovery required.");
+    return;
+  }
   const data = {
     users: Object.fromEntries(allUsers),
     totalMiningReceipts,
@@ -191,6 +216,15 @@ async function saveStats(): Promise<void> {
     fs.writeFileSync(STATS_FILE, json, "utf-8");
   } catch (e) {
     console.error("  Failed to save stats to disk:", e);
+  }
+}
+
+// Once real activity grows the counters above 0, lift the stale-state guard so saveStats resumes.
+// This is checked on every mining receipt that increments totalQCMined (see receipt handler below).
+function clearStaleStateGuardIfRecovered(): void {
+  if (statsLoadFailed && (totalMiningReceipts > 0 || totalQCMined > 0)) {
+    console.log(`  Stats stale-state guard CLEARED: counters recovered (totalQCMined=${totalQCMined}, receipts=${totalMiningReceipts}). saveStats will resume.`);
+    statsLoadFailed = false;
   }
 }
 
@@ -563,6 +597,7 @@ app.post("/api/v1/mining/receipt", (req, res) => {
   // Track mining stats
   totalMiningReceipts++;
   totalQCMined += parseFloat(amount) || 0;
+  clearStaleStateGuardIfRecovered();
 
   res.json({
     receiptId,
@@ -591,11 +626,17 @@ app.post("/api/v1/mining/verify-receipt", (req, res) => {
   res.json({ valid, receiptData });
 });
 
-// Mining network stats (placeholder -- will be replaced by ledger)
+// Mining network stats - real values from in-memory counters (kept in sync with persisted stats).
+// staleState=true means the relay is currently running with the stale-state guard active because
+// it could not load known counters at startup; the response value is then unreliable until recovered.
 app.get("/api/v1/mining/network-stats", (_req, res) => {
   res.json({
-    totalQCMined: 0, // placeholder: will be replaced by ledger integration
-    activeMiners: 0,  // placeholder: will be replaced by ledger integration
+    totalQCMined,
+    activeMiners: clients.size,
+    totalMiningReceipts,
+    knownUsers: allUsers.size,
+    staleState: statsLoadFailed,
+    serverStartedAt,
   });
 });
 
