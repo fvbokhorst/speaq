@@ -779,49 +779,125 @@ const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws: WebSocket) => {
   let clientId: string | null = null;
+  // Per-connection challenge state. When the client claims a speaqId for which we have a
+  // registered ECDSA public key, we issue a random nonce and require the next message to be
+  // an AUTH_RESPONSE with a valid signature over that nonce. The challenge expires after
+  // CHALLENGE_TTL_MS or after one attempt.
+  let pendingChallenge: { speaqId: string; nonce: string; expiresAt: number; cc?: string } | null = null;
+  const CHALLENGE_TTL_MS = 30_000;
+
+  // Helper: complete authentication once identity has been established (either via verified
+  // signature, or via TOFU on first contact for users without a registered key).
+  const completeAuth = (sid: string, cc: string | undefined, mode: "verified" | "tofu" | "legacy") => {
+    clientId = sid;
+    clients.set(sid, { speaqId: sid, ws, connectedAt: Date.now() });
+    if (cc && typeof cc === "string" && cc.length === 2) {
+      const upper = cc.toUpperCase();
+      let ids = countryStats.get(upper);
+      if (!ids) { ids = new Set<string>(); countryStats.set(upper, ids); }
+      ids.add(sid);
+    }
+    const isNewUser = trackUser(sid);
+    if (isNewUser) notifyAdmin(`[SYSTEM] New user joined: ${sid.substring(0, 8)} (${mode})`);
+    const offline = getOfflineMessages(sid);
+    for (const m of offline) {
+      ws.send(JSON.stringify({ type: "RECEIVE", from: m.from, blob: m.blob, id: m.id }));
+    }
+    if (offline.length > 0) clearOfflineMessages(sid);
+    ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length, authMode: mode }));
+  };
+
+  // Helper: verify ECDSA P-256 signature over the challenge nonce using the registered pubkey.
+  // The client signs the UTF-8 bytes of the nonce string with crypto.subtle.sign({name:"ECDSA",
+  // hash:"SHA-256"}, ...) which produces a raw IEEE-P1363 r||s pair. The pubkey was registered
+  // via /api/v1/register as a base64 raw 65-byte uncompressed P-256 public key.
+  const verifyChallengeSignature = async (signPublicKeyB64: string, nonce: string, signatureB64: string): Promise<boolean> => {
+    try {
+      const pub = Buffer.from(signPublicKeyB64, "base64");
+      const sig = Buffer.from(signatureB64, "base64");
+      const key = await crypto.webcrypto.subtle.importKey(
+        "raw", pub, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
+      );
+      return await crypto.webcrypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8")
+      );
+    } catch {
+      return false;
+    }
+  };
 
   ws.on("message", (raw: Buffer) => {
     try {
       const msg = JSON.parse(raw.toString());
 
       switch (msg.type) {
-        // AUTH: Client identifies itself
+        // AUTH: Client identifies itself.
+        // If we have a registered ECDSA public key for the claimed speaqId, we issue a
+        // challenge nonce and require an AUTH_RESPONSE with a valid signature before granting
+        // access. If we do not have a registered key yet, we fall back to TOFU (Trust On First
+        // Use): the client is admitted, but a future /api/v1/register call by that client
+        // locks the speaqId so all future AUTHs require a signature.
         case "AUTH": {
-          clientId = msg.speaqId;
-          if (!clientId) {
+          const sid = msg.speaqId;
+          const cc = msg.cc;
+          if (!sid || typeof sid !== "string") {
             ws.send(JSON.stringify({ type: "ERROR", error: "speaqId required" }));
             return;
           }
+          const known = publicKeys.get(sid);
+          if (known && known.signPublicKey) {
+            // Identity is registered - require challenge-response.
+            const nonce = crypto.randomBytes(32).toString("base64");
+            pendingChallenge = { speaqId: sid, nonce, expiresAt: Date.now() + CHALLENGE_TTL_MS, cc };
+            ws.send(JSON.stringify({ type: "AUTH_CHALLENGE", nonce, expiresAt: pendingChallenge.expiresAt }));
+            return;
+          }
+          // No registered key for this speaqId - admit on TOFU. The client is expected to call
+          // /api/v1/register shortly after to register its keys; once registered, future AUTHs
+          // for this speaqId will require a signature.
+          completeAuth(sid, cc, "tofu");
+          break;
+        }
 
-          clients.set(clientId, { speaqId: clientId, ws, connectedAt: Date.now() });
-
-          // Track country code (privacy-preserving: timezone-derived, no IP)
-          if (msg.cc && typeof msg.cc === "string" && msg.cc.length === 2) {
-            const cc = msg.cc.toUpperCase();
-            let ids = countryStats.get(cc);
-            if (!ids) {
-              ids = new Set<string>();
-              countryStats.set(cc, ids);
+        // AUTH_RESPONSE: Client signs the previously issued challenge nonce with its ECDSA
+        // private key. Server verifies against the registered public key.
+        case "AUTH_RESPONSE": {
+          if (!pendingChallenge) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "No pending challenge" }));
+            return;
+          }
+          if (Date.now() > pendingChallenge.expiresAt) {
+            pendingChallenge = null;
+            ws.send(JSON.stringify({ type: "ERROR", error: "Challenge expired" }));
+            return;
+          }
+          const sid = pendingChallenge.speaqId;
+          const nonce = pendingChallenge.nonce;
+          const cc = pendingChallenge.cc;
+          // Single-use: clear before verify so a failed attempt does not leave the challenge
+          // available for a retry from a different signature attempt.
+          pendingChallenge = null;
+          const sig = msg.signature;
+          if (!sig || typeof sig !== "string") {
+            ws.send(JSON.stringify({ type: "ERROR", error: "signature required" }));
+            return;
+          }
+          const known = publicKeys.get(sid);
+          if (!known || !known.signPublicKey) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "No registered key for this speaqId" }));
+            return;
+          }
+          (async () => {
+            const ok = await verifyChallengeSignature(known.signPublicKey, nonce, sig);
+            if (!ok) {
+              ws.send(JSON.stringify({ type: "ERROR", error: "Signature verification failed" }));
+              return;
             }
-            ids.add(clientId);
-          }
-
-          // Track user for admin stats
-          const isNewUser = trackUser(clientId);
-          if (isNewUser) {
-            notifyAdmin(`[SYSTEM] New user joined: ${clientId.substring(0, 8)}`);
-          }
-
-          // Deliver any offline messages
-          const offline = getOfflineMessages(clientId);
-          for (const m of offline) {
-            ws.send(JSON.stringify({ type: "RECEIVE", from: m.from, blob: m.blob, id: m.id }));
-          }
-          if (offline.length > 0) {
-            clearOfflineMessages(clientId);
-          }
-
-          ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length }));
+            completeAuth(sid, cc, "verified");
+          })().catch((e) => {
+            console.error("[auth] verify failed:", e);
+            ws.send(JSON.stringify({ type: "ERROR", error: "Verification error" }));
+          });
           break;
         }
 
