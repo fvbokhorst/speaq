@@ -21,6 +21,13 @@ import fs from "fs";
 import path from "path";
 import { configurePush, triggerSilentPush, isConfigured as isPushConfigured } from "./push/push-service";
 import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from "./push/push-store";
+// Audit follow-up (2026-04-25): post-quantum AUTH. Server now accepts BOTH ECDSA P-256
+// (65-byte raw pubkey, the existing scheme used since C1) and ML-DSA-65 / FIPS 204
+// (1952-byte raw pubkey, the post-quantum scheme). The format is auto-detected from
+// the registered pubkey size in publicKeys.get(speaqId).signPublicKey. Existing users
+// keep working (ECDSA path), new users with PQ-capable clients can register an ML-DSA
+// pubkey via /api/v1/register and the AUTH challenge will use the PQ verify path.
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa";
 
 // --- Types ---
 
@@ -872,21 +879,58 @@ wss.on("connection", (ws: WebSocket) => {
     ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length, authMode: mode }));
   };
 
-  // Helper: verify ECDSA P-256 signature over the challenge nonce using the registered pubkey.
-  // The client signs the UTF-8 bytes of the nonce string with crypto.subtle.sign({name:"ECDSA",
-  // hash:"SHA-256"}, ...) which produces a raw IEEE-P1363 r||s pair. The pubkey was registered
-  // via /api/v1/register as a base64 raw 65-byte uncompressed P-256 public key.
+  // Helper: verify the challenge signature.
+  // Hybrid scheme - the registered pubkey size determines the algorithm:
+  //   65 bytes  -> ECDSA P-256 raw uncompressed (NIST, pre-quantum, the original scheme).
+  //   1952 bytes -> ML-DSA-65 (FIPS 204 Dilithium, post-quantum).
+  // Other lengths (e.g. base64 of a JWK) are treated as ECDSA via Web Crypto subtle.importKey
+  // with format="jwk" parsed from the b64 payload, for compatibility with PWA clients that
+  // registered a JWK-encoded pubkey before the raw-format change.
   const verifyChallengeSignature = async (signPublicKeyB64: string, nonce: string, signatureB64: string): Promise<boolean> => {
     try {
       const pub = Buffer.from(signPublicKeyB64, "base64");
       const sig = Buffer.from(signatureB64, "base64");
-      const key = await crypto.webcrypto.subtle.importKey(
-        "raw", pub, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
-      );
-      return await crypto.webcrypto.subtle.verify(
-        { name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8")
-      );
-    } catch {
+
+      // Path 1: ML-DSA-65 (post-quantum)
+      if (pub.length === 1952) {
+        try {
+          return ml_dsa65.verify(pub, Buffer.from(nonce, "utf-8"), sig);
+        } catch (e) {
+          console.warn("[auth] ML-DSA verify error:", e);
+          return false;
+        }
+      }
+
+      // Path 2: ECDSA P-256 raw (65 byte uncompressed)
+      if (pub.length === 65) {
+        const key = await crypto.webcrypto.subtle.importKey(
+          "raw", pub, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
+        );
+        return await crypto.webcrypto.subtle.verify(
+          { name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8")
+        );
+      }
+
+      // Path 3: legacy JWK fallback - older PWA registered base64-of-JWK as pubkey.
+      // Try to parse as JSON, importKey with format="jwk".
+      try {
+        const jwk = JSON.parse(pub.toString("utf-8")) as JsonWebKey;
+        if (jwk.kty === "EC" && jwk.crv === "P-256") {
+          const key = await crypto.webcrypto.subtle.importKey(
+            "jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
+          );
+          return await crypto.webcrypto.subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" }, key, sig, Buffer.from(nonce, "utf-8")
+          );
+        }
+      } catch {
+        // not JWK, fall through
+      }
+
+      console.warn(`[auth] unrecognized signPublicKey format: length=${pub.length}`);
+      return false;
+    } catch (e) {
+      console.error("[auth] verifyChallengeSignature error:", e);
       return false;
     }
   };
