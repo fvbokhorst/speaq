@@ -1,9 +1,13 @@
+# Cache-buster 2026-04-25T15:30: PQ-AUTH hybrid + @noble deps in root.
+# Cloud Build was reusing a 2026-04-18 layer where workspaces was absent.
+# Single `npm ci` resolves all workspace deps when root package.json has
+# "workspaces": ["packages/*"] - simpler and avoids the explicit --workspace flag.
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/speaq-core/package.json packages/speaq-core/
 COPY packages/speaq-relay/package.json packages/speaq-relay/
-RUN npm ci --workspace=packages/speaq-core --workspace=packages/speaq-relay
+RUN npm ci
 COPY packages/speaq-core/ packages/speaq-core/
 COPY packages/speaq-relay/ packages/speaq-relay/
 RUN npm run build --workspace=packages/speaq-core
