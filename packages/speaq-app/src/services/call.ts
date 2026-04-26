@@ -12,6 +12,8 @@ import {
   MediaStream,
 } from "react-native-webrtc";
 import { relay } from "./relay";
+import { getIdentity } from "./speaq";
+import { encryptCallBlob, decryptCallBlob } from "./crypto";
 
 export type CallState = "idle" | "calling" | "ringing" | "connected" | "ended";
 
@@ -22,6 +24,35 @@ const ICE_SERVERS = [
   { urls: "stun:stun.thespeaq.com:3478" },
   { urls: "stun:136.109.120.222:3478" },
 ];
+
+// C2-N + C2.2-N audit fix (2026-04-26): every WebRTC signaling payload is now
+// encrypted with AES-256-GCM keyed off the ratchet rootKey before being sent
+// to the relay. Wire format (base64(iv12 ++ ct)) matches PWA so PWA<->native
+// calls remain interoperable. If a peer has no ratchet yet (legacy or first
+// contact), encryption falls back to an ID-derived key (relay-readable, only
+// when no shared secret is available).
+//
+// Inbound handlers try msg.blob first; if absent or decrypt fails, fall back
+// to legacy plaintext msg.sdp/msg.candidate with console.warn so we can spot
+// remaining unpatched peers in the field.
+
+async function tryDecryptCallBlob(peerId: string | undefined, msg: any, plaintextField: "sdp" | "candidate"): Promise<any | null> {
+  const myId = getIdentity()?.speaqId;
+  if (msg.blob && myId && peerId) {
+    try {
+      const plain = await decryptCallBlob(myId, peerId, msg.blob);
+      return JSON.parse(plain);
+    } catch (e) {
+      console.error(`[SPEAQ] call signaling decrypt failed for ${plaintextField}:`, e);
+      return null;
+    }
+  }
+  if (msg[plaintextField] !== undefined) {
+    console.warn(`[SPEAQ] call signaling received in legacy plaintext mode (${plaintextField}) from`, peerId);
+    return { [plaintextField]: msg[plaintextField], video: msg.video };
+  }
+  return null;
+}
 
 class CallService {
   private pc: RTCPeerConnection | null = null;
@@ -66,12 +97,14 @@ class CallService {
     relay.on("__raw_send", () => {});
     const ws = (relay as any).ws;
     if (ws) {
+      const myId = getIdentity()?.speaqId;
+      const blob = myId ? await encryptCallBlob(myId, contactId, JSON.stringify({ sdp: offer.sdp, video })) : null;
       ws.send(JSON.stringify({
         type: "CALL_OFFER",
         to: contactId,
-        sdp: offer.sdp,
+        ...(blob ? { blob } : { sdp: offer.sdp, video }),
         callId: this.callId,
-        video,
+        video, // kept top-level so the receiver can render UI before decrypting
       }));
     }
   }
@@ -86,10 +119,12 @@ class CallService {
 
     const ws = (relay as any).ws;
     if (ws) {
+      const myId = getIdentity()?.speaqId;
+      const blob = myId && this.contactId ? await encryptCallBlob(myId, this.contactId, JSON.stringify({ sdp: answer.sdp })) : null;
       ws.send(JSON.stringify({
         type: "CALL_ANSWER",
         to: this.contactId,
-        sdp: answer.sdp,
+        ...(blob ? { blob } : { sdp: answer.sdp }),
         callId: this.callId,
       }));
     }
@@ -215,17 +250,18 @@ class CallService {
   private async setupPeerConnection(): Promise<void> {
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    this.pc.onicecandidate = (event: any) => {
+    this.pc.onicecandidate = async (event: any) => {
       if (event.candidate && this.contactId) {
         const ws = (relay as any).ws;
-        if (ws) {
-          ws.send(JSON.stringify({
-            type: "ICE_CANDIDATE",
-            to: this.contactId,
-            candidate: event.candidate,
-            callId: this.callId,
-          }));
-        }
+        if (!ws) return;
+        const myId = getIdentity()?.speaqId;
+        const blob = myId ? await encryptCallBlob(myId, this.contactId, JSON.stringify({ candidate: event.candidate })) : null;
+        ws.send(JSON.stringify({
+          type: "ICE_CANDIDATE",
+          to: this.contactId,
+          ...(blob ? { blob } : { candidate: event.candidate }),
+          callId: this.callId,
+        }));
       }
     };
 
@@ -270,26 +306,39 @@ class CallService {
       return;
     }
 
+    const decoded = await tryDecryptCallBlob(msg.from, msg, "sdp");
+    if (!decoded || !decoded.sdp) {
+      console.error("[SPEAQ] CALL_OFFER without usable SDP, ignoring");
+      return;
+    }
+
     this.contactId = msg.from;
     this.callId = msg.callId;
-    this.isVideo = msg.video || false;
+    this.isVideo = decoded.video ?? msg.video ?? false;
     this.setState("ringing");
 
     await this.setupPeerConnection();
-    await this.pc!.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: msg.sdp }));
+    await this.pc!.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: decoded.sdp }));
 
-    this.emit("incomingCall", { from: msg.from, callId: msg.callId, video: msg.video });
+    this.emit("incomingCall", { from: msg.from, callId: msg.callId, video: this.isVideo });
   }
 
   private async handleAnswer(msg: any): Promise<void> {
     if (!this.pc || msg.callId !== this.callId) return;
-    await this.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }));
+    const decoded = await tryDecryptCallBlob(msg.from || this.contactId || undefined, msg, "sdp");
+    if (!decoded || !decoded.sdp) {
+      console.error("[SPEAQ] CALL_ANSWER without usable SDP, ignoring");
+      return;
+    }
+    await this.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: decoded.sdp }));
     this.setState("connected");
   }
 
   private async handleIceCandidate(msg: any): Promise<void> {
     if (msg.callId !== this.callId) return;
-    const candidate = new RTCIceCandidate(msg.candidate);
+    const decoded = await tryDecryptCallBlob(msg.from || this.contactId || undefined, msg, "candidate");
+    if (!decoded || !decoded.candidate) return;
+    const candidate = new RTCIceCandidate(decoded.candidate);
     if (this.pc?.remoteDescription) {
       await this.pc.addIceCandidate(candidate);
     } else {
@@ -368,17 +417,18 @@ class CallService {
     for (const memberId of memberIds) {
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-      pc.onicecandidate = (event: any) => {
+      pc.onicecandidate = async (event: any) => {
         if (event.candidate) {
           const ws = (relay as any).ws;
-          if (ws) {
-            ws.send(JSON.stringify({
-              type: "ICE_CANDIDATE",
-              to: memberId,
-              candidate: event.candidate,
-              callId: this.callId,
-            }));
-          }
+          if (!ws) return;
+          const myId = getIdentity()?.speaqId;
+          const blob = myId ? await encryptCallBlob(myId, memberId, JSON.stringify({ candidate: event.candidate })) : null;
+          ws.send(JSON.stringify({
+            type: "ICE_CANDIDATE",
+            to: memberId,
+            ...(blob ? { blob } : { candidate: event.candidate }),
+            callId: this.callId,
+          }));
         }
       };
 
@@ -403,12 +453,14 @@ class CallService {
 
       const ws = (relay as any).ws;
       if (ws) {
+        const myId = getIdentity()?.speaqId;
+        const blob = myId ? await encryptCallBlob(myId, memberId, JSON.stringify({ sdp: offer.sdp, video })) : null;
         ws.send(JSON.stringify({
           type: "CALL_OFFER",
           to: memberId,
-          sdp: offer.sdp,
+          ...(blob ? { blob } : { sdp: offer.sdp, video }),
           callId: this.callId,
-          video,
+          video, // kept top-level so the receiver can render UI before decrypting
           group: true,
         }));
       }

@@ -780,3 +780,160 @@ export function decryptMessage(key: string, ciphertext: string): string {
     return "";
   }
 }
+
+// =================================================================================
+// SECTION 8: Digital signatures for KEY_EXCHANGE auth (E1-N audit fix, 2026-04-26)
+// =================================================================================
+// Mirrors PWA src/app/app/crypto.ts SECTION 7. Native uses ML-DSA-65 (FIPS 204)
+// instead of ECDSA P-256 because @noble/curves is not a dependency here and ML-DSA
+// is post-quantum-superior. The native KEY_EXCHANGE protocol differs from the PWA
+// (it sends kyberPublicKey/kyberCiphertext as top-level fields, not as msg.blob),
+// so signing operates on the same data the receiver verifies, which keeps the two
+// platforms decoupled at the KEY_EXCHANGE layer. Cross-platform call signaling
+// (C2-N below) is wire-compatible with the PWA's blob format.
+
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
+
+export interface SigningKeyPair {
+  publicKey: string;   // base64 of 1952 bytes (ML-DSA-65 pub)
+  privateKey: string;  // base64 of 4032 bytes (ML-DSA-65 secret)
+}
+
+const SIGNING_KEYS_KEY = "speaq_signing_keys";
+const CONTACT_SIGN_PUB_PREFIX = "speaq_sign_pub_";
+
+export function generateSigningKeyPair(): SigningKeyPair {
+  const seed = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(seed);
+  const kp = ml_dsa65.keygen(seed);
+  return {
+    publicKey: _bytesToB64(kp.publicKey),
+    privateKey: _bytesToB64(kp.secretKey),
+  };
+}
+
+export function signData(data: string, privateKeyB64: string): string {
+  const sk = _b64ToBytes(privateKeyB64);
+  if (sk.length !== 4032) throw new Error(`ML-DSA-65 secretKey must be 4032 bytes, got ${sk.length}`);
+  const sig = ml_dsa65.sign(sk, _strToBytes(data));
+  return _bytesToB64(sig);
+}
+
+export function verifySignature(data: string, signatureB64: string, publicKeyB64: string): boolean {
+  try {
+    const pk = _b64ToBytes(publicKeyB64);
+    if (pk.length !== 1952) return false;
+    const sig = _b64ToBytes(signatureB64);
+    if (sig.length !== 3309) return false;
+    return ml_dsa65.verify(pk, _strToBytes(data), sig);
+  } catch {
+    return false;
+  }
+}
+
+export async function saveSigningKeys(keys: SigningKeyPair): Promise<void> {
+  await AsyncStorage.setItem(SIGNING_KEYS_KEY, JSON.stringify(keys));
+}
+
+export async function loadSigningKeys(): Promise<SigningKeyPair | null> {
+  try {
+    const s = await AsyncStorage.getItem(SIGNING_KEYS_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getOrCreateSigningKeys(): Promise<SigningKeyPair> {
+  const existing = await loadSigningKeys();
+  if (existing && existing.publicKey && existing.privateKey) return existing;
+  const fresh = generateSigningKeyPair();
+  await saveSigningKeys(fresh);
+  return fresh;
+}
+
+export async function saveContactSigningKey(contactId: string, pubKey: string): Promise<void> {
+  await AsyncStorage.setItem(`${CONTACT_SIGN_PUB_PREFIX}${contactId}`, pubKey);
+}
+
+export async function loadContactSigningKey(contactId: string): Promise<string | null> {
+  return AsyncStorage.getItem(`${CONTACT_SIGN_PUB_PREFIX}${contactId}`);
+}
+
+// =================================================================================
+// SECTION 9: Call signaling encryption (C2-N + C2.2-N audit fix, 2026-04-26)
+// =================================================================================
+// Mirrors PWA deriveCallKeyForSend / decryptCallBlob. Encrypts WebRTC SDP/ICE
+// with AES-256-GCM keyed off the ratchet rootKey -- the relay knows both SPEAQ
+// IDs (it routes by them) so an ID-derived key is computable by the relay; the
+// ratchet rootKey comes from the Kyber-768 shared secret which the relay does
+// NOT know, making call signaling truly zero-knowledge against the relay.
+//
+// Wire format matches PWA: base64(iv12 ++ ciphertext). Distinct from this file's
+// existing aesGcmEncrypt envelope ({v:2, iv, ct} JSON) because that envelope is
+// PWA-incompatible. Cross-platform call signaling MUST use this raw wire format.
+//
+// Backwards-compat: if ratchet does not exist for the peer, fall back to ID-key
+// (sortedIds path). Receiver tries ratchet-key first, ID-key second, so a
+// pre-C2.2 sender (legacy native, legacy PWA) still works.
+
+function ratchetDerivedCallKeyBytes(rootKey: string): Uint8Array {
+  return _deriveAesKey(rootKey + ":speaq-call-v1");
+}
+
+function idDerivedCallKeyBytes(myId: string, peerId: string): Uint8Array {
+  return _deriveAesKey([myId, peerId].sort().join(":"));
+}
+
+function callBlobEncryptRaw(plaintext: string, key: Uint8Array): string {
+  const iv = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(iv);
+  const ct = gcm(key, iv).encrypt(_strToBytes(plaintext));
+  const combined = new Uint8Array(iv.length + ct.length);
+  combined.set(iv);
+  combined.set(ct, iv.length);
+  return _bytesToB64(combined);
+}
+
+function callBlobDecryptRaw(blobB64: string, key: Uint8Array): string {
+  const raw = _b64ToBytes(blobB64);
+  if (raw.length < 13) throw new Error("call blob too short");
+  const iv = raw.slice(0, 12);
+  const ct = raw.slice(12);
+  return _bytesToStr(gcm(key, iv).decrypt(ct));
+}
+
+export async function deriveCallKeyForSend(myId: string, peerId: string): Promise<{ key: Uint8Array; mode: "ratchet" | "id" }> {
+  const ratchet = await loadRatchetState(peerId);
+  if (ratchet?.rootKey) {
+    return { key: ratchetDerivedCallKeyBytes(ratchet.rootKey), mode: "ratchet" };
+  }
+  return { key: idDerivedCallKeyBytes(myId, peerId), mode: "id" };
+}
+
+export async function encryptCallBlob(myId: string, peerId: string, plaintext: string): Promise<string> {
+  const { key } = await deriveCallKeyForSend(myId, peerId);
+  return callBlobEncryptRaw(plaintext, key);
+}
+
+export async function decryptCallBlob(myId: string, peerId: string, blobB64: string): Promise<string> {
+  const ratchet = await loadRatchetState(peerId);
+  if (ratchet?.rootKey) {
+    try {
+      return callBlobDecryptRaw(blobB64, ratchetDerivedCallKeyBytes(ratchet.rootKey));
+    } catch { /* fallthrough to ID-key for legacy peers */ }
+  }
+  return callBlobDecryptRaw(blobB64, idDerivedCallKeyBytes(myId, peerId));
+}
+
+// Safety number: SHA-256(sortedIds + ":" + rootKey) shown to user as 8 groups of
+// 4 hex chars (Signal-style). Returns null when ratchet is not yet established.
+export async function computeSafetyNumber(myId: string, peerId: string): Promise<string | null> {
+  const ratchet = await loadRatchetState(peerId);
+  if (!ratchet?.rootKey) return null;
+  const sorted = [myId, peerId].sort().join(":");
+  const digest = nobleSha256(_strToBytes(sorted + ":" + ratchet.rootKey));
+  let hex = "";
+  for (let i = 0; i < 16; i++) hex += digest[i].toString(16).padStart(2, "0");
+  return hex.match(/.{4}/g)!.join(" ").toUpperCase();
+}

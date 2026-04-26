@@ -16,6 +16,9 @@ import {
   getOrCreateRatchet, initRatchetFromKeyExchange,
   ratchetEncrypt,
   KyberKeyPair,
+  getOrCreateSigningKeys, signData, verifySignature,
+  saveContactSigningKey, loadContactSigningKey,
+  SigningKeyPair,
 } from "./crypto";
 import { generateDID, saveDID, loadDID } from "./identity-manager";
 
@@ -28,6 +31,13 @@ let identity: {
 } | null = null;
 
 let kyberKeys: KyberKeyPair | null = null;
+let signingKeys: SigningKeyPair | null = null;
+
+async function ensureSigningKeys(): Promise<SigningKeyPair> {
+  if (signingKeys) return signingKeys;
+  signingKeys = await getOrCreateSigningKeys();
+  return signingKeys;
+}
 
 let ws: WebSocket | null = null;
 let connected = false;
@@ -69,6 +79,9 @@ export async function createIdentity(displayName: string): Promise<typeof identi
   // Generate Kyber keypair for quantum key exchange
   kyberKeys = generateKyberKeyPair();
   await saveKyberKeyPair(kyberKeys);
+
+  // E1-N: generate ML-DSA-65 signing keypair so KEY_EXCHANGE can be signed.
+  await ensureSigningKeys();
 
   // Generate DID from Kyber public key
   const did = generateDID(kyberKeys.publicKey);
@@ -115,6 +128,9 @@ export async function loadIdentity(): Promise<typeof identity> {
         await saveKyberKeyPair(kyberKeys);
       }
 
+      // E1-N: lazy-init signing keys for existing identities (audit hardening 2026-04-26)
+      await ensureSigningKeys();
+
       // Migration: existing identity without DID -- generate now
       if (identity && !identity.did && kyberKeys) {
         const did = generateDID(kyberKeys.publicKey);
@@ -159,13 +175,13 @@ function connectRelay() {
 
       // Handle KEY_EXCHANGE messages internally
       if (msg.type === "KEY_EXCHANGE" && msg.from && msg.kyberPublicKey) {
-        handleKeyExchange(msg);
+        handleKeyExchange(msg).catch((e) => console.error("[SPEAQ] handleKeyExchange failed:", e));
         return;
       }
 
       // Handle KEY_EXCHANGE_RESPONSE (Kyber ciphertext from encapsulation)
       if (msg.type === "KEY_EXCHANGE_RESPONSE" && msg.from && msg.kyberCiphertext) {
-        handleKeyExchangeResponse(msg);
+        handleKeyExchangeResponse(msg).catch((e) => console.error("[SPEAQ] handleKeyExchangeResponse failed:", e));
         return;
       }
 
@@ -187,11 +203,50 @@ function connectRelay() {
 }
 
 /**
+ * E1-N audit hardening (2026-04-26): verify a peer's signature on the data they
+ * are claiming, AND check the signing key has not changed since first contact.
+ * Fail-closed: missing fields, bad signature, or key-rotation all REJECT.
+ *
+ * Returns true if the message can be trusted; false (and logs) otherwise.
+ */
+async function verifyAndPinSigningKey(
+  contactId: string,
+  signedData: string,
+  sig: string | undefined,
+  signPub: string | undefined,
+): Promise<boolean> {
+  if (!sig || !signPub) {
+    console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- missing signature (fail-closed)");
+    return false;
+  }
+  if (!verifySignature(signedData, sig, signPub)) {
+    console.warn("[SPEAQ] KEY_EXCHANGE signature INVALID from", contactId);
+    return false;
+  }
+  const knownKey = await loadContactSigningKey(contactId);
+  if (knownKey && knownKey !== signPub) {
+    console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- signing key changed since first contact (possible MITM)");
+    return false;
+  }
+  if (!knownKey) {
+    // TOFU: trust on first use, pin from now on.
+    await saveContactSigningKey(contactId, signPub);
+  }
+  return true;
+}
+
+/**
  * Handle incoming Kyber public key from a contact.
- * Performs encapsulation and sends back the ciphertext.
+ * E1-N hardening: requires valid signature on kyberPublicKey + key-change rejection.
+ * Performs encapsulation and sends back the ciphertext (also signed).
  */
 async function handleKeyExchange(msg: any) {
   if (!identity) return;
+
+  // E1-N: verify the sender's signature on their kyberPublicKey before trusting it.
+  if (!(await verifyAndPinSigningKey(msg.from, msg.kyberPublicKey, msg.sig, msg.signPub))) {
+    return;
+  }
 
   // Store their public key
   await saveContactPublicKey(msg.from, msg.kyberPublicKey);
@@ -201,12 +256,16 @@ async function handleKeyExchange(msg: any) {
     identity.speaqId, msg.from, msg.kyberPublicKey
   );
 
-  // Send ciphertext back so they can decapsulate
+  // Send ciphertext back so they can decapsulate.
+  // E1-N: sign the ciphertext so the peer can verify it came from us.
   if (kyberCiphertext && ws && connected) {
+    const keys = await ensureSigningKeys();
     ws.send(JSON.stringify({
       type: "KEY_EXCHANGE_RESPONSE",
       to: msg.from,
       kyberCiphertext,
+      sig: signData(kyberCiphertext, keys.privateKey),
+      signPub: keys.publicKey,
     }));
   }
 
@@ -219,9 +278,14 @@ async function handleKeyExchange(msg: any) {
 
 /**
  * Handle Kyber ciphertext response -- decapsulate to get shared secret.
+ * E1-N hardening: requires valid signature on kyberCiphertext + pinned-key check.
  */
 async function handleKeyExchangeResponse(msg: any) {
   if (!identity) return;
+
+  if (!(await verifyAndPinSigningKey(msg.from, msg.kyberCiphertext, msg.sig, msg.signPub))) {
+    return;
+  }
 
   try {
     await initRatchetFromKeyExchange(msg.from, msg.kyberCiphertext, identity.speaqId);
@@ -235,17 +299,21 @@ async function handleKeyExchangeResponse(msg: any) {
 }
 
 /**
- * Initiate key exchange with a contact
- * Sends our Kyber public key to them via relay
+ * Initiate key exchange with a contact.
+ * E1-N: signs our Kyber publicKey so the peer can verify it came from us
+ * and detect tampering / MITM via key-replacement at the relay layer.
  */
-export function initiateKeyExchange(toSpeaqId: string): void {
+export async function initiateKeyExchange(toSpeaqId: string): Promise<void> {
   if (!ws || !connected || !identity || !kyberKeys) return;
+  const keys = await ensureSigningKeys();
 
   ws.send(JSON.stringify({
     type: "KEY_EXCHANGE",
     to: toSpeaqId,
     from: identity.speaqId,
     kyberPublicKey: kyberKeys.publicKey,
+    sig: signData(kyberKeys.publicKey, keys.privateKey),
+    signPub: keys.publicKey,
   }));
 }
 
@@ -291,12 +359,15 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
   );
 
   // If this is the first message and we got a kyberCiphertext,
-  // send key exchange first
+  // send key exchange first. E1-N: sign the ciphertext.
   if (kyberCiphertext) {
+    const keys = await ensureSigningKeys();
     ws.send(JSON.stringify({
       type: "KEY_EXCHANGE_RESPONSE",
       to: toSpeaqId,
       kyberCiphertext,
+      sig: signData(kyberCiphertext, keys.privateKey),
+      signPub: keys.publicKey,
     }));
   }
 
@@ -347,10 +418,13 @@ export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<
   );
 
   if (kyberCiphertext) {
+    const keys = await ensureSigningKeys();
     ws.send(JSON.stringify({
       type: "KEY_EXCHANGE_RESPONSE",
       to: toSpeaqId,
       kyberCiphertext,
+      sig: signData(kyberCiphertext, keys.privateKey),
+      signPub: keys.publicKey,
     }));
   }
 

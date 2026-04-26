@@ -19,6 +19,7 @@ import {
   decryptMessage, getContactKey,
   getOrCreateRatchet, ratchetDecrypt,
   loadRatchetState, RatchetState,
+  computeSafetyNumber,
 } from "../services/crypto";
 import {
   loadMessages, saveMessages, cleanExpiredMessages, StoredMessage,
@@ -327,10 +328,32 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
   function handleHeaderLongPress() {
     Alert.alert(contactName, contactId, [
+      { text: "Safety number", onPress: handleShowSafetyNumber },
       { text: t("disappearingMessages"), onPress: handleSetDisappear },
       { text: t("blockUser"), style: "destructive", onPress: handleBlockUser },
       { text: t("cancel"), style: "cancel" },
     ]);
+  }
+
+  // Safety number: SHA-256 over (sortedIds + ":" + ratchet.rootKey) presented as
+  // 8 groups of 4 hex chars. Both peers see the same number when their channel
+  // is mutually authenticated. Verify in person or via voice to detect MITM.
+  async function handleShowSafetyNumber() {
+    const me = getIdentity();
+    if (!me) return;
+    const sn = await computeSafetyNumber(me.speaqId, contactId);
+    if (!sn) {
+      Alert.alert(
+        "Safety number not yet available",
+        "Send a message to establish the secure channel, then try again."
+      );
+      return;
+    }
+    Alert.alert(
+      "Safety number",
+      `${sn}\n\nCompare this number with your contact in person or via a separate voice call. If it matches on both ends the channel is mutually authenticated.`,
+      [{ text: "OK", style: "default" }]
+    );
   }
 
   function handleSetDisappear() {
