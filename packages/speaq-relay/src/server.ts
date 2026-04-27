@@ -125,6 +125,12 @@ let totalQCMined = 0;
 // While true, saveStats() refuses to overwrite the persisted file to avoid wiping a healthy
 // remote/disk copy with the in-memory zero-state from a fresh container.
 let statsLoadFailed = false;
+// Boot-time guard: until loadStats() has finished, saveStats() must not run.
+// Without this, a fresh container that scaled up could write its empty in-memory
+// Map to the remote stats-file before its loadStats() fetch completed, wiping
+// the persisted state for every other container (incident 2026-04-26 13:29 UTC,
+// 24 of 29 users lost).
+let statsLoaded = false;
 
 // Block list: per recipient, the set of speaqIds they have blocked.
 // On SEND/SEND_SEALED/CALL_*, if the recipient has the sender in their block-list, the relay drops
@@ -258,6 +264,13 @@ async function loadStats(): Promise<void> {
 
 // Save stats to remote server (Google VM) + local disk
 async function saveStats(): Promise<void> {
+  // Boot-time guard: never overwrite persisted state until loadStats() has completed.
+  // This prevents the wipe-on-restart race condition where a freshly started container
+  // could save its empty in-memory Map before the load-from-remote fetch finished.
+  if (!statsLoaded) {
+    console.warn("  saveStats SKIPPED: boot-time guard (loadStats not yet completed).");
+    return;
+  }
   // Stale-state guard: if loadStats flagged a likely silent-reset, do not overwrite the persisted
   // copy with our in-memory zero state. The healthy values stay safe on remote/disk until either
   // (a) counters grow above 0 from real activity, or (b) an operator force-resets statsLoadFailed.
@@ -1407,20 +1420,31 @@ setInterval(() => {
     .catch((err) => console.warn("[push] cleanup failed:", err instanceof Error ? err.message : err));
 }, 24 * 60 * 60 * 1000);
 
-// Load persisted stats before starting
-loadStats();
-
-server.listen(PORT, () => {
-  console.log("");
-  console.log("  SPEAQ Relay Server v0.1.0");
-  console.log("  SPEAQ Freely.");
-  console.log("");
-  console.log("  WebSocket: ws://localhost:" + PORT);
-  console.log("  REST API:  http://localhost:" + PORT + "/api/v1/health");
-  console.log("  Admin:     http://localhost:" + PORT + "/api/v1/admin/stats");
-  console.log("  Zero knowledge: server sees ONLY encrypted blobs");
-  console.log("");
-});
+// Load persisted stats BEFORE accepting connections.
+// loadStats() must complete (success or fail) before server.listen() opens, otherwise
+// incoming connections can trigger addUser() -> saveStats() while the in-memory Map
+// is still empty, wiping the persisted state.
+(async () => {
+  try {
+    await loadStats();
+  } catch (e) {
+    console.error("  loadStats threw, continuing with whatever state we have:", e instanceof Error ? e.message : e);
+  } finally {
+    statsLoaded = true;
+  }
+  server.listen(PORT, () => {
+    console.log("");
+    console.log("  SPEAQ Relay Server v0.1.0");
+    console.log("  SPEAQ Freely.");
+    console.log("");
+    console.log("  WebSocket: ws://localhost:" + PORT);
+    console.log("  REST API:  http://localhost:" + PORT + "/api/v1/health");
+    console.log("  Admin:     http://localhost:" + PORT + "/api/v1/admin/stats");
+    console.log("  Zero knowledge: server sees ONLY encrypted blobs");
+    console.log("  statsLoaded: " + statsLoaded + " | knownUsers: " + allUsers.size);
+    console.log("");
+  });
+})();
 
 // Save stats on graceful shutdown
 process.on("SIGTERM", () => {
