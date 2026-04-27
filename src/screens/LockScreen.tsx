@@ -106,12 +106,19 @@ export default function LockScreen({ onUnlock, isFirstTime }: Props) {
         ))}
       </View>
 
-      {/* Submit */}
-      {pin.length >= 4 && (
-        <TouchableOpacity style={styles.unlockBtn} onPress={handlePinSubmit} activeOpacity={0.8}>
-          <Text style={styles.unlockText}>{settingPin ? (step === "enter" ? "Next" : "Set PIN") : "Unlock"}</Text>
-        </TouchableOpacity>
-      )}
+      {/* Submit - always rendered to reserve layout space, hidden until pin >= 4
+          so the numpad does not shift the moment the 4th digit is entered. */}
+      <TouchableOpacity
+        style={[styles.unlockBtn, pin.length < 4 && { opacity: 0 }]}
+        onPress={handlePinSubmit}
+        activeOpacity={0.8}
+        disabled={pin.length < 4}
+        pointerEvents={pin.length < 4 ? "none" : "auto"}
+        accessibilityElementsHidden={pin.length < 4}
+        importantForAccessibility={pin.length < 4 ? "no-hide-descendants" : "auto"}
+      >
+        <Text style={styles.unlockText}>{settingPin ? (step === "enter" ? "Next" : "Set PIN") : "Unlock"}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
