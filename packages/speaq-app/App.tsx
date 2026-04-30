@@ -212,9 +212,20 @@ function App() {
     return (
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
-        <EulaScreen onAccept={() => {
-          AsyncStorage.setItem("speaq_eula_v1_accepted_at", new Date().toISOString());
-          setPhase(savedPin ? "pin-enter" : "welcome");
+        <EulaScreen onAccept={async () => {
+          await AsyncStorage.setItem("speaq_eula_v1_accepted_at", new Date().toISOString());
+          // Re-read the stored PIN at click-time. The useEffect that loaded
+          // savedPin runs at boot, but if the EULA was reached before that
+          // resolved (rare race), the local savedPin state may still be
+          // empty. Going to AsyncStorage here is the source-of-truth and
+          // mirrors what the boot routing would do on the next launch.
+          const storedPin = await AsyncStorage.getItem("speaq_pin");
+          if (storedPin) {
+            setSavedPin(storedPin);
+            setPhase("pin-enter");
+          } else {
+            setPhase("welcome");
+          }
         }} />
       </SafeAreaProvider>
     );
