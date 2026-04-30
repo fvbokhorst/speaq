@@ -19,3 +19,5 @@ export function getFirestore(): Firestore {
 }
 
 export const PUSH_COLLECTION = "push_subscriptions";
+export const ABUSE_REPORTS_COLLECTION = "abuse_reports";
+export const DENIED_SPEAQ_IDS_COLLECTION = "denied_speaq_ids";

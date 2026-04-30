@@ -21,6 +21,7 @@ import fs from "fs";
 import path from "path";
 import { configurePush, triggerSilentPush, isConfigured as isPushConfigured } from "./push/push-service";
 import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from "./push/push-store";
+import { createAbuseReport, validateAbuseReport, loadDenyList, isSpeaqIdDeniedSync } from "./abuse/abuse-store";
 // Audit follow-up (2026-04-25): post-quantum AUTH. Server now accepts BOTH ECDSA P-256
 // (65-byte raw pubkey, the existing scheme used since C1) and ML-DSA-65 / FIPS 204
 // (1952-byte raw pubkey, the post-quantum scheme). The format is auto-detected from
@@ -531,6 +532,51 @@ app.post("/api/push/subscribe", async (req, res) => {
   } catch (err) {
     console.error("[push] subscribe failed:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Subscribe failed" });
+  }
+});
+
+// Abuse report endpoint (Apple Guideline 1.2 - User-Generated Content)
+// PWA + Native send a report when the user long-presses a message and
+// chooses Report, or when the user blocks another SPEAQ ID. The report
+// is stored in Firestore and reviewed by SPEAQ moderators within 24h.
+const abuseReportRateLimit = new Map<string, number[]>();
+function allowAbuseReport(speaqId: string): boolean {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxPerWindow = 10;
+  const recent = (abuseReportRateLimit.get(speaqId) || []).filter((t) => now - t < windowMs);
+  if (recent.length >= maxPerWindow) return false;
+  recent.push(now);
+  abuseReportRateLimit.set(speaqId, recent);
+  return true;
+}
+
+app.post("/api/v1/abuse-report", async (req, res) => {
+  const body = req.body || {};
+  const v = validateAbuseReport(body);
+  if (!v.ok) {
+    return res.status(400).json({ error: v.error });
+  }
+  if (!allowAbuseReport(body.reporterSpeaqId)) {
+    return res.status(429).json({ error: "Abuse report rate limit exceeded" });
+  }
+  try {
+    const result = await createAbuseReport({
+      reporterSpeaqId: body.reporterSpeaqId,
+      reportedSpeaqId: body.reportedSpeaqId,
+      reason: body.reason,
+      comment: body.comment,
+      messageContent: body.messageContent,
+      messageId: body.messageId,
+      source: body.source,
+      appVersion: body.appVersion,
+      language: body.language,
+    });
+    console.log(`[abuse] report ${result.id}: ${body.reporterSpeaqId.slice(0, 8)}.. -> ${body.reportedSpeaqId.slice(0, 8)}.. (${body.reason}, ${body.source})`);
+    res.status(201).json({ ok: true, reportId: result.id });
+  } catch (err) {
+    console.error("[abuse] report failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Report failed" });
   }
 });
 
