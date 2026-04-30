@@ -1259,9 +1259,12 @@ wss.on("connection", (ws: WebSocket) => {
             return;
           }
 
-          const { to, blob, id } = msg;
-          if (!to || !blob) {
-            ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
+          // Accept both PWA-native field-name conventions: PWA uses `blob`,
+          // native iOS uses `kyberPublicKey` for KEY_EXCHANGE.
+          const { to, id } = msg;
+          const payload = (msg.blob as string) || (msg.kyberPublicKey as string);
+          if (!to || !payload) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "to and key payload required" }));
             return;
           }
 
@@ -1270,15 +1273,26 @@ wss.on("connection", (ws: WebSocket) => {
           const recipient = clients.get(to);
 
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            // Forward signature material so the recipient can verify the exchange
+            // (E1 audit hardening 2026-04-25: signatures are mandatory).
             recipient.ws.send(JSON.stringify({
               type: "KEY_EXCHANGE",
               from: clientId,
-              blob,
+              blob: payload,
+              kyberPublicKey: payload,
+              sig: msg.sig,
+              signPub: msg.signPub,
               id: messageId,
             }));
             ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
           } else {
-            queueOfflineMessage(to, clientId, JSON.stringify({ type: "KEY_EXCHANGE", blob }));
+            queueOfflineMessage(to, clientId, JSON.stringify({
+              type: "KEY_EXCHANGE",
+              blob: payload,
+              kyberPublicKey: payload,
+              sig: msg.sig,
+              signPub: msg.signPub,
+            }));
             ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
           }
           break;
@@ -1294,9 +1308,12 @@ wss.on("connection", (ws: WebSocket) => {
             return;
           }
 
-          const { to, blob, id } = msg;
-          if (!to || !blob) {
-            ws.send(JSON.stringify({ type: "ERROR", error: "to and blob required" }));
+          // Accept both PWA-native field-name conventions: PWA uses `blob`,
+          // native iOS uses `kyberCiphertext`.
+          const { to, id } = msg;
+          const payload = (msg.blob as string) || (msg.kyberCiphertext as string);
+          if (!to || !payload) {
+            ws.send(JSON.stringify({ type: "ERROR", error: "to and ciphertext required" }));
             return;
           }
 
@@ -1305,15 +1322,25 @@ wss.on("connection", (ws: WebSocket) => {
           const recipient = clients.get(to);
 
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            // Forward signature material so the recipient can verify (E1 hardening).
             recipient.ws.send(JSON.stringify({
               type: "KEY_EXCHANGE_RESPONSE",
               from: clientId,
-              blob,
+              blob: payload,
+              kyberCiphertext: payload,
+              sig: msg.sig,
+              signPub: msg.signPub,
               id: messageId,
             }));
             ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "delivered" }));
           } else {
-            queueOfflineMessage(to, clientId, JSON.stringify({ type: "KEY_EXCHANGE_RESPONSE", blob }));
+            queueOfflineMessage(to, clientId, JSON.stringify({
+              type: "KEY_EXCHANGE_RESPONSE",
+              blob: payload,
+              kyberCiphertext: payload,
+              sig: msg.sig,
+              signPub: msg.signPub,
+            }));
             ws.send(JSON.stringify({ type: "ACK", id: messageId, status: "queued" }));
           }
           break;
