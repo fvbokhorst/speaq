@@ -21,7 +21,7 @@ import fs from "fs";
 import path from "path";
 import { configurePush, triggerSilentPush, isConfigured as isPushConfigured } from "./push/push-service";
 import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from "./push/push-store";
-import { createAbuseReport, validateAbuseReport, loadDenyList, isSpeaqIdDeniedSync } from "./abuse/abuse-store";
+import { createAbuseReport, validateAbuseReport, loadDenyList, isSpeaqIdDeniedSync, listAbuseReports, actionAbuseReport, unbanSpeaqId } from "./abuse/abuse-store";
 // Audit follow-up (2026-04-25): post-quantum AUTH. Server now accepts BOTH ECDSA P-256
 // (65-byte raw pubkey, the existing scheme used since C1) and ML-DSA-65 / FIPS 204
 // (1952-byte raw pubkey, the post-quantum scheme). The format is auto-detected from
@@ -1063,6 +1063,17 @@ wss.on("connection", (ws: WebSocket) => {
               ws.send(JSON.stringify({ type: "ERROR", error: "Signature verification failed" }));
               return;
             }
+            // Apple Guideline 1.2 - identity-level moderation. SPEAQ IDs that
+            // are on the deny-list (set by admin moderators after reviewing
+            // abuse reports within 24 hours) are rejected from the network.
+            // The cache is refreshed every 60s, so a freshly-banned user is
+            // still allowed for at most 60s after the moderator action.
+            if (isSpeaqIdDeniedSync(sid)) {
+              console.warn("[auth] denied SPEAQ ID rejected:", sid.slice(0, 12) + "...");
+              ws.send(JSON.stringify({ type: "ERROR", error: "This SPEAQ ID has been suspended for violating community standards. Contact abuse@thespeaq.com if you believe this is in error.", code: "SUSPENDED" }));
+              try { ws.close(4003, "suspended"); } catch (e) { /* ignore */ }
+              return;
+            }
             completeAuth(sid, cc, "verified");
           })().catch((e) => {
             console.error("[auth] verify failed:", e);
@@ -1466,6 +1477,83 @@ setInterval(() => {
     .catch((err) => console.warn("[push] cleanup failed:", err instanceof Error ? err.message : err));
 }, 24 * 60 * 60 * 1000);
 
+// Periodic refresh of the denied-SPEAQ-ID list (Apple Guideline 1.2).
+// The cache TTL inside loadDenyList() is 60s, so this interval just
+// keeps the list warm so admin actions propagate quickly.
+setInterval(() => {
+  loadDenyList(true).catch((e) => console.warn("[abuse] denyList refresh failed:", e instanceof Error ? e.message : e));
+}, 60 * 1000);
+
+// Apple Guideline 1.2 - admin endpoint to force-refresh the deny-list
+// after a moderator action in the dashboard. Requires the same admin
+// secret as the existing admin endpoints.
+const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.RELAY_ADMIN_SECRET || "";
+app.post("/api/v1/admin/abuse/refresh-deny-list", async (req, res) => {
+  const provided = (req.headers["x-admin-secret"] as string) || (req.body?.secret as string) || "";
+  if (!ADMIN_SECRET || provided !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  try {
+    const list = await loadDenyList(true);
+    res.json({ ok: true, count: list.size });
+  } catch (e) {
+    res.status(500).json({ error: "refresh failed", message: e instanceof Error ? e.message : "unknown" });
+  }
+});
+
+// Apple Guideline 1.2 - moderator endpoints (admin dashboard).
+app.get("/api/v1/admin/abuse/reports", async (req, res) => {
+  const provided = (req.headers["x-admin-secret"] as string) || "";
+  if (!ADMIN_SECRET || provided !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const status = req.query.status as "open" | "actioned" | "dismissed" | undefined;
+  const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+  try {
+    const reports = await listAbuseReports({ status, limit });
+    res.json({ ok: true, reports });
+  } catch (e) {
+    res.status(500).json({ error: "list failed", message: e instanceof Error ? e.message : "unknown" });
+  }
+});
+
+app.post("/api/v1/admin/abuse/action", async (req, res) => {
+  const provided = (req.headers["x-admin-secret"] as string) || (req.body?.secret as string) || "";
+  if (!ADMIN_SECRET || provided !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const { reportId, action, actionedBy, banReason } = req.body || {};
+  if (!reportId || !action || !["ban", "dismiss", "defer"].includes(action)) {
+    return res.status(400).json({ error: "reportId and action (ban|dismiss|defer) required" });
+  }
+  try {
+    const result = await actionAbuseReport({ reportId, action, actionedBy, banReason });
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "action failed", message: e instanceof Error ? e.message : "unknown" });
+  }
+});
+
+app.post("/api/v1/admin/abuse/unban", async (req, res) => {
+  const provided = (req.headers["x-admin-secret"] as string) || (req.body?.secret as string) || "";
+  if (!ADMIN_SECRET || provided !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const { speaqId } = req.body || {};
+  if (!speaqId || typeof speaqId !== "string") {
+    return res.status(400).json({ error: "speaqId required" });
+  }
+  try {
+    await unbanSpeaqId(speaqId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "unban failed", message: e instanceof Error ? e.message : "unknown" });
+  }
+});
+
 // Load persisted stats BEFORE accepting connections.
 // loadStats() must complete (success or fail) before server.listen() opens, otherwise
 // incoming connections can trigger addUser() -> saveStats() while the in-memory Map
@@ -1477,6 +1565,15 @@ setInterval(() => {
     console.error("  loadStats threw, continuing with whatever state we have:", e instanceof Error ? e.message : e);
   } finally {
     statsLoaded = true;
+  }
+  // Apple Guideline 1.2 - load denied-SPEAQ-ID deny-list before opening
+  // listener so the first connection after restart already gets the
+  // current banned list applied at AUTH time.
+  try {
+    const list = await loadDenyList(true);
+    if (list.size > 0) console.log(`  Deny-list loaded: ${list.size} suspended SPEAQ IDs`);
+  } catch (e) {
+    console.warn("  Deny-list load failed:", e instanceof Error ? e.message : e);
   }
   server.listen(PORT, () => {
     console.log("");

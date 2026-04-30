@@ -167,3 +167,108 @@ export async function unbanSpeaqId(speaqId: string): Promise<void> {
   });
   denyListCache.delete(speaqId);
 }
+
+// --- Admin moderator helpers ---
+
+export interface AbuseReportSummary {
+  id: string;
+  reporterSpeaqId: string;
+  reportedSpeaqId: string;
+  reason: string;
+  comment: string;
+  messageContent: string;
+  messageId: string | null;
+  source: string;
+  status: "open" | "actioned" | "dismissed";
+  createdAt: number;
+  actionedAt: number | null;
+  actionedBy: string | null;
+  resolution: null | "ban" | "dismiss" | "defer";
+  language?: string | null;
+  appVersion?: string | null;
+}
+
+export async function listAbuseReports(opts: { status?: "open" | "actioned" | "dismissed"; limit?: number } = {}): Promise<AbuseReportSummary[]> {
+  const db = getFirestore();
+  let q: FirebaseFirestore.Query = db.collection(ABUSE_REPORTS_COLLECTION);
+  if (opts.status) q = q.where("status", "==", opts.status);
+  q = q.orderBy("createdAt", "desc").limit(opts.limit || 100);
+  const snap = await q.get();
+  return snap.docs.map((doc) => {
+    const d = doc.data() as Record<string, unknown>;
+    return {
+      id: doc.id,
+      reporterSpeaqId: String(d.reporterSpeaqId || ""),
+      reportedSpeaqId: String(d.reportedSpeaqId || ""),
+      reason: String(d.reason || ""),
+      comment: String(d.comment || ""),
+      messageContent: String(d.messageContent || ""),
+      messageId: (d.messageId as string | null) || null,
+      source: String(d.source || ""),
+      status: (d.status as "open" | "actioned" | "dismissed") || "open",
+      createdAt: Number(d.createdAt) || 0,
+      actionedAt: (d.actionedAt as number | null) || null,
+      actionedBy: (d.actionedBy as string | null) || null,
+      resolution: (d.resolution as null | "ban" | "dismiss" | "defer") || null,
+      language: (d.language as string | null) || null,
+      appVersion: (d.appVersion as string | null) || null,
+    };
+  });
+}
+
+export async function actionAbuseReport(input: {
+  reportId: string;
+  action: "ban" | "dismiss" | "defer";
+  actionedBy?: string;
+  banReason?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const db = getFirestore();
+  const ref = db.collection(ABUSE_REPORTS_COLLECTION).doc(input.reportId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return { ok: false, error: "report not found" };
+  }
+  const data = snap.data() as Record<string, unknown>;
+  const reportedSpeaqId = String(data.reportedSpeaqId || "");
+
+  if (input.action === "ban") {
+    if (!reportedSpeaqId) {
+      return { ok: false, error: "reportedSpeaqId missing on report" };
+    }
+    await denySpeaqId({
+      speaqId: reportedSpeaqId,
+      reason: input.banReason || `report ${input.reportId} (${data.reason || "unknown"})`,
+      reportRef: input.reportId,
+      actionedBy: input.actionedBy || "moderator",
+    });
+    await ref.update({
+      status: "actioned",
+      resolution: "ban",
+      actionedAt: Date.now(),
+      actionedBy: input.actionedBy || "moderator",
+    });
+    return { ok: true };
+  }
+
+  if (input.action === "dismiss") {
+    await ref.update({
+      status: "dismissed",
+      resolution: "dismiss",
+      actionedAt: Date.now(),
+      actionedBy: input.actionedBy || "moderator",
+    });
+    return { ok: true };
+  }
+
+  if (input.action === "defer") {
+    await ref.update({
+      status: "open",
+      resolution: "defer",
+      actionedAt: Date.now(),
+      actionedBy: input.actionedBy || "moderator",
+    });
+    return { ok: true };
+  }
+
+  return { ok: false, error: "unknown action" };
+}
