@@ -19,6 +19,9 @@ export interface StoredMessage {
   deleted?: boolean;
   expiresAt?: number; // timestamp when message auto-deletes
   status?: "sent" | "delivered" | "read"; // delivery status for sent messages
+  // Apple Guideline 1.2 - flagged by client-side keyword filter on receive.
+  // Renders blurred until user reveals.
+  flagged?: boolean;
 }
 
 // Disappearing message timer options

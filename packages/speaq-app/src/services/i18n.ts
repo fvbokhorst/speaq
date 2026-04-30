@@ -228,6 +228,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Illegal content or activity",
     safetyReason_impersonation: "Impersonation",
     safetyReason_other: "Other",
+    safetyFlaggedNotice: "This message may contain offensive language.",
+    safetyReveal: "Reveal anyway",
   },
   nl: {
     chats: "Chats",
@@ -413,6 +415,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Illegale inhoud of activiteit",
     safetyReason_impersonation: "Identiteitsfraude",
     safetyReason_other: "Anders",
+    safetyFlaggedNotice: "Dit bericht kan beledigend taalgebruik bevatten.",
+    safetyReveal: "Toch tonen",
   },
   fr: {
     chats: "Discussions",
@@ -598,6 +602,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Contenu ou activite illegal",
     safetyReason_impersonation: "Usurpation d'identite",
     safetyReason_other: "Autre",
+    safetyFlaggedNotice: "Ce message peut contenir un langage offensant.",
+    safetyReveal: "Afficher quand meme",
   },
   es: {
     chats: "Chats",
@@ -783,6 +789,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Contenido o actividad ilegal",
     safetyReason_impersonation: "Suplantacion de identidad",
     safetyReason_other: "Otro",
+    safetyFlaggedNotice: "Este mensaje puede contener lenguaje ofensivo.",
+    safetyReveal: "Mostrar de todos modos",
   },
   ru: {
     chats: "Chaty",
@@ -968,6 +976,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Nezakonnyy kontent",
     safetyReason_impersonation: "Vydavanie sebya za drugogo",
     safetyReason_other: "Drugoye",
+    safetyFlaggedNotice: "Eto soobshchenie mozhet soderzhat oskorbitelnyy yazyk.",
+    safetyReveal: "Vse ravno pokazat",
   },
   de: {
     chats: "Chats",
@@ -1153,6 +1163,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Illegale Inhalte oder Aktivitaten",
     safetyReason_impersonation: "Identitatsdiebstahl",
     safetyReason_other: "Andere",
+    safetyFlaggedNotice: "Diese Nachricht kann beleidigende Sprache enthalten.",
+    safetyReveal: "Trotzdem anzeigen",
   },
   sl: {
     chats: "Pogovori",
@@ -1338,6 +1350,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Nezakonita vsebina",
     safetyReason_impersonation: "Predstavljanje za drugega",
     safetyReason_other: "Drugo",
+    safetyFlaggedNotice: "To sporocilo lahko vsebuje zaljiv jezik.",
+    safetyReveal: "Vseeno prikazi",
   },
   lg: {
     chats: "Emboozi",
@@ -1523,6 +1537,8 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Ebitamu mateeka",
     safetyReason_impersonation: "Okwefumira",
     safetyReason_other: "Ekirala",
+    safetyFlaggedNotice: "Obubaka buno buyinza okuba bukyaayi.",
+    safetyReveal: "Lambika",
   },
   sw: {
     chats: "Mazungumzo",
@@ -1708,5 +1724,7 @@ const translations: Record<Language, Record<string, string>> = {
     safetyReason_illegal: "Maudhui au shughuli haramu",
     safetyReason_impersonation: "Kujifanya mtu mwingine",
     safetyReason_other: "Nyingine",
+    safetyFlaggedNotice: "Ujumbe huu unaweza kuwa na lugha chafu.",
+    safetyReveal: "Onyesha hata hivyo",
   },
 };

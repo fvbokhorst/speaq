@@ -30,9 +30,10 @@ import {
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
 import { postAbuseReport, type AbuseReason } from "../services/abuse-report";
+import { containsObjectionableContent, type SafetyLang } from "../services/keyword-filter";
 import { getContactPhoto } from "../services/profile";
 import { playMessageReceived, playMessageSent } from "../services/sound";
-import { t } from "../services/i18n";
+import { t, getLanguage } from "../services/i18n";
 
 interface Props {
   contactId: string;
@@ -52,6 +53,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   const [reportReason, setReportReason] = useState<AbuseReason>("harassment");
   const [reportComment, setReportComment] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [revealedFlagged, setRevealedFlagged] = useState<Record<string, boolean>>({});
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profilePhotoRef = useRef<string | null>(null);
@@ -155,6 +157,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               if (data.qc && data.amount && data.amount > 0) {
                 walletService.receive(data.senderId || contactId, data.amount, `From ${data.fromName || contactId.substring(0, 8)}`);
               }
+              const flagged = data.text ? containsObjectionableContent(data.text, getLanguage() as SafetyLang) : false;
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
                 text: data.text,
@@ -162,6 +165,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                 type: (data.qc || data.paymentAmount) ? "payment" : "text",
                 amount: data.amount || data.paymentAmount,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+                flagged,
               };
               setMessages((prev) => [...prev, newMsg]);
             }
@@ -456,9 +460,19 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           </View>
         )}
         <TouchableWithoutFeedback onLongPress={() => handleLongPress(item)}>
-          <View style={[st.bubble, item.sent ? st.sent : st.received, item.deleted && st.deletedBubble]}>
+          <View style={[st.bubble, item.sent ? st.sent : st.received, item.deleted && st.deletedBubble, !!item.flagged && !item.sent && !revealedFlagged[item.id] && st.flaggedBubble]}>
             {item.deleted ? (
               <Text style={st.deletedText}>{item.text}</Text>
+            ) : !!item.flagged && !item.sent && !revealedFlagged[item.id] ? (
+              <View style={{ paddingVertical: 4 }}>
+                <Text style={st.flaggedNotice}>{t("safetyFlaggedNotice")}</Text>
+                <TouchableOpacity onPress={() => setRevealedFlagged((prev) => ({ ...prev, [item.id]: true }))}>
+                  <Text style={st.flaggedReveal}>{t("safetyReveal")}</Text>
+                </TouchableOpacity>
+                <View style={st.bubbleFooter}>
+                  <Text style={[st.bubbleTime, st.receivedTime]}>{item.timestamp}</Text>
+                </View>
+              </View>
             ) : item.type === "payment" ? (
               <View style={st.paymentBubble}>
                 <Text style={st.paymentIcon}>Q</Text>
@@ -723,6 +737,11 @@ const st = StyleSheet.create({
   fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: colors.border.subtle },
   fileIconText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
   fileName: { fontSize: 13, flex: 1 },
+
+  // Apple Guideline 1.2 - flagged content blur + reveal
+  flaggedBubble: { borderWidth: 1, borderColor: "rgba(226, 75, 74, 0.5)" },
+  flaggedNotice: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  flaggedReveal: { color: colors.voice.gold, fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
 
   // Apple Guideline 1.2 - Report message dialog
   reportOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", paddingHorizontal: 16 },
