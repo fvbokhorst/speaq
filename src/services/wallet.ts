@@ -116,13 +116,6 @@ class WalletService {
     this.receive("SPEAQ Network", amount, `Contribution: ${type}`);
   }
 
-  // Initial bonus for new users
-  addWelcomeBonus(): void {
-    if (this.transactions.length === 0) {
-      this.receive("SPEAQ", 10, "Welcome bonus");
-    }
-  }
-
   // --- Projects ---
 
   getProjects(): Project[] {

@@ -86,7 +86,6 @@ function App() {
   // Check if user is registered on startup + load wallet
   useEffect(() => {
     walletService.load().then(() => {
-      walletService.addWelcomeBonus();
       loadMining(); // Mining must start AFTER wallet is loaded
     });
     contactsService.load();
