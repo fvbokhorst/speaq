@@ -7,7 +7,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Image, Modal, TextInput, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, fonts } from "../theme/brand";
+import { fonts } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { getIdentity } from "../services/speaq";
 import { contactsService } from "../services/contacts";
 import { getContactPhoto } from "../services/profile";
@@ -27,6 +28,8 @@ interface Props {
 }
 
 export default function ChatListScreen({ onOpenChat }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [chats, setChats] = useState<ChatPreview[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatId, setNewChatId] = useState("");
@@ -142,7 +145,7 @@ export default function ChatListScreen({ onOpenChat }: Props) {
                 value={newChatId}
                 onChangeText={setNewChatId}
                 placeholder="Enter SPEAQ ID"
-                placeholderTextColor={colors.signal.steel}
+                placeholderTextColor={c.signal.steel}
                 autoCapitalize="none"
               />
             </View>
@@ -151,7 +154,7 @@ export default function ChatListScreen({ onOpenChat }: Props) {
               value={newChatName}
               onChangeText={setNewChatName}
               placeholder="Name (optional)"
-              placeholderTextColor={colors.signal.steel}
+              placeholderTextColor={c.signal.steel}
             />
             <TouchableOpacity
               style={[st.startBtn, (!newChatId.trim()) && { opacity: 0.3 }]}
@@ -213,51 +216,51 @@ export default function ChatListScreen({ onOpenChat }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   logo: { fontSize: 28, fontWeight: "700", fontFamily: fonts.display },
-  logoS: { color: colors.signal.white },
-  logoQ: { color: colors.voice.gold },
-  headerSub: { fontSize: 11, color: colors.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },
+  logoS: { color: c.signal.white },
+  logoQ: { color: c.voice.gold },
+  headerSub: { fontSize: 11, color: c.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },
   list: { flex: 1 },
   listPad: { paddingTop: 8 },
-  chatItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  chatItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 16 },
-  avatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 16, borderWidth: 1, borderColor: colors.voice.gold },
-  avatarText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
+  avatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 16, borderWidth: 1, borderColor: c.voice.gold },
+  avatarText: { color: c.voice.gold, fontSize: 18, fontWeight: "600" },
   chatContent: { flex: 1 },
   chatHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  chatName: { color: colors.signal.white, fontSize: 16, fontWeight: "500" },
+  chatName: { color: c.signal.white, fontSize: 16, fontWeight: "500" },
   chatNameBold: { fontWeight: "700" },
-  chatTime: { color: colors.signal.steel, fontSize: 12 },
-  chatTimeUnread: { color: colors.voice.gold },
+  chatTime: { color: c.signal.steel, fontSize: 12 },
+  chatTimeUnread: { color: c.voice.gold },
   chatFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  chatMsg: { color: colors.signal.steel, fontSize: 14, flex: 1, marginRight: 8 },
-  chatMsgUnread: { color: colors.signal.light },
-  badge: { backgroundColor: colors.voice.gold, borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
-  badgeText: { color: colors.depth.void, fontSize: 11, fontWeight: "700" },
+  chatMsg: { color: c.signal.steel, fontSize: 14, flex: 1, marginRight: 8 },
+  chatMsgUnread: { color: c.signal.light },
+  badge: { backgroundColor: c.voice.gold, borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  badgeText: { color: c.depth.void, fontSize: 11, fontWeight: "700" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 100 },
-  emptyTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "500", marginBottom: 8 },
-  emptySub: { color: colors.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
-  fab: { position: "absolute", bottom: 32, right: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.voice.gold, alignItems: "center", justifyContent: "center", shadowColor: colors.voice.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-  fabText: { color: colors.depth.void, fontSize: 28, fontWeight: "300", marginTop: -2 },
+  emptyTitle: { color: c.signal.white, fontSize: 18, fontWeight: "500", marginBottom: 8 },
+  emptySub: { color: c.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
+  fab: { position: "absolute", bottom: 32, right: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: c.voice.gold, alignItems: "center", justifyContent: "center", shadowColor: c.voice.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  fabText: { color: c.depth.void, fontSize: 28, fontWeight: "300", marginTop: -2 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
-  modalBox: { width: 320, backgroundColor: colors.depth.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: colors.border.subtle },
-  modalTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", fontFamily: "Georgia", marginBottom: 16 },
+  modalBox: { width: 320, backgroundColor: c.depth.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: c.border.subtle },
+  modalTitle: { color: c.signal.white, fontSize: 20, fontWeight: "600", fontFamily: "Georgia", marginBottom: 16 },
   newChatRow: { marginBottom: 10 },
-  newChatInput: { backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 15, marginBottom: 10 },
-  startBtn: { backgroundColor: colors.voice.gold, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginBottom: 16 },
-  startBtnText: { color: colors.depth.void, fontSize: 15, fontWeight: "600" },
-  orText: { color: colors.signal.steel, fontSize: 12, textAlign: "center", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 },
-  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
-  contactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
-  contactName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  contactId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
-  yourId: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle, alignItems: "center" },
-  yourIdLabel: { color: colors.signal.steel, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
-  yourIdValue: { color: colors.voice.gold, fontSize: 13, fontFamily: "Courier", marginTop: 4 },
-  cancelBtn: { marginTop: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  cancelText: { color: colors.signal.steel, fontSize: 14 },
+  newChatInput: { backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: c.signal.white, fontSize: 15, marginBottom: 10 },
+  startBtn: { backgroundColor: c.voice.gold, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginBottom: 16 },
+  startBtnText: { color: c.depth.void, fontSize: 15, fontWeight: "600" },
+  orText: { color: c.signal.steel, fontSize: 12, textAlign: "center", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: c.quantum.teal },
+  contactInit: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactName: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  contactId: { color: c.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  yourId: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border.subtle, alignItems: "center" },
+  yourIdLabel: { color: c.signal.steel, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  yourIdValue: { color: c.voice.gold, fontSize: 13, fontFamily: "Courier", marginTop: 4 },
+  cancelBtn: { marginTop: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  cancelText: { color: c.signal.steel, fontSize: 14 },
 });

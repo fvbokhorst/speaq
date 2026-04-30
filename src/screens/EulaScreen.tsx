@@ -19,7 +19,7 @@ import {
   Linking,
   Platform,
 } from "react-native";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { t } from "../services/i18n";
 
 interface Props {
@@ -27,6 +27,7 @@ interface Props {
 }
 
 export default function EulaScreen({ onAccept }: Props) {
+  const st = useThemedStyles(makeStyles);
   const [agreed, setAgreed] = useState(false);
 
   function openTerms() {
@@ -111,10 +112,10 @@ export default function EulaScreen({ onAccept }: Props) {
   );
 }
 
-const st = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.depth.void,
+    backgroundColor: c.depth.void,
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -127,7 +128,7 @@ const st = StyleSheet.create({
     marginBottom: 24,
   },
   logoSpea: {
-    color: colors.signal.white,
+    color: c.signal.white,
     fontSize: 22,
     fontWeight: "700",
     letterSpacing: -0.5,
@@ -137,14 +138,14 @@ const st = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: colors.voice.gold,
+    borderColor: c.voice.gold,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 1,
     position: "relative",
   },
   logoQText: {
-    color: colors.voice.gold,
+    color: c.voice.gold,
     fontSize: 18,
     fontWeight: "700",
     fontFamily: "Georgia",
@@ -156,31 +157,31 @@ const st = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 2,
-    backgroundColor: colors.quantum.teal,
+    backgroundColor: c.quantum.teal,
   },
   title: {
-    color: colors.signal.white,
+    color: c.signal.white,
     fontSize: 24,
     fontWeight: "700",
     marginBottom: 12,
     lineHeight: 30,
   },
   intro: {
-    color: colors.signal.steel,
+    color: c.signal.steel,
     fontSize: 14,
     lineHeight: 21,
     marginBottom: 18,
   },
   policyCard: {
-    backgroundColor: colors.depth.elevated,
+    backgroundColor: c.depth.elevated,
     borderRadius: 14,
     padding: 18,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: colors.depth.surface,
+    borderColor: c.depth.surface,
   },
   policyHeading: {
-    color: colors.voice.gold,
+    color: c.voice.gold,
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 12,
@@ -192,7 +193,7 @@ const st = StyleSheet.create({
     alignItems: "flex-start",
   },
   bulletDot: {
-    color: colors.voice.gold,
+    color: c.voice.gold,
     fontSize: 14,
     marginRight: 8,
     width: 8,
@@ -200,18 +201,18 @@ const st = StyleSheet.create({
   },
   bulletText: {
     flex: 1,
-    color: colors.signal.steel,
+    color: c.signal.steel,
     fontSize: 12,
     lineHeight: 18,
   },
   linkLine: {
-    color: colors.signal.steel,
+    color: c.signal.steel,
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 14,
   },
   linkText: {
-    color: colors.voice.gold,
+    color: c.voice.gold,
     textDecorationLine: "underline",
   },
   checkboxRow: {
@@ -224,24 +225,24 @@ const st = StyleSheet.create({
     height: 22,
     borderRadius: 5,
     borderWidth: 2,
-    borderColor: colors.signal.steel,
+    borderColor: c.signal.steel,
     marginTop: 1,
     marginRight: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxChecked: {
-    backgroundColor: colors.voice.gold,
-    borderColor: colors.voice.gold,
+    backgroundColor: c.voice.gold,
+    borderColor: c.voice.gold,
   },
   checkboxMark: {
-    color: colors.depth.void,
+    color: c.depth.void,
     fontSize: 14,
     fontWeight: "700",
   },
   checkboxText: {
     flex: 1,
-    color: colors.signal.white,
+    color: c.signal.white,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -250,24 +251,24 @@ const st = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: Platform.OS === "ios" ? 32 : 20,
     borderTopWidth: 1,
-    borderTopColor: colors.depth.elevated,
-    backgroundColor: colors.depth.void,
+    borderTopColor: c.depth.elevated,
+    backgroundColor: c.depth.void,
   },
   continueBtn: {
-    backgroundColor: colors.voice.gold,
+    backgroundColor: c.voice.gold,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
   },
   continueBtnDisabled: {
-    backgroundColor: colors.depth.elevated,
+    backgroundColor: c.depth.elevated,
   },
   continueText: {
-    color: colors.depth.void,
+    color: c.depth.void,
     fontSize: 16,
     fontWeight: "600",
   },
   continueTextDisabled: {
-    color: colors.signal.steel,
+    color: c.signal.steel,
   },
 });

@@ -8,7 +8,7 @@ import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch,
 } from "react-native";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { t } from "../services/i18n";
 import {
   loadMining, isMiningActive, startMining, stopMining,
@@ -33,6 +33,8 @@ const TYPE_INFO: Record<MiningType, { icon: string; name: string; desc: string }
 const CHAIN_API = "https://thespeaq.com";
 
 export default function MiningScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [active, setActive] = useState(isMiningActive());
   const [stats, setStats] = useState<MiningStats>(getMiningStats());
   const [rewards, setRewards] = useState<MiningReward[]>(getMiningRewards());
@@ -114,8 +116,8 @@ export default function MiningScreen({ onBack }: Props) {
             <Switch
               value={active}
               onValueChange={handleToggleMining}
-              trackColor={{ false: colors.depth.elevated, true: colors.voice.gold }}
-              thumbColor={colors.signal.white}
+              trackColor={{ false: c.depth.elevated, true: c.voice.gold }}
+              thumbColor={c.signal.white}
             />
           </View>
           {active && (
@@ -178,7 +180,7 @@ export default function MiningScreen({ onBack }: Props) {
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Your Earnings</Text>
-            <Text style={[st.networkValue, { color: colors.quantum.teal }]}>{stats.totalEarned.toFixed(4)} QC</Text>
+            <Text style={[st.networkValue, { color: c.quantum.teal }]}>{stats.totalEarned.toFixed(4)} QC</Text>
           </View>
           <View style={st.networkRow}>
             <Text style={st.networkLabel}>Halving</Text>
@@ -254,62 +256,62 @@ export default function MiningScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
-  subtitle: { color: colors.quantum.teal, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
+  subtitle: { color: c.quantum.teal, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
   scroll: { flex: 1 },
 
-  toggleCard: { margin: 16, padding: 20, backgroundColor: colors.depth.card, borderRadius: 16, borderWidth: 1, borderColor: colors.voice.gold },
+  toggleCard: { margin: 16, padding: 20, backgroundColor: c.depth.card, borderRadius: 16, borderWidth: 1, borderColor: c.voice.gold },
   toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  toggleLabel: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  toggleSub: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
+  toggleLabel: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  toggleSub: { color: c.signal.steel, fontSize: 12, marginTop: 2 },
   pulseRow: { flexDirection: "row", alignItems: "center", marginTop: 12 },
   pulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22C55E", marginRight: 8 },
   pulseText: { color: "#22C55E", fontSize: 12, fontWeight: "500" },
 
   statsRow: { flexDirection: "row", paddingHorizontal: 12, gap: 8 },
-  statCard: { flex: 1, backgroundColor: colors.depth.card, borderRadius: 12, padding: 16, alignItems: "center", borderWidth: 1, borderColor: colors.border.subtle },
-  statValue: { color: colors.voice.gold, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
-  statLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 },
+  statCard: { flex: 1, backgroundColor: c.depth.card, borderRadius: 12, padding: 16, alignItems: "center", borderWidth: 1, borderColor: c.border.subtle },
+  statValue: { color: c.voice.gold, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
+  statLabel: { color: c.signal.steel, fontSize: 10, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 },
 
   levelRow: { flexDirection: "row", paddingHorizontal: 12, gap: 8, marginTop: 8 },
-  levelCard: { flex: 1, backgroundColor: colors.depth.card, borderRadius: 12, padding: 16, alignItems: "center", borderWidth: 1, borderColor: colors.border.subtle },
-  levelValue: { color: colors.signal.white, fontSize: 18, fontWeight: "700" },
-  levelLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4 },
-  levelBar: { width: "100%", height: 4, backgroundColor: colors.depth.elevated, borderRadius: 2, marginTop: 8 },
-  levelFill: { height: 4, backgroundColor: colors.voice.gold, borderRadius: 2 },
+  levelCard: { flex: 1, backgroundColor: c.depth.card, borderRadius: 12, padding: 16, alignItems: "center", borderWidth: 1, borderColor: c.border.subtle },
+  levelValue: { color: c.signal.white, fontSize: 18, fontWeight: "700" },
+  levelLabel: { color: c.signal.steel, fontSize: 10, marginTop: 4 },
+  levelBar: { width: "100%", height: 4, backgroundColor: c.depth.elevated, borderRadius: 2, marginTop: 8 },
+  levelFill: { height: 4, backgroundColor: c.voice.gold, borderRadius: 2 },
 
-  networkCard: { margin: 16, marginBottom: 8, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
-  networkTitle: { color: colors.signal.white, fontSize: 14, fontWeight: "600", marginBottom: 12 },
-  networkRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  networkLabel: { color: colors.signal.steel, fontSize: 13 },
-  networkValue: { color: colors.signal.white, fontSize: 13, fontWeight: "500" },
+  networkCard: { margin: 16, marginBottom: 8, padding: 16, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
+  networkTitle: { color: c.signal.white, fontSize: 14, fontWeight: "600", marginBottom: 12 },
+  networkRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  networkLabel: { color: c.signal.steel, fontSize: 13 },
+  networkValue: { color: c.signal.white, fontSize: 13, fontWeight: "500" },
 
-  sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600", paddingHorizontal: 16, marginTop: 16, marginBottom: 8 },
-  emptyText: { color: colors.signal.steel, fontSize: 12, paddingHorizontal: 16, paddingBottom: 16 },
+  sectionTitle: { color: c.signal.white, fontSize: 16, fontWeight: "600", paddingHorizontal: 16, marginTop: 16, marginBottom: 8 },
+  emptyText: { color: c.signal.steel, fontSize: 12, paddingHorizontal: 16, paddingBottom: 16 },
 
-  typeCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 14, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
-  typeCardActive: { borderColor: colors.voice.gold, backgroundColor: "rgba(212,168,83,0.05)" },
-  typeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  typeCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 14, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
+  typeCardActive: { borderColor: c.voice.gold, backgroundColor: "rgba(212,168,83,0.05)" },
+  typeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12 },
   typeIconActive: { backgroundColor: "rgba(212,168,83,0.15)" },
-  typeIconText: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  typeIconText: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
   typeInfo: { flex: 1 },
-  typeName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  typeNameActive: { color: colors.voice.gold },
-  typeDesc: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
-  typeRate: { color: colors.quantum.teal, fontSize: 10, marginTop: 3 },
-  typeCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.border.subtle, alignItems: "center", justifyContent: "center" },
-  typeCheckActive: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
-  typeCheckMark: { color: colors.depth.void, fontSize: 14, fontWeight: "700" },
+  typeName: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  typeNameActive: { color: c.voice.gold },
+  typeDesc: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
+  typeRate: { color: c.quantum.teal, fontSize: 10, marginTop: 3 },
+  typeCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: c.border.subtle, alignItems: "center", justifyContent: "center" },
+  typeCheckActive: { borderColor: c.voice.gold, backgroundColor: c.voice.gold },
+  typeCheckMark: { color: c.depth.void, fontSize: 14, fontWeight: "700" },
 
-  rewardRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  rewardRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   rewardDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E", marginRight: 12 },
   rewardInfo: { flex: 1 },
-  rewardDesc: { color: colors.signal.white, fontSize: 13 },
-  rewardTime: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+  rewardDesc: { color: c.signal.white, fontSize: 13 },
+  rewardTime: { color: c.signal.steel, fontSize: 10, marginTop: 2 },
   rewardAmount: { color: "#22C55E", fontSize: 13, fontWeight: "600" },
 });

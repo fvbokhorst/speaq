@@ -6,8 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Image, Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme/brand";
-import { useTheme, ThemeMode } from "../theme/ThemeContext";
+import { useThemedStyles, useTheme, ThemeColors, ThemeMode } from "../theme/ThemeContext";
 import { getIdentity, getKyberPublicKey } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
@@ -144,6 +143,7 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   const [exportData, setExportData] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const { mode: themeMode, setMode: setThemeMode, theme: th, colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const identity = getIdentity();
 
   useEffect(() => {
@@ -445,42 +445,42 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  title: { color: c.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
   list: { flex: 1, paddingHorizontal: 16 },
   photoSection: { alignItems: "center", paddingVertical: 20 },
-  profilePhoto: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.voice.gold },
-  profilePhotoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.voice.gold },
-  profilePhotoInit: { color: colors.voice.gold, fontSize: 32, fontWeight: "600" },
-  photoHint: { color: colors.signal.steel, fontSize: 11, marginTop: 8 },
-  sectionLabel: { color: colors.signal.steel, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginTop: 20, marginBottom: 8, paddingHorizontal: 8 },
-  card: { backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, overflow: "hidden" },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  rowLabel: { color: colors.signal.white, fontSize: 14 },
-  rowLabelRed: { color: colors.signal.red, fontSize: 14 },
-  rowValue: { color: colors.signal.steel, fontSize: 14 },
-  rowValueMono: { color: colors.voice.gold, fontSize: 12, fontFamily: "Courier" },
-  rowValueTeal: { color: colors.quantum.teal, fontSize: 12 },
-  rowAction: { color: colors.voice.gold, fontSize: 14, fontWeight: "500" },
-  langRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle },
+  profilePhoto: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: c.voice.gold },
+  profilePhotoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.voice.gold },
+  profilePhotoInit: { color: c.voice.gold, fontSize: 32, fontWeight: "600" },
+  photoHint: { color: c.signal.steel, fontSize: 11, marginTop: 8 },
+  sectionLabel: { color: c.signal.steel, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginTop: 20, marginBottom: 8, paddingHorizontal: 8 },
+  card: { backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle, overflow: "hidden" },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  rowLabel: { color: c.signal.white, fontSize: 14 },
+  rowLabelRed: { color: c.signal.red, fontSize: 14 },
+  rowValue: { color: c.signal.steel, fontSize: 14 },
+  rowValueMono: { color: c.voice.gold, fontSize: 12, fontFamily: "Courier" },
+  rowValueTeal: { color: c.quantum.teal, fontSize: 12 },
+  rowAction: { color: c.voice.gold, fontSize: 14, fontWeight: "500" },
+  langRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border.subtle },
   langRowActive: { backgroundColor: "rgba(212,168,83,0.08)" },
-  langNative: { color: colors.signal.white, fontSize: 14 },
-  langNativeActive: { color: colors.voice.gold, fontWeight: "600" },
-  langLabel: { color: colors.signal.steel, fontSize: 12 },
-  rowActionRed: { color: colors.signal.red, fontSize: 14, fontWeight: "500" },
+  langNative: { color: c.signal.white, fontSize: 14 },
+  langNativeActive: { color: c.voice.gold, fontWeight: "600" },
+  langLabel: { color: c.signal.steel, fontSize: 12 },
+  rowActionRed: { color: c.signal.red, fontSize: 14, fontWeight: "500" },
   themeBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", minHeight: 44 },
   themeBtnActive: { backgroundColor: "rgba(212,168,83,0.15)" },
-  themeBtnText: { color: colors.signal.steel, fontSize: 14 },
-  themeBtnTextActive: { color: colors.voice.gold, fontWeight: "600" },
+  themeBtnText: { color: c.signal.steel, fontSize: 14 },
+  themeBtnTextActive: { color: c.voice.gold, fontWeight: "600" },
 
-  privacyContainer: { flex: 1, backgroundColor: colors.depth.void },
-  privacyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  privacyTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600" },
-  privacyClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
+  privacyContainer: { flex: 1, backgroundColor: c.depth.void },
+  privacyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  privacyTitle: { color: c.signal.white, fontSize: 20, fontWeight: "600" },
+  privacyClose: { color: c.voice.gold, fontSize: 16, fontWeight: "500" },
   privacyScroll: { flex: 1, padding: 24 },
-  privacyText: { color: colors.signal.light, fontSize: 14, lineHeight: 22 },
-  exportBox: { backgroundColor: colors.depth.card, borderRadius: 8, padding: 16, borderWidth: 1, borderColor: colors.border.subtle },
-  exportData: { color: colors.quantum.teal, fontSize: 10, fontFamily: "Courier", lineHeight: 16 },
+  privacyText: { color: c.signal.light, fontSize: 14, lineHeight: 22 },
+  exportBox: { backgroundColor: c.depth.card, borderRadius: 8, padding: 16, borderWidth: 1, borderColor: c.border.subtle },
+  exportData: { color: c.quantum.teal, fontSize: 10, fontFamily: "Courier", lineHeight: 16 },
 });

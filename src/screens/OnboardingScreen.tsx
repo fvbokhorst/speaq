@@ -6,7 +6,7 @@
 
 import React, { useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Dimensions } from "react-native";
-import { colors } from "../theme/brand";
+import { useThemedStyles, ThemeColors } from "../theme/ThemeContext";
 import { t } from "../services/i18n";
 
 const { width } = Dimensions.get("window");
@@ -26,6 +26,7 @@ function getSlides() {
 }
 
 export default function OnboardingScreen({ onDone }: Props) {
+  const st = useThemedStyles(makeStyles);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const SLIDES = getSlides();
@@ -88,18 +89,18 @@ export default function OnboardingScreen({ onDone }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center" },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void, alignItems: "center" },
   skipBtn: { position: "absolute", top: 60, right: 24, zIndex: 10 },
-  skipText: { color: colors.signal.steel, fontSize: 14 },
+  skipText: { color: c.signal.steel, fontSize: 14 },
   slide: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
-  iconCircle: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginBottom: 32 },
-  iconText: { color: colors.voice.gold, fontSize: 40, fontWeight: "700", fontFamily: "Georgia" },
-  slideTitle: { color: colors.signal.white, fontSize: 24, fontWeight: "700", textAlign: "center", marginBottom: 16 },
-  slideSubtitle: { color: colors.signal.steel, fontSize: 15, lineHeight: 22, textAlign: "center" },
+  iconCircle: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: c.voice.gold, alignItems: "center", justifyContent: "center", marginBottom: 32 },
+  iconText: { color: c.voice.gold, fontSize: 40, fontWeight: "700", fontFamily: "Georgia" },
+  slideTitle: { color: c.signal.white, fontSize: 24, fontWeight: "700", textAlign: "center", marginBottom: 16 },
+  slideSubtitle: { color: c.signal.steel, fontSize: 15, lineHeight: 22, textAlign: "center" },
   dots: { flexDirection: "row", gap: 8, marginBottom: 24 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.depth.elevated },
-  dotActive: { backgroundColor: colors.voice.gold, width: 24 },
-  nextBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 48, paddingVertical: 14, borderRadius: 12 },
-  nextText: { color: colors.depth.void, fontSize: 16, fontWeight: "600" },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.depth.elevated },
+  dotActive: { backgroundColor: c.voice.gold, width: 24 },
+  nextBtn: { backgroundColor: c.voice.gold, paddingHorizontal: 48, paddingVertical: 14, borderRadius: 12 },
+  nextText: { color: c.depth.void, fontSize: 16, fontWeight: "600" },
 });

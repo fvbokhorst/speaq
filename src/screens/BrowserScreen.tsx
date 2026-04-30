@@ -8,7 +8,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Alert } from "react-native";
 import { WebView } from "react-native-webview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { obfuscatePayload } from "../services/transport";
 
 const HISTORY_KEY = "speaq_browser_history";
@@ -24,6 +24,8 @@ interface Props {
 }
 
 export default function BrowserScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [url, setUrl] = useState("https://duckduckgo.com");
   const [inputUrl, setInputUrl] = useState("https://duckduckgo.com");
   const [canGoBack, setCanGoBack] = useState(false);
@@ -158,7 +160,7 @@ export default function BrowserScreen({ onBack }: Props) {
           returnKeyType="go"
           selectTextOnFocus
           placeholder="Search or enter URL"
-          placeholderTextColor={colors.signal.steel}
+          placeholderTextColor={c.signal.steel}
         />
         <TouchableOpacity onPress={() => navigateTo(inputUrl)} style={st.navBtn}>
           <Text style={st.navBtnText}>Go</Text>
@@ -206,8 +208,8 @@ export default function BrowserScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
 
   // Navigation bar
   navBar: {
@@ -216,21 +218,21 @@ const st = StyleSheet.create({
     paddingTop: 56,
     paddingHorizontal: 8,
     paddingBottom: 8,
-    backgroundColor: colors.depth.surface,
+    backgroundColor: c.depth.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    borderBottomColor: c.border.subtle,
     gap: 6,
   },
   urlInput: {
     flex: 1,
     height: 36,
-    backgroundColor: colors.depth.card,
+    backgroundColor: c.depth.card,
     borderRadius: 8,
     paddingHorizontal: 12,
-    color: colors.signal.white,
+    color: c.signal.white,
     fontSize: 13,
     borderWidth: 1,
-    borderColor: colors.border.subtle,
+    borderColor: c.border.subtle,
   },
   navBtn: {
     width: 36,
@@ -238,9 +240,9 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 8,
-    backgroundColor: colors.depth.card,
+    backgroundColor: c.depth.card,
   },
-  navBtnText: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
+  navBtnText: { color: c.voice.gold, fontSize: 13, fontWeight: "600" },
 
   // WebView
   webview: { flex: 1 },
@@ -251,9 +253,9 @@ const st = StyleSheet.create({
     justifyContent: "space-around",
     paddingVertical: 8,
     paddingBottom: 28,
-    backgroundColor: colors.depth.surface,
+    backgroundColor: c.depth.surface,
     borderTopWidth: 1,
-    borderTopColor: colors.border.subtle,
+    borderTopColor: c.border.subtle,
   },
   bottomBtn: {
     width: 44,
@@ -262,8 +264,8 @@ const st = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 8,
   },
-  bottomBtnText: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
-  bottomBtnDisabled: { color: colors.signal.steel },
+  bottomBtnText: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
+  bottomBtnDisabled: { color: c.signal.steel },
 
   // Header (history view)
   header: {
@@ -274,23 +276,23 @@ const st = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    borderBottomColor: c.border.subtle,
   },
-  headerTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  backBtn: { color: colors.voice.gold, fontSize: 15, fontWeight: "500" },
-  clearBtn: { color: colors.signal.red, fontSize: 15, fontWeight: "500" },
+  headerTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  backBtn: { color: c.voice.gold, fontSize: 15, fontWeight: "500" },
+  clearBtn: { color: c.signal.red, fontSize: 15, fontWeight: "500" },
 
   // History list
   historyRow: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    borderBottomColor: c.border.subtle,
   },
-  historyTitle: { color: colors.signal.white, fontSize: 14, marginBottom: 2 },
-  historyUrl: { color: colors.signal.steel, fontSize: 11 },
+  historyTitle: { color: c.signal.white, fontSize: 14, marginBottom: 2 },
+  historyUrl: { color: c.signal.steel, fontSize: 11 },
 
   // Empty state
   emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyText: { color: colors.signal.steel, fontSize: 14 },
+  emptyText: { color: c.signal.steel, fontSize: 14 },
 });

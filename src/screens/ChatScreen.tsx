@@ -14,7 +14,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { sendMessage, sendQCPayment, onMessage, getIdentity, sendBlock } from "../services/speaq";
 import {
   decryptMessage, getContactKey,
@@ -43,6 +43,8 @@ interface Props {
 }
 
 export default function ChatScreen({ contactId, contactName, onBack, onCall }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -576,7 +578,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           value={message}
           onChangeText={setMessage}
           placeholder={t("speaqFreely")}
-          placeholderTextColor={colors.signal.steel}
+          placeholderTextColor={c.signal.steel}
           multiline
           returnKeyType="send"
           onSubmitEditing={handleSend}
@@ -621,7 +623,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                 value={reportComment}
                 onChangeText={(v) => setReportComment(v.slice(0, 500))}
                 placeholder={t("safetyReportCommentPlaceholder")}
-                placeholderTextColor={colors.signal.steel}
+                placeholderTextColor={c.signal.steel}
                 multiline
                 numberOfLines={3}
                 style={st.reportComment}
@@ -653,112 +655,112 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.surface },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.surface },
   header: {
     flexDirection: "row", alignItems: "center",
     paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
-    backgroundColor: colors.depth.void, borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
+    backgroundColor: c.depth.void, borderBottomWidth: 1, borderBottomColor: c.border.subtle,
   },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  headerPhoto: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.quantum.teal },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  headerPhoto: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: c.quantum.teal },
   headerAvatar: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated,
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.quantum.teal,
+    width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.quantum.teal,
   },
-  headerAvatarText: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
+  headerAvatarText: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
   headerInfo: { flex: 1, marginLeft: 12 },
-  headerName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
-  headerStatus: { color: colors.quantum.teal, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", marginTop: 1 },
-  encBanner: { backgroundColor: colors.depth.card, paddingVertical: 4, alignItems: "center" },
-  encText: { color: colors.signal.steel, fontSize: 9, letterSpacing: 0.5 },
+  headerName: { color: c.signal.white, fontSize: 16, fontWeight: "600" },
+  headerStatus: { color: c.quantum.teal, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", marginTop: 1 },
+  encBanner: { backgroundColor: c.depth.card, paddingVertical: 4, alignItems: "center" },
+  encText: { color: c.signal.steel, fontSize: 9, letterSpacing: 0.5 },
   list: { flex: 1 },
   listContent: { padding: 16, gap: 8 },
 
   // Date separator
   dateSep: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
-  dateLine: { flex: 1, height: 1, backgroundColor: colors.border.subtle },
-  dateText: { color: colors.signal.steel, fontSize: 11, marginHorizontal: 12 },
+  dateLine: { flex: 1, height: 1, backgroundColor: c.border.subtle },
+  dateText: { color: c.signal.steel, fontSize: 11, marginHorizontal: 12 },
 
   // Bubbles
   bubble: { maxWidth: "80%", padding: 12, borderRadius: 16 },
-  sent: { alignSelf: "flex-end", backgroundColor: colors.voice.deep, borderBottomRightRadius: 4 },
-  received: { alignSelf: "flex-start", backgroundColor: colors.depth.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border.subtle },
+  sent: { alignSelf: "flex-end", backgroundColor: c.voice.deep, borderBottomRightRadius: 4 },
+  received: { alignSelf: "flex-start", backgroundColor: c.depth.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: c.border.subtle },
   deletedBubble: { opacity: 0.5 },
-  deletedText: { color: colors.signal.steel, fontSize: 13, fontStyle: "italic" },
+  deletedText: { color: c.signal.steel, fontSize: 13, fontStyle: "italic" },
   bubbleText: { fontSize: 15, lineHeight: 21 },
-  sentText: { color: colors.voice.light },
-  receivedText: { color: colors.signal.white },
+  sentText: { color: c.voice.light },
+  receivedText: { color: c.signal.white },
   bubbleFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 4 },
-  readReceipt: { fontSize: 9, color: colors.quantum.teal, fontWeight: "600" },
+  readReceipt: { fontSize: 9, color: c.quantum.teal, fontWeight: "600" },
   bubbleTime: { fontSize: 9 },
-  sentTime: { color: colors.voice.warm },
-  receivedTime: { color: colors.signal.steel },
+  sentTime: { color: c.voice.warm },
+  receivedTime: { color: c.signal.steel },
 
   // Voice bubble
   voiceBubble: { flexDirection: "row", alignItems: "center", gap: 8 },
-  voiceIcon: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  voiceIcon: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
   voiceWave: { flexDirection: "row", alignItems: "center", gap: 2 },
-  voiceBar: { width: 3, height: 10, borderRadius: 1.5, backgroundColor: colors.voice.gold },
+  voiceBar: { width: 3, height: 10, borderRadius: 1.5, backgroundColor: c.voice.gold },
 
   // Location bubble
   locationBubble: { flexDirection: "row", alignItems: "center", gap: 8 },
-  locationIcon: { color: colors.quantum.teal, fontSize: 16, fontWeight: "600" },
+  locationIcon: { color: c.quantum.teal, fontSize: 16, fontWeight: "600" },
 
   // Payment bubble
   paymentBubble: { alignItems: "center", paddingVertical: 4 },
-  paymentIcon: { color: colors.voice.gold, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
-  paymentAmount: { color: colors.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 4 },
+  paymentIcon: { color: c.voice.gold, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
+  paymentAmount: { color: c.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 4 },
 
   // Input
   inputRow: {
     flexDirection: "row", alignItems: "flex-end", padding: 12, paddingBottom: 28,
-    backgroundColor: colors.depth.void, borderTopWidth: 1, borderTopColor: colors.border.subtle, gap: 8,
+    backgroundColor: c.depth.void, borderTopWidth: 1, borderTopColor: c.border.subtle, gap: 8,
   },
   input: {
-    flex: 1, backgroundColor: colors.depth.card, borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 12, color: colors.signal.white,
-    fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.border.subtle,
+    flex: 1, backgroundColor: c.depth.card, borderRadius: 16,
+    paddingHorizontal: 16, paddingVertical: 12, color: c.signal.white,
+    fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: c.border.subtle,
   },
-  callBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginLeft: 8 },
-  callBtnText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
-  attachBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle },
-  attachIcon: { color: colors.voice.gold, fontSize: 22, fontWeight: "400" },
-  timerBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle, alignSelf: "center" },
-  timerBtnActive: { borderColor: colors.quantum.teal, backgroundColor: "rgba(45,212,191,0.1)" },
-  timerIcon: { color: colors.signal.steel, fontSize: 14, fontWeight: "600" },
-  timerIconActive: { color: colors.quantum.teal },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center" },
-  sendActive: { backgroundColor: colors.voice.gold },
-  sendIcon: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  callBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginLeft: 8 },
+  callBtnText: { color: c.voice.gold, fontSize: 14, fontWeight: "600" },
+  attachBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border.subtle },
+  attachIcon: { color: c.voice.gold, fontSize: 22, fontWeight: "400" },
+  timerBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border.subtle, alignSelf: "center" },
+  timerBtnActive: { borderColor: c.quantum.teal, backgroundColor: "rgba(45,212,191,0.1)" },
+  timerIcon: { color: c.signal.steel, fontSize: 14, fontWeight: "600" },
+  timerIconActive: { color: c.quantum.teal },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center" },
+  sendActive: { backgroundColor: c.voice.gold },
+  sendIcon: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
   msgImage: { width: 200, height: 150, borderRadius: 12, marginBottom: 4 },
   fileRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: colors.border.subtle },
-  fileIconText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
+  fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: c.border.subtle },
+  fileIconText: { color: c.voice.gold, fontSize: 14, fontWeight: "600" },
   fileName: { fontSize: 13, flex: 1 },
 
   // Apple Guideline 1.2 - flagged content blur + reveal
   flaggedBubble: { borderWidth: 1, borderColor: "rgba(226, 75, 74, 0.5)" },
-  flaggedNotice: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 8 },
-  flaggedReveal: { color: colors.voice.gold, fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
+  flaggedNotice: { color: c.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  flaggedReveal: { color: c.voice.gold, fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
 
   // Apple Guideline 1.2 - Report message dialog
   reportOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", paddingHorizontal: 16 },
-  reportCard: { width: "100%", maxWidth: 420, maxHeight: "85%", backgroundColor: colors.depth.elevated, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border.subtle },
-  reportTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
-  reportSubtitle: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
-  reportSectionLabel: { color: colors.signal.white, fontSize: 12, fontWeight: "600", marginBottom: 8, marginTop: 4 },
-  reportReasonRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.depth.surface, marginBottom: 6, borderWidth: 1, borderColor: "transparent" },
-  reportReasonRowActive: { backgroundColor: "rgba(212, 168, 78, 0.15)", borderColor: colors.voice.gold },
-  reportRadio: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.signal.steel, marginRight: 10 },
-  reportRadioActive: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
-  reportReasonText: { color: colors.signal.white, fontSize: 13, flex: 1 },
-  reportComment: { color: colors.signal.white, fontSize: 13, backgroundColor: colors.depth.surface, borderRadius: 10, padding: 10, minHeight: 60, textAlignVertical: "top", marginBottom: 12 },
+  reportCard: { width: "100%", maxWidth: 420, maxHeight: "85%", backgroundColor: c.depth.elevated, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: c.border.subtle },
+  reportTitle: { color: c.signal.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  reportSubtitle: { color: c.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  reportSectionLabel: { color: c.signal.white, fontSize: 12, fontWeight: "600", marginBottom: 8, marginTop: 4 },
+  reportReasonRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.depth.surface, marginBottom: 6, borderWidth: 1, borderColor: "transparent" },
+  reportReasonRowActive: { backgroundColor: "rgba(212, 168, 78, 0.15)", borderColor: c.voice.gold },
+  reportRadio: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: c.signal.steel, marginRight: 10 },
+  reportRadioActive: { borderColor: c.voice.gold, backgroundColor: c.voice.gold },
+  reportReasonText: { color: c.signal.white, fontSize: 13, flex: 1 },
+  reportComment: { color: c.signal.white, fontSize: 13, backgroundColor: c.depth.surface, borderRadius: 10, padding: 10, minHeight: 60, textAlignVertical: "top", marginBottom: 12 },
   reportActions: { flexDirection: "row", gap: 8, marginTop: 12 },
   reportBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
-  reportBtnSecondary: { backgroundColor: colors.depth.surface },
-  reportBtnSecondaryText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
-  reportBtnPrimary: { backgroundColor: colors.voice.gold },
-  reportBtnPrimaryText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  reportBtnSecondary: { backgroundColor: c.depth.surface },
+  reportBtnSecondaryText: { color: c.signal.white, fontSize: 14, fontWeight: "600" },
+  reportBtnPrimary: { backgroundColor: c.voice.gold },
+  reportBtnPrimaryText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
 });

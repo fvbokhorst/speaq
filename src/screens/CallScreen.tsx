@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
 import { RTCView } from "react-native-webrtc";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { callService, CallState } from "../services/call";
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
 }
 
 export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: Props) {
+  const st = useThemedStyles(makeStyles);
   const [callState, setCallState] = useState<CallState>(callService.getCallState());
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -206,31 +207,31 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
   remoteVideo: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  localVideo: { position: "absolute", top: 60, right: 16, width: 120, height: 160, borderRadius: 12, overflow: "hidden", borderWidth: 2, borderColor: colors.voice.gold, zIndex: 10 },
+  localVideo: { position: "absolute", top: 60, right: 16, width: 120, height: 160, borderRadius: 12, overflow: "hidden", borderWidth: 2, borderColor: c.voice.gold, zIndex: 10 },
   overlay: { flex: 1, justifyContent: "space-between" },
   top: { alignItems: "center", paddingTop: 60 },
   encBadge: { backgroundColor: "rgba(45,212,191,0.15)", paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  encText: { color: colors.quantum.teal, fontSize: 11, letterSpacing: 1 },
+  encText: { color: c.quantum.teal, fontSize: 11, letterSpacing: 1 },
   center: { alignItems: "center" },
-  avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.voice.gold, marginBottom: 16 },
-  avatarText: { color: colors.voice.gold, fontSize: 40, fontWeight: "600" },
-  contactName: { color: colors.signal.white, fontSize: 24, fontWeight: "600" },
-  participantCount: { color: colors.quantum.teal, fontSize: 12, marginTop: 4, letterSpacing: 0.5 },
-  status: { color: colors.signal.steel, fontSize: 14, marginTop: 8 },
+  avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.voice.gold, marginBottom: 16 },
+  avatarText: { color: c.voice.gold, fontSize: 40, fontWeight: "600" },
+  contactName: { color: c.signal.white, fontSize: 24, fontWeight: "600" },
+  participantCount: { color: c.quantum.teal, fontSize: 12, marginTop: 4, letterSpacing: 0.5 },
+  status: { color: c.signal.steel, fontSize: 14, marginTop: 8 },
   controls: { paddingBottom: 60, paddingHorizontal: 24 },
   incomingRow: { flexDirection: "row", justifyContent: "space-around" },
-  rejectBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.signal.red, alignItems: "center", justifyContent: "center" },
+  rejectBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.signal.red, alignItems: "center", justifyContent: "center" },
   acceptBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#22C55E", alignItems: "center", justifyContent: "center" },
-  btnIcon: { color: colors.signal.white, fontSize: 24, fontWeight: "600" },
-  btnLabel: { color: colors.signal.white, fontSize: 10, marginTop: 4 },
+  btnIcon: { color: c.signal.white, fontSize: 24, fontWeight: "600" },
+  btnLabel: { color: c.signal.white, fontSize: 10, marginTop: 4 },
   activeRow: { flexDirection: "row", justifyContent: "space-around", alignItems: "center" },
-  ctrlBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border.subtle },
-  ctrlActive: { backgroundColor: colors.voice.gold },
-  ctrlIcon: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  ctrlLabel: { color: colors.signal.steel, fontSize: 9, marginTop: 4 },
-  endBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.signal.red, alignItems: "center", justifyContent: "center" },
-  endIcon: { color: colors.signal.white, fontSize: 20, fontWeight: "600" },
+  ctrlBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.depth.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border.subtle },
+  ctrlActive: { backgroundColor: c.voice.gold },
+  ctrlIcon: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  ctrlLabel: { color: c.signal.steel, fontSize: 9, marginTop: 4 },
+  endBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.signal.red, alignItems: "center", justifyContent: "center" },
+  endIcon: { color: c.signal.white, fontSize: 20, fontWeight: "600" },
 });

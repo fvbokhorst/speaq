@@ -9,7 +9,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { getIdentity } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
@@ -23,6 +23,8 @@ interface Props {
 }
 
 export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLightning }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [balance, setBalance] = useState(walletService.getBalance());
   const [transactions, setTransactions] = useState<Transaction[]>(walletService.getTransactions());
   const [goldOracle, setGoldOracle] = useState<GoldOracleSnapshot | null>(null);
@@ -272,7 +274,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
         ) : (
           linkedWallets.map((w) => (
             <View key={w.id} style={st.walletCard}>
-              <View style={[st.walletDot, { backgroundColor: WALLET_TYPES.find((t) => t.key === w.type)?.color || colors.voice.gold }]} />
+              <View style={[st.walletDot, { backgroundColor: WALLET_TYPES.find((t) => t.key === w.type)?.color || c.voice.gold }]} />
               <View style={st.walletInfo}>
                 <Text style={st.walletLabel}>{w.label}</Text>
                 <Text style={st.walletAddr} numberOfLines={1}>{w.address}</Text>
@@ -327,12 +329,12 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             </TouchableOpacity>
             {!sendToName && (
               <TextInput style={st.modalInput} value={sendTo} onChangeText={setSendTo}
-                placeholder={t("enterSpeaqId")} placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+                placeholder={t("enterSpeaqId")} placeholderTextColor={c.signal.steel} autoCapitalize="none" />
             )}
             <TextInput style={st.modalInput} value={sendAmount} onChangeText={setSendAmount}
-              placeholder={t("amountQC")} placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
+              placeholder={t("amountQC")} placeholderTextColor={c.signal.steel} keyboardType="decimal-pad" />
             <TextInput style={st.modalInput} value={sendNote} onChangeText={setSendNote}
-              placeholder={t("noteOptional")} placeholderTextColor={colors.signal.steel} />
+              placeholder={t("noteOptional")} placeholderTextColor={c.signal.steel} />
             <Text style={st.balanceHint}>{t("available")}: {balance.toFixed(2)} QC</Text>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowSend(false); setSendTo(""); setSendToName(""); setSendAmount(""); setSendNote(""); }}>
@@ -410,14 +412,14 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             <Text style={st.modalTitle}>{t("requestPayment")}</Text>
             <Text style={st.modalSub}>{t("requestPaymentSub")}</Text>
             <TextInput style={st.modalInput} value={receiveAmount} onChangeText={setReceiveAmount}
-              placeholder={t("amountQC")} placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" />
+              placeholder={t("amountQC")} placeholderTextColor={c.signal.steel} keyboardType="decimal-pad" />
             {receiveAmount && parseFloat(receiveAmount) > 0 && (
               <View style={st.qrBox}>
                 <QRCode
                   value={`speaq-pay://${identity?.speaqId || "unknown"}?amount=${receiveAmount}`}
                   size={160}
-                  backgroundColor={colors.depth.card}
-                  color={colors.voice.gold}
+                  backgroundColor={c.depth.card}
+                  color={c.voice.gold}
                 />
                 <Text style={st.qrAmountText}>{parseFloat(receiveAmount).toFixed(2)} QC</Text>
               </View>
@@ -435,9 +437,9 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>{t("newProject")}</Text>
             <TextInput style={st.modalInput} value={projectName} onChangeText={setProjectName}
-              placeholder={t("projectName")} placeholderTextColor={colors.signal.steel} autoFocus />
+              placeholder={t("projectName")} placeholderTextColor={c.signal.steel} autoFocus />
             <TextInput style={st.modalInput} value={projectDesc} onChangeText={setProjectDesc}
-              placeholder={t("description")} placeholderTextColor={colors.signal.steel} />
+              placeholder={t("description")} placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowNewProject(false)}>
                 <Text style={st.cancelText}>{t("cancel")}</Text>
@@ -467,9 +469,9 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             </View>
             <TextInput style={st.modalInput} value={walletAddress} onChangeText={setWalletAddress}
               placeholder={`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} address`}
-              placeholderTextColor={colors.signal.steel} autoCapitalize="none" />
+              placeholderTextColor={c.signal.steel} autoCapitalize="none" />
             <TextInput style={st.modalInput} value={walletLabel} onChangeText={setWalletLabel}
-              placeholder={t("labelOptional")} placeholderTextColor={colors.signal.steel} />
+              placeholder={t("labelOptional")} placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowLinkWallet(false)}>
                 <Text style={st.cancelText}>{t("cancel")}</Text>
@@ -492,8 +494,8 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
               <QRCode
                 value={`speaq-pay://${identity?.speaqId || "unknown"}`}
                 size={180}
-                backgroundColor={colors.depth.card}
-                color={colors.voice.gold}
+                backgroundColor={c.depth.card}
+                color={c.voice.gold}
               />
             </View>
             <Text style={st.qrId}>{identity?.speaqId || "No ID"}</Text>
@@ -508,93 +510,93 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
-  headerSub: { fontSize: 11, color: colors.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  title: { color: c.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
+  headerSub: { fontSize: 11, color: c.quantum.teal, letterSpacing: 2, textTransform: "uppercase", marginTop: 2 },
 
-  balanceCard: { margin: 16, padding: 24, backgroundColor: colors.depth.card, borderRadius: 20, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center" },
-  balanceLabel: { color: colors.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
-  balanceAmount: { color: colors.voice.gold, fontSize: 48, fontWeight: "700", fontFamily: "Georgia", marginTop: 8 },
-  balanceUsd: { color: colors.signal.steel, fontSize: 14, marginTop: 4 },
-  balanceOracle: { color: colors.signal.steel, fontSize: 10, marginTop: 4, opacity: 0.7 },
+  balanceCard: { margin: 16, padding: 24, backgroundColor: c.depth.card, borderRadius: 20, borderWidth: 1, borderColor: c.voice.gold, alignItems: "center" },
+  balanceLabel: { color: c.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
+  balanceAmount: { color: c.voice.gold, fontSize: 48, fontWeight: "700", fontFamily: "Georgia", marginTop: 8 },
+  balanceUsd: { color: c.signal.steel, fontSize: 14, marginTop: 4 },
+  balanceOracle: { color: c.signal.steel, fontSize: 10, marginTop: 4, opacity: 0.7 },
   balanceActions: { flexDirection: "row", gap: 24, marginTop: 20 },
-  actionBtn: { alignItems: "center", backgroundColor: colors.depth.elevated, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
-  actionIcon: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
-  actionLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4 },
+  actionBtn: { alignItems: "center", backgroundColor: c.depth.elevated, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
+  actionIcon: { color: c.voice.gold, fontSize: 18, fontWeight: "600" },
+  actionLabel: { color: c.signal.steel, fontSize: 10, marginTop: 4 },
 
   scrollArea: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
   sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, marginTop: 20, marginBottom: 8 },
-  sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
-  sectionAdd: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
+  sectionTitle: { color: c.signal.white, fontSize: 16, fontWeight: "600" },
+  sectionAdd: { color: c.voice.gold, fontSize: 13, fontWeight: "600" },
 
-  lightningCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 16, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: "#F7931A" },
+  lightningCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 16, padding: 16, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: "#F7931A" },
   lightningIcon: { color: "#F7931A", fontSize: 24, fontWeight: "700", marginRight: 14 },
-  lightningTitle: { color: colors.signal.white, fontSize: 15, fontWeight: "600" },
-  lightningSub: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
+  lightningTitle: { color: c.signal.white, fontSize: 15, fontWeight: "600" },
+  lightningSub: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
   emptySmall: { paddingHorizontal: 24, paddingVertical: 12 },
-  emptySub: { color: colors.signal.steel, fontSize: 12 },
+  emptySub: { color: c.signal.steel, fontSize: 12 },
 
-  projectCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  projectCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 16, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
   projectInfo: { flex: 1 },
-  projectName: { color: colors.signal.white, fontSize: 15, fontWeight: "600" },
-  projectDesc: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
-  projectBalance: { color: colors.voice.gold, fontSize: 16, fontWeight: "700", fontFamily: "Georgia" },
+  projectName: { color: c.signal.white, fontSize: 15, fontWeight: "600" },
+  projectDesc: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
+  projectBalance: { color: c.voice.gold, fontSize: 16, fontWeight: "700", fontFamily: "Georgia" },
 
-  walletCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 14, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  walletCard: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, padding: 14, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
   walletDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
   walletInfo: { flex: 1 },
-  walletLabel: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  walletAddr: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 2 },
-  walletUnlink: { color: colors.signal.red, fontSize: 16, fontWeight: "600", paddingHorizontal: 8 },
+  walletLabel: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  walletAddr: { color: c.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 2 },
+  walletUnlink: { color: c.signal.red, fontSize: 16, fontWeight: "600", paddingHorizontal: 8 },
   walletTypeRow: { flexDirection: "row", gap: 8, marginBottom: 12, width: "100%" },
-  walletTypeBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  walletTypeTxt: { color: colors.signal.steel, fontSize: 10, fontWeight: "600" },
-  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  walletTypeBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  walletTypeTxt: { color: c.signal.steel, fontSize: 10, fontWeight: "600" },
+  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   txIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginRight: 12 },
   txIn: { backgroundColor: "rgba(34,197,94,0.15)" },
   txOut: { backgroundColor: "rgba(239,68,68,0.15)" },
-  txIconText: { fontSize: 18, fontWeight: "600", color: colors.signal.white },
+  txIconText: { fontSize: 18, fontWeight: "600", color: c.signal.white },
   txInfo: { flex: 1 },
-  txPeer: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  txNote: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
+  txPeer: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  txNote: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
   txRight: { alignItems: "flex-end" },
   txAmount: { fontSize: 14, fontWeight: "600" },
   txAmountIn: { color: "#22C55E" },
-  txAmountOut: { color: colors.signal.red },
-  txTime: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+  txAmountOut: { color: c.signal.red },
+  txTime: { color: c.signal.steel, fontSize: 10, marginTop: 2 },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
-  modalBox: { width: 300, backgroundColor: colors.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  modalTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 16 },
-  modalInput: { width: "100%", backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 15, marginBottom: 12 },
+  modalBox: { width: 300, backgroundColor: c.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  modalTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 16 },
+  modalInput: { width: "100%", backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: c.signal.white, fontSize: 15, marginBottom: 12 },
   modalBtns: { flexDirection: "row", gap: 12, marginTop: 4, width: "100%" },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  cancelText: { color: colors.signal.steel, fontSize: 14 },
-  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
-  confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  cancelText: { color: c.signal.steel, fontSize: 14 },
+  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, alignItems: "center" },
+  confirmText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
 
-  contactPickBtn: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 12 },
-  contactPickText: { color: colors.signal.white, fontSize: 15 },
-  contactPickArrow: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
-  balanceHint: { color: colors.signal.steel, fontSize: 11, marginBottom: 8, alignSelf: "flex-start" },
-  confirmCard: { width: "100%", backgroundColor: colors.depth.elevated, borderRadius: 12, padding: 20, marginBottom: 16, alignItems: "center" },
-  confirmAmount: { color: colors.voice.gold, fontSize: 40, fontWeight: "700", fontFamily: "Georgia" },
-  confirmQC: { color: colors.voice.gold, fontSize: 14, letterSpacing: 1, marginTop: 2 },
-  confirmDivider: { width: "100%", height: 1, backgroundColor: colors.border.subtle, marginVertical: 16 },
-  confirmLabel: { color: colors.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8 },
-  confirmValue: { color: colors.signal.white, fontSize: 15, fontWeight: "500", marginTop: 2 },
-  confirmBtnGold: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
-  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
-  contactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
-  contactName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  contactId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
-  modalSub: { color: colors.signal.steel, fontSize: 11, marginBottom: 16 },
-  qrAmountText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 12 },
-  qrBox: { padding: 16, backgroundColor: colors.depth.elevated, borderRadius: 16, marginBottom: 16, alignItems: "center" },
-  qrId: { color: colors.voice.gold, fontSize: 14, fontFamily: "Courier", marginBottom: 8 },
-  qrHint: { color: colors.signal.steel, fontSize: 11, textAlign: "center", marginBottom: 16 },
+  contactPickBtn: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 12 },
+  contactPickText: { color: c.signal.white, fontSize: 15 },
+  contactPickArrow: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
+  balanceHint: { color: c.signal.steel, fontSize: 11, marginBottom: 8, alignSelf: "flex-start" },
+  confirmCard: { width: "100%", backgroundColor: c.depth.elevated, borderRadius: 12, padding: 20, marginBottom: 16, alignItems: "center" },
+  confirmAmount: { color: c.voice.gold, fontSize: 40, fontWeight: "700", fontFamily: "Georgia" },
+  confirmQC: { color: c.voice.gold, fontSize: 14, letterSpacing: 1, marginTop: 2 },
+  confirmDivider: { width: "100%", height: 1, backgroundColor: c.border.subtle, marginVertical: 16 },
+  confirmLabel: { color: c.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8 },
+  confirmValue: { color: c.signal.white, fontSize: 15, fontWeight: "500", marginTop: 2 },
+  confirmBtnGold: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, alignItems: "center" },
+  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  contactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: c.quantum.teal },
+  contactInit: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactName: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  contactId: { color: c.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  modalSub: { color: c.signal.steel, fontSize: 11, marginBottom: 16 },
+  qrAmountText: { color: c.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 12 },
+  qrBox: { padding: 16, backgroundColor: c.depth.elevated, borderRadius: 16, marginBottom: 16, alignItems: "center" },
+  qrId: { color: c.voice.gold, fontSize: 14, fontFamily: "Courier", marginBottom: 8 },
+  qrHint: { color: c.signal.steel, fontSize: 11, textAlign: "center", marginBottom: 16 },
 });

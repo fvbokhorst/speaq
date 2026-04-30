@@ -12,7 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { Camera } from "react-native-camera-kit";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { contactsService } from "../services/contacts";
 import { sendMessage } from "../services/speaq";
 // Use Alert to show copyable text instead of native clipboard
@@ -28,6 +28,8 @@ interface Props {
 }
 
 export default function VaultScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [files, setFiles] = useState<VaultFile[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [layer, setLayer] = useState(getCurrentLayer());
@@ -372,7 +374,7 @@ export default function VaultScreen({ onBack }: Props) {
               value={pinStep === "create" ? hiddenPin : confirmPin}
               onChangeText={pinStep === "create" ? setHiddenPin : setConfirmPin}
               placeholder="Enter PIN"
-              placeholderTextColor={colors.signal.steel}
+              placeholderTextColor={c.signal.steel}
               keyboardType="number-pad"
               secureTextEntry
               autoFocus
@@ -406,7 +408,7 @@ export default function VaultScreen({ onBack }: Props) {
             value={noteText}
             onChangeText={setNoteText}
             placeholder="Write your secure note here..."
-            placeholderTextColor={colors.signal.steel}
+            placeholderTextColor={c.signal.steel}
             multiline
             autoFocus
             textAlignVertical="top"
@@ -444,7 +446,7 @@ export default function VaultScreen({ onBack }: Props) {
                 value={shareManualId}
                 onChangeText={setShareManualId}
                 placeholder="Enter SPEAQ ID"
-                placeholderTextColor={colors.signal.steel}
+                placeholderTextColor={c.signal.steel}
                 autoCapitalize="none"
               />
               <TouchableOpacity
@@ -463,7 +465,7 @@ export default function VaultScreen({ onBack }: Props) {
             {/* Contact list */}
             <Text style={st.shareContactsLabel}>Your Contacts</Text>
             {contactsService.getContacts().length === 0 ? (
-              <Text style={{ color: colors.signal.steel, fontSize: 12, paddingVertical: 8 }}>No contacts yet. Use SPEAQ ID or QR code above.</Text>
+              <Text style={{ color: c.signal.steel, fontSize: 12, paddingVertical: 8 }}>No contacts yet. Use SPEAQ ID or QR code above.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 200 }}>
                 {contactsService.getContacts().map((c) => (
@@ -484,14 +486,14 @@ export default function VaultScreen({ onBack }: Props) {
 
       {/* Share QR Scanner */}
       <Modal visible={showShareQR} animationType="slide">
-        <View style={{ flex: 1, backgroundColor: colors.depth.void }}>
+        <View style={{ flex: 1, backgroundColor: c.depth.void }}>
           <View style={st.scanHeader}>
             <Text style={st.scanTitle}>Scan SPEAQ ID</Text>
             <TouchableOpacity onPress={() => { setShowShareQR(false); setShowSharePicker(true); }}>
               <Text style={st.scanClose}>Close</Text>
             </TouchableOpacity>
           </View>
-          <Suspense fallback={<View style={{ flex: 1, backgroundColor: colors.depth.void }}><Text style={{ color: colors.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
+          <Suspense fallback={<View style={{ flex: 1, backgroundColor: c.depth.void }}><Text style={{ color: c.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
           <Camera
             scanBarcode
             onReadCode={(event: any) => {
@@ -503,8 +505,8 @@ export default function VaultScreen({ onBack }: Props) {
               }
             }}
             showFrame
-            frameColor={colors.voice.gold}
-            laserColor={colors.quantum.teal}
+            frameColor={c.voice.gold}
+            laserColor={c.quantum.teal}
           />
           </Suspense>
         </View>
@@ -548,7 +550,7 @@ export default function VaultScreen({ onBack }: Props) {
               value={restoreData}
               onChangeText={setRestoreData}
               placeholder="Paste encrypted backup..."
-              placeholderTextColor={colors.signal.steel}
+              placeholderTextColor={c.signal.steel}
               multiline
               autoFocus
             />
@@ -574,7 +576,7 @@ export default function VaultScreen({ onBack }: Props) {
               value={hiddenPin}
               onChangeText={setHiddenPin}
               placeholder="Enter hidden PIN"
-              placeholderTextColor={colors.signal.steel}
+              placeholderTextColor={c.signal.steel}
               keyboardType="number-pad"
               secureTextEntry
               autoFocus
@@ -594,86 +596,86 @@ export default function VaultScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
-  layerBadge: { color: colors.quantum.teal, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
-  backupBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, marginRight: 6 },
-  backupBtnText: { color: colors.signal.steel, fontSize: 11, fontWeight: "500" },
-  addBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  addBtnText: { color: colors.depth.void, fontSize: 13, fontWeight: "600" },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
+  layerBadge: { color: c.quantum.teal, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
+  backupBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: c.border.subtle, marginRight: 6 },
+  backupBtnText: { color: c.signal.steel, fontSize: 11, fontWeight: "500" },
+  addBtn: { backgroundColor: c.voice.gold, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  addBtnText: { color: c.depth.void, fontSize: 13, fontWeight: "600" },
 
   layerRow: { paddingHorizontal: 16, paddingVertical: 12 },
-  layerBtn: { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.quantum.teal, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  layerBtnRed: { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  layerBtnText: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
+  layerBtn: { backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.quantum.teal, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  layerBtnRed: { backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.signal.red, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  layerBtnText: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
 
   warningBanner: { backgroundColor: "rgba(45,212,191,0.1)", paddingVertical: 8, paddingHorizontal: 16 },
-  warningText: { color: colors.quantum.teal, fontSize: 11, textAlign: "center" },
+  warningText: { color: c.quantum.teal, fontSize: 11, textAlign: "center" },
 
   scroll: { flex: 1, paddingHorizontal: 16 },
   empty: { alignItems: "center", paddingTop: 60 },
-  emptyTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
-  emptySub: { color: colors.signal.steel, fontSize: 12 },
+  emptyTitle: { color: c.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
+  emptySub: { color: c.signal.steel, fontSize: 12 },
 
-  fileRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  fileRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   fileThumb: { width: 48, height: 48, borderRadius: 8, marginRight: 14 },
-  fileIcon: { width: 48, height: 48, borderRadius: 8, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", marginRight: 14, borderWidth: 1, borderColor: colors.border.subtle },
-  fileIconText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
+  fileIcon: { width: 48, height: 48, borderRadius: 8, backgroundColor: c.depth.card, alignItems: "center", justifyContent: "center", marginRight: 14, borderWidth: 1, borderColor: c.border.subtle },
+  fileIconText: { color: c.voice.gold, fontSize: 18, fontWeight: "600" },
   fileInfo: { flex: 1 },
-  fileName: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
-  fileMeta: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
+  fileName: { color: c.signal.white, fontSize: 15, fontWeight: "500" },
+  fileMeta: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
-  modalBox: { width: 300, backgroundColor: colors.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: colors.border.subtle },
-  modalTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
-  modalSub: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
-  pinInput: { backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, color: colors.signal.white, fontSize: 20, textAlign: "center", letterSpacing: 8, marginBottom: 16 },
+  modalBox: { width: 300, backgroundColor: c.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: c.border.subtle },
+  modalTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
+  modalSub: { color: c.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  pinInput: { backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, color: c.signal.white, fontSize: 20, textAlign: "center", letterSpacing: 8, marginBottom: 16 },
   modalBtns: { flexDirection: "row", gap: 12 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  cancelText: { color: colors.signal.steel, fontSize: 14 },
-  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
-  confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  cancelText: { color: c.signal.steel, fontSize: 14 },
+  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, alignItems: "center" },
+  confirmText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
 
-  noteEditorContainer: { flex: 1, backgroundColor: colors.depth.void },
-  noteEditorHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  noteEditorCancel: { color: colors.signal.steel, fontSize: 16 },
-  noteEditorTitle: { color: colors.signal.white, fontSize: 17, fontWeight: "600" },
-  noteEditorSave: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
-  noteEditorInput: { flex: 1, paddingHorizontal: 20, paddingTop: 20, color: colors.signal.white, fontSize: 16, lineHeight: 24 },
-  noteEditorActions: { flexDirection: "row", gap: 12, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.subtle },
-  noteShareBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center" },
-  noteShareText: { color: colors.voice.gold, fontSize: 14, fontWeight: "500" },
-  noteDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red, alignItems: "center" },
-  noteDeleteText: { color: colors.signal.red, fontSize: 14 },
+  noteEditorContainer: { flex: 1, backgroundColor: c.depth.void },
+  noteEditorHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  noteEditorCancel: { color: c.signal.steel, fontSize: 16 },
+  noteEditorTitle: { color: c.signal.white, fontSize: 17, fontWeight: "600" },
+  noteEditorSave: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
+  noteEditorInput: { flex: 1, paddingHorizontal: 20, paddingTop: 20, color: c.signal.white, fontSize: 16, lineHeight: 24 },
+  noteEditorActions: { flexDirection: "row", gap: 12, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border.subtle },
+  noteShareBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.voice.gold, alignItems: "center" },
+  noteShareText: { color: c.voice.gold, fontSize: 14, fontWeight: "500" },
+  noteDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.signal.red, alignItems: "center" },
+  noteDeleteText: { color: c.signal.red, fontSize: 14 },
 
   shareIdRow: { flexDirection: "row", gap: 8, marginBottom: 12, width: "100%" },
-  shareIdInput: { flex: 1, backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 14 },
-  shareIdSend: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, justifyContent: "center" },
-  shareIdSendText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
-  shareScanBtn: { width: "100%", paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.quantum.teal, alignItems: "center", marginBottom: 16 },
-  shareScanText: { color: colors.quantum.teal, fontSize: 14, fontWeight: "500" },
-  shareContactsLabel: { color: colors.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, alignSelf: "flex-start" },
-  scanHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: colors.depth.void },
-  scanTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  scanClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
-  shareContactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  shareContactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
-  shareContactInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
-  shareContactName: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
+  shareIdInput: { flex: 1, backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: c.signal.white, fontSize: 14 },
+  shareIdSend: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, justifyContent: "center" },
+  shareIdSendText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
+  shareScanBtn: { width: "100%", paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.quantum.teal, alignItems: "center", marginBottom: 16 },
+  shareScanText: { color: c.quantum.teal, fontSize: 14, fontWeight: "500" },
+  shareContactsLabel: { color: c.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, alignSelf: "flex-start" },
+  scanHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: c.depth.void },
+  scanTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  scanClose: { color: c.voice.gold, fontSize: 16, fontWeight: "500" },
+  shareContactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  shareContactAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: c.quantum.teal },
+  shareContactInit: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
+  shareContactName: { color: c.signal.white, fontSize: 15, fontWeight: "500" },
 
   viewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  viewerClose: { position: "absolute", top: 60, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.depth.card, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  viewerCloseText: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
+  viewerClose: { position: "absolute", top: 60, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: c.depth.card, alignItems: "center", justifyContent: "center", zIndex: 10 },
+  viewerCloseText: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
   viewerImage: { width: Dimensions.get("window").width - 32, height: Dimensions.get("window").height * 0.5 },
   viewerInfo: { alignItems: "center", marginTop: 20 },
-  viewerName: { color: colors.signal.white, fontSize: 16, fontWeight: "500" },
-  viewerMeta: { color: colors.signal.steel, fontSize: 12, marginTop: 4 },
+  viewerName: { color: c.signal.white, fontSize: 16, fontWeight: "500" },
+  viewerMeta: { color: c.signal.steel, fontSize: 12, marginTop: 4 },
   viewerActions: { flexDirection: "row", gap: 16, marginTop: 24 },
-  viewerBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle },
-  viewerBtnRed: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.signal.red },
-  viewerBtnText: { color: colors.signal.white, fontSize: 14 },
+  viewerBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.border.subtle },
+  viewerBtnRed: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.signal.red },
+  viewerBtnText: { color: c.signal.white, fontSize: 14 },
 });

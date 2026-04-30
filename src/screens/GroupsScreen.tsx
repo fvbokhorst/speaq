@@ -8,7 +8,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Image,
 } from "react-native";
 import { launchImageLibrary } from "react-native-image-picker";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { contactsService, Contact } from "../services/contacts";
 import { loadGroups, getGroups, createGroup, deleteGroup, Group } from "../services/groups";
 import { getIdentity } from "../services/speaq";
@@ -20,6 +20,8 @@ interface Props {
 }
 
 export default function GroupsScreen({ onOpenGroupChat }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [groupName, setGroupName] = useState("");
@@ -197,7 +199,7 @@ export default function GroupsScreen({ onOpenGroupChat }: Props) {
             value={groupName}
             onChangeText={setGroupName}
             placeholder="Group name"
-            placeholderTextColor={colors.signal.steel}
+            placeholderTextColor={c.signal.steel}
           />
 
           <Text style={st.sectionLabel}>Add Members ({selectedMembers.length})</Text>
@@ -231,46 +233,46 @@ export default function GroupsScreen({ onOpenGroupChat }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  title: { color: colors.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
-  createBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  createBtnText: { color: colors.depth.void, fontSize: 13, fontWeight: "600" },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  title: { color: c.signal.white, fontSize: 28, fontWeight: "700", fontFamily: "Georgia" },
+  createBtn: { backgroundColor: c.voice.gold, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  createBtnText: { color: c.depth.void, fontSize: 13, fontWeight: "600" },
   list: { flex: 1 },
   empty: { alignItems: "center", paddingTop: 60 },
-  emptyTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
-  emptySub: { color: colors.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
-  groupRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  groupPhoto: { width: 48, height: 48, borderRadius: 24, marginRight: 16, borderWidth: 1, borderColor: colors.voice.gold },
-  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 16, borderWidth: 1, borderColor: colors.voice.gold },
-  groupIconText: { color: colors.voice.gold, fontSize: 18, fontWeight: "600" },
+  emptyTitle: { color: c.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
+  emptySub: { color: c.signal.steel, fontSize: 12, textAlign: "center", paddingHorizontal: 40 },
+  groupRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  groupPhoto: { width: 48, height: 48, borderRadius: 24, marginRight: 16, borderWidth: 1, borderColor: c.voice.gold },
+  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 16, borderWidth: 1, borderColor: c.voice.gold },
+  groupIconText: { color: c.voice.gold, fontSize: 18, fontWeight: "600" },
   groupInfo: { flex: 1 },
-  groupName: { color: colors.signal.white, fontSize: 16, fontWeight: "600" },
-  groupMembers: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
+  groupName: { color: c.signal.white, fontSize: 16, fontWeight: "600" },
+  groupMembers: { color: c.signal.steel, fontSize: 12, marginTop: 2 },
   groupActionBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  groupActionDots: { color: colors.signal.steel, fontSize: 20, fontWeight: "700" },
+  groupActionDots: { color: c.signal.steel, fontSize: 20, fontWeight: "700" },
 
-  createContainer: { flex: 1, backgroundColor: colors.depth.void },
-  createHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  createCancel: { color: colors.signal.steel, fontSize: 16 },
-  createTitle: { color: colors.signal.white, fontSize: 17, fontWeight: "600" },
-  createDone: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
-  nameInput: { marginHorizontal: 20, marginTop: 20, backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, color: colors.signal.white, fontSize: 16 },
-  sectionLabel: { color: colors.signal.steel, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, paddingHorizontal: 20, marginTop: 24, marginBottom: 12 },
-  emptyContacts: { color: colors.signal.steel, fontSize: 12, paddingHorizontal: 20 },
+  createContainer: { flex: 1, backgroundColor: c.depth.void },
+  createHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  createCancel: { color: c.signal.steel, fontSize: 16 },
+  createTitle: { color: c.signal.white, fontSize: 17, fontWeight: "600" },
+  createDone: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
+  nameInput: { marginHorizontal: 20, marginTop: 20, backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, color: c.signal.white, fontSize: 16 },
+  sectionLabel: { color: c.signal.steel, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, paddingHorizontal: 20, marginTop: 24, marginBottom: 12 },
+  emptyContacts: { color: c.signal.steel, fontSize: 12, paddingHorizontal: 20 },
   membersList: { flex: 1, paddingHorizontal: 20 },
-  memberRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  memberCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.border.subtle, marginRight: 12, alignItems: "center", justifyContent: "center" },
-  memberChecked: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
-  checkMark: { color: colors.depth.void, fontSize: 14, fontWeight: "700" },
-  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
-  memberInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
-  memberName: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
-  memberId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  memberRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  memberCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: c.border.subtle, marginRight: 12, alignItems: "center", justifyContent: "center" },
+  memberChecked: { borderColor: c.voice.gold, backgroundColor: c.voice.gold },
+  checkMark: { color: c.depth.void, fontSize: 14, fontWeight: "700" },
+  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: c.quantum.teal },
+  memberInit: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
+  memberName: { color: c.signal.white, fontSize: 15, fontWeight: "500" },
+  memberId: { color: c.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
   photoPicker: { alignItems: "center", marginBottom: 16 },
-  photoPreview: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.voice.gold },
-  photoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.border.subtle },
-  photoPlaceholderIcon: { color: colors.voice.gold, fontSize: 28, fontWeight: "300" },
-  photoPlaceholderText: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+  photoPreview: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: c.voice.gold },
+  photoPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.border.subtle },
+  photoPlaceholderIcon: { color: c.voice.gold, fontSize: 28, fontWeight: "300" },
+  photoPlaceholderText: { color: c.signal.steel, fontSize: 10, marginTop: 2 },
 });

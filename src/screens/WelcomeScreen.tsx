@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated, TextInput, Modal, Keyboard, ActivityIndicator } from "react-native";
-import { colors, spacing, radius } from "../theme/brand";
+import { spacing, radius } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import Logo from "../components/Logo";
 
 interface Props {
@@ -8,6 +9,8 @@ interface Props {
 }
 
 export default function WelcomeScreen({ onCreateIdentity }: Props) {
+  const { colors: c } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [showNameModal, setShowNameModal] = useState(false);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +97,7 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
               value={name}
               onChangeText={setName}
               placeholder="Your name"
-              placeholderTextColor={colors.signal.steel}
+              placeholderTextColor={c.signal.steel}
               autoFocus
               returnKeyType="done"
               editable={!submitting}
@@ -114,7 +117,7 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
                 disabled={!name.trim() || submitting}
               >
                 {submitting ? (
-                  <ActivityIndicator color={colors.depth.void} />
+                  <ActivityIndicator color={c.depth.void} />
                 ) : (
                   <Text style={styles.modalConfirmText}>Create</Text>
                 )}
@@ -127,47 +130,47 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void, alignItems: "center", justifyContent: "center" },
   content: { alignItems: "center" },
 
-  freely: { color: colors.voice.warm, fontSize: 13, fontStyle: "italic", fontFamily: "Georgia", marginTop: 12, letterSpacing: 1 },
+  freely: { color: c.voice.warm, fontSize: 13, fontStyle: "italic", fontFamily: "Georgia", marginTop: 12, letterSpacing: 1 },
 
   taglineCircle: {
     width: 160, height: 160, borderRadius: 80, borderWidth: 1.5,
-    backgroundColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginTop: 36,
-    shadowColor: colors.voice.gold, shadowOffset: { width: 0, height: 0 }, shadowRadius: 20,
+    backgroundColor: c.voice.gold, alignItems: "center", justifyContent: "center", marginTop: 36,
+    shadowColor: c.voice.gold, shadowOffset: { width: 0, height: 0 }, shadowRadius: 20,
   },
-  taglineText: { color: colors.signal.white, fontSize: 14, textAlign: "center", lineHeight: 22, fontWeight: "600", letterSpacing: 0.3 },
+  taglineText: { color: c.signal.white, fontSize: 14, textAlign: "center", lineHeight: 22, fontWeight: "600", letterSpacing: 0.3 },
 
   cta: {
-    backgroundColor: colors.voice.gold, paddingHorizontal: 32, paddingVertical: 13,
+    backgroundColor: c.voice.gold, paddingHorizontal: 32, paddingVertical: 13,
     borderRadius: radius.lg, marginTop: 48,
-    shadowColor: colors.voice.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8,
+    shadowColor: c.voice.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8,
   },
-  ctaLabel: { color: colors.depth.void, fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
-  ctaSub: { color: colors.signal.steel, fontSize: 10, marginTop: 10 },
+  ctaLabel: { color: c.depth.void, fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
+  ctaSub: { color: c.signal.steel, fontSize: 10, marginTop: 10 },
 
   bottom: { position: "absolute", bottom: 44 },
-  bottomText: { color: colors.signal.steel, fontSize: 9, letterSpacing: 0.5 },
+  bottomText: { color: c.signal.steel, fontSize: 9, letterSpacing: 0.5 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
   modalBox: {
-    width: 300, backgroundColor: colors.depth.card, borderRadius: radius.lg,
-    padding: 28, borderWidth: 1, borderColor: colors.border.subtle,
+    width: 300, backgroundColor: c.depth.card, borderRadius: radius.lg,
+    padding: 28, borderWidth: 1, borderColor: c.border.subtle,
   },
-  modalTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", fontFamily: "Georgia", marginBottom: 8 },
-  modalSub: { color: colors.signal.steel, fontSize: 12, marginBottom: 20, lineHeight: 18 },
+  modalTitle: { color: c.signal.white, fontSize: 20, fontWeight: "600", fontFamily: "Georgia", marginBottom: 8 },
+  modalSub: { color: c.signal.steel, fontSize: 12, marginBottom: 20, lineHeight: 18 },
   nameInput: {
-    backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle,
+    backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle,
     borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 14,
-    color: colors.signal.white, fontSize: 16, marginBottom: 20,
+    color: c.signal.white, fontSize: 16, marginBottom: 20,
   },
   modalButtons: { flexDirection: "row", gap: 12 },
-  modalCancel: { flex: 1, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  modalCancelText: { color: colors.signal.steel, fontSize: 14 },
-  modalConfirm: { flex: 1, paddingVertical: 12, borderRadius: radius.md, backgroundColor: colors.voice.gold, alignItems: "center" },
-  modalConfirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
+  modalCancel: { flex: 1, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  modalCancelText: { color: c.signal.steel, fontSize: 14 },
+  modalConfirm: { flex: 1, paddingVertical: 12, borderRadius: radius.md, backgroundColor: c.voice.gold, alignItems: "center" },
+  modalConfirmText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
   modalDisabled: { opacity: 0.3 },
 });

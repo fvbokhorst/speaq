@@ -9,7 +9,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert, Dimensions,
 } from "react-native";
 import { Camera } from "react-native-camera-kit";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { advancedService, GhostGroup, GhostPoll, WitnessRecord, DeadManSwitch } from "../services/advanced";
 import { contactsService, Contact } from "../services/contacts";
 
@@ -18,6 +18,8 @@ interface Props {
 }
 
 export default function AdvancedScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [ghostGroups, setGhostGroups] = useState<GhostGroup[]>([]);
   const [witnesses, setWitnesses] = useState<WitnessRecord[]>([]);
   const [dms, setDms] = useState<DeadManSwitch | null>(null);
@@ -258,7 +260,7 @@ export default function AdvancedScreen({ onBack }: Props) {
                     <Text style={st.itemMeta}>{formatDate(w.timestamp)}</Text>
                     <Text style={st.hashText} numberOfLines={1}>SHA-256: {w.contentHash.substring(0, 24)}...</Text>
                     {w.location && <Text style={st.hashText}>GPS: {w.location.lat.toFixed(4)}, {w.location.lng.toFixed(4)}</Text>}
-                    <Text style={[st.hashText, { color: isValid ? "#22C55E" : colors.signal.red }]}>
+                    <Text style={[st.hashText, { color: isValid ? "#22C55E" : c.signal.red }]}>
                       {isValid ? "Signature valid" : "SIGNATURE INVALID"}
                     </Text>
                     <View style={st.witnessActions}>
@@ -321,9 +323,9 @@ export default function AdvancedScreen({ onBack }: Props) {
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>New Private Group</Text>
             <TextInput style={st.input} value={ghostName} onChangeText={setGhostName}
-              placeholder="Group name" placeholderTextColor={colors.signal.steel} autoFocus />
+              placeholder="Group name" placeholderTextColor={c.signal.steel} autoFocus />
             <TextInput style={st.input} value={ghostDesc} onChangeText={setGhostDesc}
-              placeholder="Description (optional)" placeholderTextColor={colors.signal.steel} />
+              placeholder="Description (optional)" placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowNewGhost(false)}>
                 <Text style={st.cancelText}>Cancel</Text>
@@ -344,7 +346,7 @@ export default function AdvancedScreen({ onBack }: Props) {
             <Text style={st.modalSub}>Type what you want to record. It will be timestamped and cryptographically hashed.</Text>
             <TextInput style={[st.input, { height: 100, textAlignVertical: "top" }]}
               value={witnessText} onChangeText={setWitnessText}
-              placeholder="What are you witnessing?" placeholderTextColor={colors.signal.steel}
+              placeholder="What are you witnessing?" placeholderTextColor={c.signal.steel}
               multiline autoFocus />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowWitness(false)}>
@@ -360,20 +362,20 @@ export default function AdvancedScreen({ onBack }: Props) {
 
       {/* QR Scanner Modal */}
       <Modal visible={showQRScanner} animationType="slide">
-        <View style={{ flex: 1, backgroundColor: colors.depth.void }}>
+        <View style={{ flex: 1, backgroundColor: c.depth.void }}>
           <View style={st.scannerHeader}>
             <Text style={st.scannerTitle}>Scan SPEAQ QR Code</Text>
             <TouchableOpacity onPress={() => setShowQRScanner(false)}>
               <Text style={st.scannerClose}>Close</Text>
             </TouchableOpacity>
           </View>
-          <Suspense fallback={<View style={{ flex: 1 }}><Text style={{ color: colors.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
+          <Suspense fallback={<View style={{ flex: 1 }}><Text style={{ color: c.signal.white, textAlign: "center", marginTop: 100 }}>Loading camera...</Text></View>}>
           <Camera
             scanBarcode
             onReadCode={handleQRScan}
             showFrame
-            frameColor={colors.voice.gold}
-            laserColor={colors.quantum.teal}
+            frameColor={c.voice.gold}
+            laserColor={c.quantum.teal}
           />
           </Suspense>
         </View>
@@ -415,14 +417,14 @@ export default function AdvancedScreen({ onBack }: Props) {
             <Text style={st.modalTitle}>Safety Check-in</Text>
             <Text style={st.modalSub}>Set a check-in interval. If you don't check in on time, your safety message is sent automatically.</Text>
             <TextInput style={st.input} value={dmsHours} onChangeText={setDmsHours}
-              placeholder="Check-in interval (hours)" placeholderTextColor={colors.signal.steel}
+              placeholder="Check-in interval (hours)" placeholderTextColor={c.signal.steel}
               keyboardType="number-pad" />
             <TextInput style={st.input} value={dmsRecipient} onChangeText={setDmsRecipient}
-              placeholder="Recipient SPEAQ ID" placeholderTextColor={colors.signal.steel}
+              placeholder="Recipient SPEAQ ID" placeholderTextColor={c.signal.steel}
               autoCapitalize="none" />
             <TextInput style={[st.input, { height: 80, textAlignVertical: "top" }]}
               value={dmsMessage} onChangeText={setDmsMessage}
-              placeholder="Safety message" placeholderTextColor={colors.signal.steel}
+              placeholder="Safety message" placeholderTextColor={c.signal.steel}
               multiline />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowDmsConfig(false)}>
@@ -443,11 +445,11 @@ export default function AdvancedScreen({ onBack }: Props) {
             <Text style={st.modalTitle}>Create Anonymous Poll</Text>
             <Text style={st.modalSub}>No voter identity is recorded. Results are anonymous.</Text>
             <TextInput style={st.input} value={pollQuestion} onChangeText={setPollQuestion}
-              placeholder="Question" placeholderTextColor={colors.signal.steel} autoFocus />
+              placeholder="Question" placeholderTextColor={c.signal.steel} autoFocus />
             {pollOptions.map((opt, i) => (
               <TextInput key={i} style={st.input} value={opt}
                 onChangeText={(val) => { const updated = [...pollOptions]; updated[i] = val; setPollOptions(updated); }}
-                placeholder={`Option ${i + 1}`} placeholderTextColor={colors.signal.steel} />
+                placeholder={`Option ${i + 1}`} placeholderTextColor={c.signal.steel} />
             ))}
             <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ""])}>
               <Text style={st.addBtn}>+ Add Option</Text>
@@ -501,74 +503,74 @@ export default function AdvancedScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
   scroll: { flex: 1 },
 
   section: { marginTop: 24, paddingHorizontal: 16 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
-  sectionTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  sectionDesc: { color: colors.signal.steel, fontSize: 11, marginTop: 2, maxWidth: 240 },
-  addBtn: { color: colors.voice.gold, fontSize: 13, fontWeight: "600" },
+  sectionTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  sectionDesc: { color: c.signal.steel, fontSize: 11, marginTop: 2, maxWidth: 240 },
+  addBtn: { color: c.voice.gold, fontSize: 13, fontWeight: "600" },
 
-  emptyText: { color: colors.signal.steel, fontSize: 12, paddingVertical: 12 },
+  emptyText: { color: c.signal.steel, fontSize: 12, paddingVertical: 12 },
 
-  itemCard: { flexDirection: "row", alignItems: "center", padding: 14, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, marginBottom: 8 },
+  itemCard: { flexDirection: "row", alignItems: "center", padding: 14, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle, marginBottom: 8 },
   ghostIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(212,168,83,0.15)", alignItems: "center", justifyContent: "center", marginRight: 12 },
-  ghostIconText: { color: colors.voice.gold, fontSize: 16, fontWeight: "600" },
+  ghostIconText: { color: c.voice.gold, fontSize: 16, fontWeight: "600" },
   witnessIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(45,212,191,0.15)", alignItems: "center", justifyContent: "center", marginRight: 12 },
-  witnessIconText: { color: colors.quantum.teal, fontSize: 16, fontWeight: "600" },
+  witnessIconText: { color: c.quantum.teal, fontSize: 16, fontWeight: "600" },
   itemInfo: { flex: 1 },
-  itemName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  itemMeta: { color: colors.signal.steel, fontSize: 11, marginTop: 2 },
-  hashText: { color: colors.quantum.teal, fontSize: 9, fontFamily: "Courier", marginTop: 2 },
+  itemName: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  itemMeta: { color: c.signal.steel, fontSize: 11, marginTop: 2 },
+  hashText: { color: c.quantum.teal, fontSize: 9, fontFamily: "Courier", marginTop: 2 },
 
-  dmsSetup: { padding: 20, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  dmsSetupText: { color: colors.voice.gold, fontSize: 15, fontWeight: "600" },
-  dmsSetupSub: { color: colors.signal.steel, fontSize: 11, marginTop: 4 },
+  dmsSetup: { padding: 20, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  dmsSetupText: { color: c.voice.gold, fontSize: 15, fontWeight: "600" },
+  dmsSetupSub: { color: c.signal.steel, fontSize: 11, marginTop: 4 },
 
-  dmsActive: { padding: 16, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  dmsActive: { padding: 16, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
   dmsStatus: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   dmsDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   dmsDotGreen: { backgroundColor: "#22C55E" },
-  dmsDotRed: { backgroundColor: colors.signal.red },
-  dmsStatusText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
-  dmsInfo: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
+  dmsDotRed: { backgroundColor: c.signal.red },
+  dmsStatusText: { color: c.signal.white, fontSize: 14, fontWeight: "600" },
+  dmsInfo: { color: c.signal.steel, fontSize: 12, marginTop: 2 },
   dmsActions: { flexDirection: "row", gap: 12, marginTop: 12 },
   checkInBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: "#22C55E", alignItems: "center" },
-  checkInText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
-  disableBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.signal.red, alignItems: "center" },
-  disableText: { color: colors.signal.red, fontSize: 14 },
+  checkInText: { color: c.signal.white, fontSize: 14, fontWeight: "600" },
+  disableBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: c.signal.red, alignItems: "center" },
+  disableText: { color: c.signal.red, fontSize: 14 },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
-  modalBox: { width: 300, backgroundColor: colors.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: colors.border.subtle },
-  modalTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
-  modalSub: { color: colors.signal.steel, fontSize: 11, marginBottom: 16, lineHeight: 16 },
-  input: { backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 15, marginBottom: 12 },
+  modalBox: { width: 300, backgroundColor: c.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: c.border.subtle },
+  modalTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
+  modalSub: { color: c.signal.steel, fontSize: 11, marginBottom: 16, lineHeight: 16 },
+  input: { backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: c.signal.white, fontSize: 15, marginBottom: 12 },
   modalBtns: { flexDirection: "row", gap: 12, marginTop: 4 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  cancelText: { color: colors.signal.steel, fontSize: 14 },
-  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.voice.gold, alignItems: "center" },
-  confirmText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
-  scannerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: colors.depth.void },
-  scannerTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600" },
-  scannerClose: { color: colors.voice.gold, fontSize: 16, fontWeight: "500" },
-  contactPickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
-  contactPickAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: colors.quantum.teal },
-  contactPickInit: { color: colors.quantum.teal, fontSize: 14, fontWeight: "600" },
-  contactPickName: { color: colors.signal.white, fontSize: 14, fontWeight: "500" },
-  contactPickId: { color: colors.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  cancelText: { color: c.signal.steel, fontSize: 14 },
+  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, alignItems: "center" },
+  confirmText: { color: c.depth.void, fontSize: 14, fontWeight: "600" },
+  scannerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, backgroundColor: c.depth.void },
+  scannerTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600" },
+  scannerClose: { color: c.voice.gold, fontSize: 16, fontWeight: "500" },
+  contactPickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  contactPickAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 12, borderWidth: 1, borderColor: c.quantum.teal },
+  contactPickInit: { color: c.quantum.teal, fontSize: 14, fontWeight: "600" },
+  contactPickName: { color: c.signal.white, fontSize: 14, fontWeight: "500" },
+  contactPickId: { color: c.signal.steel, fontSize: 10, fontFamily: "Courier", marginTop: 1 },
   witnessActions: { flexDirection: "row", gap: 12, marginTop: 6 },
-  witnessActionBtn: { color: colors.voice.gold, fontSize: 11, fontWeight: "600" },
-  pollCard: { padding: 12, backgroundColor: colors.depth.elevated, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: colors.border.subtle },
-  pollQuestion: { color: colors.signal.white, fontSize: 14, fontWeight: "600", marginBottom: 4 },
-  pollMeta: { color: colors.signal.steel, fontSize: 10, marginBottom: 8 },
-  pollOption: { position: "relative", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, marginBottom: 4, overflow: "hidden" },
+  witnessActionBtn: { color: c.voice.gold, fontSize: 11, fontWeight: "600" },
+  pollCard: { padding: 12, backgroundColor: c.depth.elevated, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: c.border.subtle },
+  pollQuestion: { color: c.signal.white, fontSize: 14, fontWeight: "600", marginBottom: 4 },
+  pollMeta: { color: c.signal.steel, fontSize: 10, marginBottom: 8 },
+  pollOption: { position: "relative", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: c.border.subtle, marginBottom: 4, overflow: "hidden" },
   pollBar: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "rgba(212,168,83,0.15)", borderRadius: 8 } as any,
-  pollOptText: { color: colors.signal.white, fontSize: 13, zIndex: 1 },
-  pollOptCount: { color: colors.signal.steel, fontSize: 11, zIndex: 1 },
+  pollOptText: { color: c.signal.white, fontSize: 13, zIndex: 1 },
+  pollOptCount: { color: c.signal.steel, fontSize: 11, zIndex: 1 },
 });

@@ -6,7 +6,7 @@
 
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { getLanguage } from "../services/i18n";
 
 interface Props {
@@ -224,6 +224,7 @@ const INFO: Record<string, { title: string; sections: { heading: string; body: s
 };
 
 export default function InfoScreen({ onBack }: Props) {
+  const st = useThemedStyles(makeStyles);
   const lang = getLanguage();
   const content = INFO[lang] || INFO.en;
 
@@ -253,19 +254,19 @@ export default function InfoScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 22, fontWeight: "700", fontFamily: "Georgia" },
   scroll: { flex: 1, paddingHorizontal: 20 },
 
   section: { marginTop: 24 },
-  heading: { color: colors.voice.gold, fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  body: { color: colors.signal.light, fontSize: 14, lineHeight: 22 },
+  heading: { color: c.voice.gold, fontSize: 16, fontWeight: "600", marginBottom: 8 },
+  body: { color: c.signal.light, fontSize: 14, lineHeight: 22 },
 
-  footer: { alignItems: "center", marginTop: 40, paddingVertical: 20, borderTopWidth: 1, borderTopColor: colors.border.subtle },
-  footerText: { color: colors.voice.gold, fontSize: 16, fontWeight: "600", fontFamily: "Georgia" },
-  footerSub: { color: colors.signal.steel, fontSize: 12, marginTop: 4, fontFamily: "Courier" },
+  footer: { alignItems: "center", marginTop: 40, paddingVertical: 20, borderTopWidth: 1, borderTopColor: c.border.subtle },
+  footerText: { color: c.voice.gold, fontSize: 16, fontWeight: "600", fontFamily: "Georgia" },
+  footerSub: { color: c.signal.steel, fontSize: 12, marginTop: 4, fontFamily: "Courier" },
 });

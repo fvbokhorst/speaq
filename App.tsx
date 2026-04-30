@@ -27,8 +27,7 @@ import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import { ChatIcon, ContactIcon, WalletIcon, MiningIcon, SettingsIcon } from "./src/components/Icons";
-import { colors } from "./src/theme/brand";
-import { ThemeProvider } from "./src/theme/ThemeContext";
+import { ThemeProvider, useThemedStyles } from "./src/theme/ThemeContext";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
@@ -44,6 +43,7 @@ import { setNormalPin } from "./src/services/vault";
 import { setKeystorePin } from "./src/services/crypto";
 
 function App() {
+  const st = useThemedStyles(makeAppStyles);
   const [phase, setPhase] = useState<"loading" | "onboarding" | "eula" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
   const [chatContactId, setChatContactId] = useState("");
@@ -350,6 +350,7 @@ function App() {
 }
 
 function Tab({ icon, label, active, onPress }: { icon: React.ReactNode; label: string; active: boolean; onPress: () => void }) {
+  const st = useThemedStyles(makeAppStyles);
   return (
     <TouchableOpacity style={st.tab} onPress={onPress} activeOpacity={0.7}>
       {icon}
@@ -359,38 +360,33 @@ function Tab({ icon, label, active, onPress }: { icon: React.ReactNode; label: s
   );
 }
 
-function PH({ title }: { title: string }) {
-  return <View style={st.ph}><Text style={st.phT}>{title}</Text><Text style={st.phS}>Coming soon</Text></View>;
+function makeAppStyles(c: typeof import("./src/theme/brand").darkColors) {
+  return StyleSheet.create({
+    lockContainer: { flex: 1, backgroundColor: c.depth.void, alignItems: "center", justifyContent: "center" },
+    lockLogo: { flexDirection: "row", alignItems: "center", marginBottom: 32 },
+    lockSpea: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia", color: c.signal.white },
+    lockQC: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.voice.gold, alignItems: "center", justifyContent: "center", marginLeft: 2 },
+    lockQL: { fontSize: 22, fontWeight: "700", fontFamily: "Georgia", color: c.voice.gold, marginTop: -1 },
+    lockQB: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: c.quantum.teal, position: "absolute", bottom: 5, right: 7 },
+    lockTitle: { color: c.signal.white, fontSize: 20, fontWeight: "600", marginBottom: 6 },
+    lockSub: { color: c.signal.steel, fontSize: 12, marginBottom: 32 },
+    dots: { flexDirection: "row", gap: 12, marginBottom: 40 },
+    dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: c.voice.gold },
+    dotFull: { backgroundColor: c.voice.gold },
+    numpad: { flexDirection: "row", flexWrap: "wrap", width: 240, justifyContent: "center" },
+    nk: { width: 72, height: 56, alignItems: "center", justifyContent: "center", margin: 4, borderRadius: 12, backgroundColor: c.depth.card },
+    nkHide: { backgroundColor: "transparent" },
+    nkTxt: { color: c.signal.white, fontSize: 24, fontWeight: "400" },
+    unlockBtn: { backgroundColor: c.voice.gold, paddingHorizontal: 40, paddingVertical: 12, borderRadius: 12, marginTop: 24 },
+    unlockTxt: { color: c.depth.void, fontSize: 15, fontWeight: "600" },
+    container: { flex: 1, backgroundColor: c.depth.void },
+    nav: { flexDirection: "row", backgroundColor: c.depth.void, borderTopWidth: 1, borderTopColor: c.border.subtle, paddingBottom: 24, paddingTop: 10 },
+    tab: { flex: 1, alignItems: "center", paddingVertical: 4 },
+    tabLbl: { fontSize: 10, color: c.signal.steel, marginTop: 4, letterSpacing: 0.5 },
+    tabAct: { color: c.voice.gold },
+    tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.voice.gold, marginTop: 3 },
+  });
 }
-
-const st = StyleSheet.create({
-  lockContainer: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
-  lockLogo: { flexDirection: "row", alignItems: "center", marginBottom: 32 },
-  lockSpea: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia", color: colors.signal.white },
-  lockQC: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginLeft: 2 },
-  lockQL: { fontSize: 22, fontWeight: "700", fontFamily: "Georgia", color: colors.voice.gold, marginTop: -1 },
-  lockQB: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.quantum.teal, position: "absolute", bottom: 5, right: 7 },
-  lockTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", marginBottom: 6 },
-  lockSub: { color: colors.signal.steel, fontSize: 12, marginBottom: 32 },
-  dots: { flexDirection: "row", gap: 12, marginBottom: 40 },
-  dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: colors.voice.gold },
-  dotFull: { backgroundColor: colors.voice.gold },
-  numpad: { flexDirection: "row", flexWrap: "wrap", width: 240, justifyContent: "center" },
-  nk: { width: 72, height: 56, alignItems: "center", justifyContent: "center", margin: 4, borderRadius: 12, backgroundColor: colors.depth.card },
-  nkHide: { backgroundColor: "transparent" },
-  nkTxt: { color: colors.signal.white, fontSize: 24, fontWeight: "400" },
-  unlockBtn: { backgroundColor: colors.voice.gold, paddingHorizontal: 40, paddingVertical: 12, borderRadius: 12, marginTop: 24 },
-  unlockTxt: { color: colors.depth.void, fontSize: 15, fontWeight: "600" },
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  nav: { flexDirection: "row", backgroundColor: colors.depth.void, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingBottom: 24, paddingTop: 10 },
-  tab: { flex: 1, alignItems: "center", paddingVertical: 4 },
-  tabLbl: { fontSize: 10, color: colors.signal.steel, marginTop: 4, letterSpacing: 0.5 },
-  tabAct: { color: colors.voice.gold },
-  tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.voice.gold, marginTop: 3 },
-  ph: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.depth.void },
-  phT: { color: colors.signal.white, fontSize: 20, fontWeight: "500" },
-  phS: { color: colors.signal.steel, fontSize: 12, marginTop: 8 },
-});
 
 function AppWithTheme() {
   return (

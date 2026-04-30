@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput,
 } from "react-native";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { walletService, Transaction } from "../services/wallet";
 
 interface Props {
@@ -15,6 +15,8 @@ interface Props {
 }
 
 export default function TransactionsScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [searchQuery, setSearchQuery] = useState("");
   const allTransactions = walletService.getTransactions();
 
@@ -84,7 +86,7 @@ export default function TransactionsScreen({ onBack }: Props) {
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search by name, note or amount..."
-          placeholderTextColor={colors.signal.steel}
+          placeholderTextColor={c.signal.steel}
         />
       </View>
 
@@ -120,41 +122,41 @@ export default function TransactionsScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia", flex: 1 },
-  count: { color: colors.signal.steel, fontSize: 14 },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia", flex: 1 },
+  count: { color: c.signal.steel, fontSize: 14 },
 
   searchRow: { paddingHorizontal: 16, paddingVertical: 12 },
-  searchInput: { backgroundColor: colors.depth.card, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: colors.signal.white, fontSize: 15 },
+  searchInput: { backgroundColor: c.depth.card, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: c.signal.white, fontSize: 15 },
 
-  summaryRow: { flexDirection: "row", marginHorizontal: 16, marginBottom: 12, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, overflow: "hidden" },
+  summaryRow: { flexDirection: "row", marginHorizontal: 16, marginBottom: 12, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle, overflow: "hidden" },
   summaryItem: { flex: 1, alignItems: "center", paddingVertical: 14 },
-  summaryDivider: { width: 1, backgroundColor: colors.border.subtle },
-  summaryLabel: { color: colors.signal.steel, fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
+  summaryDivider: { width: 1, backgroundColor: c.border.subtle },
+  summaryLabel: { color: c.signal.steel, fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 },
   summaryIn: { color: "#22C55E", fontSize: 16, fontWeight: "600" },
-  summaryOut: { color: colors.signal.red, fontSize: 16, fontWeight: "600" },
+  summaryOut: { color: c.signal.red, fontSize: 16, fontWeight: "600" },
 
   dateHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6 },
-  dateHeaderText: { color: colors.signal.steel, fontSize: 12, fontWeight: "600", letterSpacing: 0.5 },
+  dateHeaderText: { color: c.signal.steel, fontSize: 12, fontWeight: "600", letterSpacing: 0.5 },
 
   list: { flex: 1 },
-  txRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  txRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   txDot: { width: 8, height: 8, borderRadius: 4, marginRight: 14 },
   txDotIn: { backgroundColor: "#22C55E" },
-  txDotOut: { backgroundColor: colors.signal.red },
+  txDotOut: { backgroundColor: c.signal.red },
   txInfo: { flex: 1 },
-  txPeer: { color: colors.signal.white, fontSize: 15, fontWeight: "500" },
-  txNote: { color: colors.signal.steel, fontSize: 12, marginTop: 2 },
-  txTime: { color: colors.signal.steel, fontSize: 10, marginTop: 3 },
+  txPeer: { color: c.signal.white, fontSize: 15, fontWeight: "500" },
+  txNote: { color: c.signal.steel, fontSize: 12, marginTop: 2 },
+  txTime: { color: c.signal.steel, fontSize: 10, marginTop: 3 },
   txAmount: { fontSize: 15, fontWeight: "600", marginLeft: 8 },
   txAmountIn: { color: "#22C55E" },
-  txAmountOut: { color: colors.signal.red },
+  txAmountOut: { color: c.signal.red },
 
   empty: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
-  emptySub: { color: colors.signal.steel, fontSize: 12 },
+  emptyTitle: { color: c.signal.white, fontSize: 16, fontWeight: "500", marginBottom: 4 },
+  emptySub: { color: c.signal.steel, fontSize: 12 },
 });

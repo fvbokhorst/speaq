@@ -8,7 +8,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, Alert,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { colors } from "../theme/brand";
+import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { t } from "../services/i18n";
 import { walletService } from "../services/wallet";
 import {
@@ -23,6 +23,8 @@ interface Props {
 }
 
 export default function LightningScreen({ onBack }: Props) {
+  const { colors: c } = useTheme();
+  const st = useThemedStyles(makeStyles);
   const [connected, setConnected] = useState(isConnected());
   const [balanceSats, setBalanceSats] = useState(getBalance());
   const [invoiceList, setInvoiceList] = useState<LightningInvoice[]>(getInvoices());
@@ -166,7 +168,7 @@ export default function LightningScreen({ onBack }: Props) {
               <View style={st.invoiceCard}>
                 <Text style={st.invoiceTitle}>Pending Invoice</Text>
                 <View style={st.qrBox}>
-                  <QRCode value={createdInvoice.bolt11} size={160} backgroundColor={colors.depth.card} color={colors.voice.gold} />
+                  <QRCode value={createdInvoice.bolt11} size={160} backgroundColor={c.depth.card} color={c.voice.gold} />
                 </View>
                 <Text style={st.invoiceAmount}>{createdInvoice.amountSats.toLocaleString()} sats</Text>
                 <Text style={st.invoiceMemo}>{createdInvoice.memo}</Text>
@@ -205,12 +207,12 @@ export default function LightningScreen({ onBack }: Props) {
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>Create Invoice</Text>
             <TextInput style={st.modalInput} value={invoiceAmount} onChangeText={setInvoiceAmount}
-              placeholder="Amount (satoshis)" placeholderTextColor={colors.signal.steel} keyboardType="number-pad" autoFocus />
+              placeholder="Amount (satoshis)" placeholderTextColor={c.signal.steel} keyboardType="number-pad" autoFocus />
             {invoiceAmount && parseInt(invoiceAmount) > 0 && (
               <Text style={st.convertHint}>= {satsToQC(parseInt(invoiceAmount)).toFixed(4)} QC</Text>
             )}
             <TextInput style={st.modalInput} value={invoiceMemo} onChangeText={setInvoiceMemo}
-              placeholder="Memo (optional)" placeholderTextColor={colors.signal.steel} />
+              placeholder="Memo (optional)" placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowCreate(false)}>
                 <Text style={st.cancelText}>{t("cancel")}</Text>
@@ -229,7 +231,7 @@ export default function LightningScreen({ onBack }: Props) {
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>Pay Lightning Invoice</Text>
             <TextInput style={[st.modalInput, { height: 80 }]} value={payBolt11} onChangeText={setPayBolt11}
-              placeholder="Paste BOLT11 invoice (lnbc...)" placeholderTextColor={colors.signal.steel}
+              placeholder="Paste BOLT11 invoice (lnbc...)" placeholderTextColor={c.signal.steel}
               multiline autoCapitalize="none" autoFocus />
             <Text style={st.convertHint}>Balance: {balanceSats.toLocaleString()} sats</Text>
             <View style={st.modalBtns}>
@@ -261,7 +263,7 @@ export default function LightningScreen({ onBack }: Props) {
             </View>
             <TextInput style={st.modalInput} value={convertAmount} onChangeText={setConvertAmount}
               placeholder={convertDirection === "toQC" ? "Amount (satoshis)" : "Amount (QC)"}
-              placeholderTextColor={colors.signal.steel} keyboardType="decimal-pad" autoFocus />
+              placeholderTextColor={c.signal.steel} keyboardType="decimal-pad" autoFocus />
             {convertAmount && parseFloat(convertAmount) > 0 && (
               <Text style={st.convertHint}>
                 = {convertDirection === "toQC"
@@ -284,71 +286,71 @@ export default function LightningScreen({ onBack }: Props) {
   );
 }
 
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.depth.void },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.depth.void },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   backBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  backText: { color: colors.voice.gold, fontSize: 20, fontWeight: "600" },
-  title: { color: colors.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
+  backText: { color: c.voice.gold, fontSize: 20, fontWeight: "600" },
+  title: { color: c.signal.white, fontSize: 24, fontWeight: "700", fontFamily: "Georgia" },
   subtitle: { color: "#F7931A", fontSize: 10, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 },
   scroll: { flex: 1 },
 
-  connectCard: { margin: 16, padding: 24, backgroundColor: colors.depth.card, borderRadius: 16, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
-  connectTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
-  connectSub: { color: colors.signal.steel, fontSize: 13, textAlign: "center", marginBottom: 16 },
+  connectCard: { margin: 16, padding: 24, backgroundColor: c.depth.card, borderRadius: 16, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
+  connectTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 8 },
+  connectSub: { color: c.signal.steel, fontSize: 13, textAlign: "center", marginBottom: 16 },
   connectBtn: { backgroundColor: "#F7931A", paddingHorizontal: 32, paddingVertical: 12, borderRadius: 10 },
-  connectBtnText: { color: colors.signal.white, fontSize: 15, fontWeight: "600" },
+  connectBtnText: { color: c.signal.white, fontSize: 15, fontWeight: "600" },
 
-  balanceCard: { margin: 16, padding: 24, backgroundColor: colors.depth.card, borderRadius: 20, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
-  balanceLabel: { color: colors.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
+  balanceCard: { margin: 16, padding: 24, backgroundColor: c.depth.card, borderRadius: 20, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
+  balanceLabel: { color: c.signal.steel, fontSize: 12, letterSpacing: 1, textTransform: "uppercase" },
   balanceAmount: { color: "#F7931A", fontSize: 36, fontWeight: "700", fontFamily: "Georgia", marginTop: 8 },
-  balanceSub: { color: colors.signal.steel, fontSize: 14, marginTop: 4 },
+  balanceSub: { color: c.signal.steel, fontSize: 14, marginTop: 4 },
   balanceActions: { flexDirection: "row", gap: 16, marginTop: 20 },
-  actionBtn: { alignItems: "center", backgroundColor: colors.depth.elevated, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle },
+  actionBtn: { alignItems: "center", backgroundColor: c.depth.elevated, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle },
   actionIcon: { color: "#F7931A", fontSize: 18, fontWeight: "600" },
-  actionLabel: { color: colors.signal.steel, fontSize: 10, marginTop: 4 },
+  actionLabel: { color: c.signal.steel, fontSize: 10, marginTop: 4 },
 
-  rateCard: { marginHorizontal: 16, marginBottom: 16, padding: 14, backgroundColor: colors.depth.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  rateLabel: { color: colors.signal.steel, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
-  rateValue: { color: colors.signal.white, fontSize: 15, fontWeight: "600", marginTop: 4 },
-  rateSub: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+  rateCard: { marginHorizontal: 16, marginBottom: 16, padding: 14, backgroundColor: c.depth.card, borderRadius: 12, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  rateLabel: { color: c.signal.steel, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  rateValue: { color: c.signal.white, fontSize: 15, fontWeight: "600", marginTop: 4 },
+  rateSub: { color: c.signal.steel, fontSize: 10, marginTop: 2 },
 
-  invoiceCard: { margin: 16, padding: 20, backgroundColor: colors.depth.card, borderRadius: 16, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
-  invoiceTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600", marginBottom: 12 },
-  qrBox: { padding: 12, backgroundColor: colors.depth.elevated, borderRadius: 12 },
+  invoiceCard: { margin: 16, padding: 20, backgroundColor: c.depth.card, borderRadius: 16, borderWidth: 1, borderColor: "#F7931A", alignItems: "center" },
+  invoiceTitle: { color: c.signal.white, fontSize: 16, fontWeight: "600", marginBottom: 12 },
+  qrBox: { padding: 12, backgroundColor: c.depth.elevated, borderRadius: 12 },
   invoiceAmount: { color: "#F7931A", fontSize: 20, fontWeight: "700", marginTop: 12 },
-  invoiceMemo: { color: colors.signal.steel, fontSize: 12, marginTop: 4 },
-  invoiceBolt11: { color: colors.signal.steel, fontSize: 9, fontFamily: "Courier", marginTop: 8, textAlign: "center" },
-  dismissBtn: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle },
-  dismissText: { color: colors.signal.steel, fontSize: 13 },
+  invoiceMemo: { color: c.signal.steel, fontSize: 12, marginTop: 4 },
+  invoiceBolt11: { color: c.signal.steel, fontSize: 9, fontFamily: "Courier", marginTop: 8, textAlign: "center" },
+  dismissBtn: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: c.border.subtle },
+  dismissText: { color: c.signal.steel, fontSize: 13 },
 
-  sectionTitle: { color: colors.signal.white, fontSize: 16, fontWeight: "600", paddingHorizontal: 16, marginTop: 8, marginBottom: 8 },
-  emptyText: { color: colors.signal.steel, fontSize: 12, paddingHorizontal: 16 },
+  sectionTitle: { color: c.signal.white, fontSize: 16, fontWeight: "600", paddingHorizontal: 16, marginTop: 8, marginBottom: 8 },
+  emptyText: { color: c.signal.steel, fontSize: 12, paddingHorizontal: 16 },
 
-  historyRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  historyRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
   historyDot: { width: 8, height: 8, borderRadius: 4, marginRight: 12 },
   dotIn: { backgroundColor: "#22C55E" },
   dotOut: { backgroundColor: "#F7931A" },
   historyInfo: { flex: 1 },
-  historyMemo: { color: colors.signal.white, fontSize: 14 },
-  historyStatus: { color: colors.signal.steel, fontSize: 10, marginTop: 2 },
+  historyMemo: { color: c.signal.white, fontSize: 14 },
+  historyStatus: { color: c.signal.steel, fontSize: 10, marginTop: 2 },
   historyAmount: { fontSize: 14, fontWeight: "600" },
   amountIn: { color: "#22C55E" },
   amountOut: { color: "#F7931A" },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center" },
-  modalBox: { width: 300, backgroundColor: colors.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: colors.border.subtle },
-  modalTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 16 },
-  modalInput: { backgroundColor: colors.depth.elevated, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.signal.white, fontSize: 15, marginBottom: 12 },
+  modalBox: { width: 300, backgroundColor: c.depth.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: c.border.subtle },
+  modalTitle: { color: c.signal.white, fontSize: 18, fontWeight: "600", marginBottom: 16 },
+  modalInput: { backgroundColor: c.depth.elevated, borderWidth: 1, borderColor: c.border.subtle, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: c.signal.white, fontSize: 15, marginBottom: 12 },
   convertHint: { color: "#F7931A", fontSize: 12, marginBottom: 12 },
   directionRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  dirBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
+  dirBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
   dirBtnActive: { borderColor: "#F7931A", backgroundColor: "rgba(247,147,26,0.1)" },
-  dirText: { color: colors.signal.steel, fontSize: 13 },
+  dirText: { color: c.signal.steel, fontSize: 13 },
   dirTextActive: { color: "#F7931A", fontWeight: "600" },
   modalBtns: { flexDirection: "row", gap: 12, marginTop: 4 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, alignItems: "center" },
-  cancelText: { color: colors.signal.steel, fontSize: 14 },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border.subtle, alignItems: "center" },
+  cancelText: { color: c.signal.steel, fontSize: 14 },
   confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#F7931A", alignItems: "center" },
-  confirmText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
+  confirmText: { color: c.signal.white, fontSize: 14, fontWeight: "600" },
 });
