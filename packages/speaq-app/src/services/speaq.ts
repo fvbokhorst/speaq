@@ -470,3 +470,29 @@ export function getKyberPublicKey(): string | null {
 export function isConnected(): boolean {
   return connected;
 }
+
+/**
+ * Apple Guideline 1.2 - send a server-side BLOCK so the relay drops
+ * future SENDs from `targetSpeaqId` to me. Best-effort: if WS is not
+ * open the local AsyncStorage block list still applies as a safety net.
+ */
+export function sendBlock(targetSpeaqId: string): void {
+  if (!ws || !connected) return;
+  try {
+    ws.send(JSON.stringify({ type: "BLOCK", targetSpeaqId }));
+  } catch (e) {
+    console.warn("[block] WS BLOCK send failed:", (e as Error).message);
+  }
+}
+
+/**
+ * Apple Guideline 1.2 - inverse of sendBlock.
+ */
+export function sendUnblock(targetSpeaqId: string): void {
+  if (!ws || !connected) return;
+  try {
+    ws.send(JSON.stringify({ type: "UNBLOCK", targetSpeaqId }));
+  } catch (e) {
+    console.warn("[block] WS UNBLOCK send failed:", (e as Error).message);
+  }
+}

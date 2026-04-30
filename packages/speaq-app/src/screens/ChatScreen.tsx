@@ -9,12 +9,13 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, Vibration,
+  Modal, ScrollView,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
-import { sendMessage, sendQCPayment, onMessage, getIdentity } from "../services/speaq";
+import { sendMessage, sendQCPayment, onMessage, getIdentity, sendBlock } from "../services/speaq";
 import {
   decryptMessage, getContactKey,
   getOrCreateRatchet, ratchetDecrypt,
@@ -28,6 +29,7 @@ import {
 } from "../services/messages";
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
+import { postAbuseReport, type AbuseReason } from "../services/abuse-report";
 import { getContactPhoto } from "../services/profile";
 import { playMessageReceived, playMessageSent } from "../services/sound";
 import { t } from "../services/i18n";
@@ -44,6 +46,12 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [disappearTimer, setDisappearTimerState] = useState<DisappearTimer>("off");
+
+  // Apple Guideline 1.2 - Report message dialog state
+  const [reportDialog, setReportDialog] = useState<{ messageId: string; messageText: string } | null>(null);
+  const [reportReason, setReportReason] = useState<AbuseReason>("harassment");
+  const [reportComment, setReportComment] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profilePhotoRef = useRef<string | null>(null);
@@ -311,19 +319,80 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         ));
         sendMessage(contactId, JSON.stringify({ type: "delete", messageId: item.id }));
       }});
+    } else {
+      // Apple Guideline 1.2 - incoming messages get Report + Block options
+      options.push({ text: t("safetyReportMessage"), onPress: () => {
+        setReportReason("harassment");
+        setReportComment("");
+        setReportDialog({ messageId: item.id, messageText: item.text });
+      }});
+      options.push({ text: t("safetyBlockUser"), style: "destructive", onPress: () => {
+        handleBlockUser(item.id, item.text);
+      }});
     }
     options.push({ text: t("cancel"), style: "cancel" });
     Alert.alert(t("message"), item.text.substring(0, 50), options);
   }
 
-  function handleBlockUser() {
+  // Block: store locally, tell relay (BLOCK), and auto-file an abuse
+  // report (Apple 24-hour SLA). messageId/messageText are passed from
+  // the long-press handler so moderators see what triggered the block.
+  async function handleBlockUser(triggerMsgId?: string, triggerMsgText?: string) {
+    if (triggerMsgId && triggerMsgText) {
+      // Direct block from a specific message - skip the confirm dialog
+      // because the user already chose Block from the action sheet.
+      await doBlock(triggerMsgId, triggerMsgText);
+      return;
+    }
     Alert.alert(t("blockUser"), t("blockUserMsg").replace("%s", contactName), [
       { text: t("cancel"), style: "cancel" },
-      { text: t("block"), style: "destructive", onPress: () => {
-        blockUser(contactId);
-        Alert.alert(t("blocked"), t("blockedMsg").replace("%s", contactName));
-      }},
+      { text: t("block"), style: "destructive", onPress: () => doBlock() },
     ]);
+  }
+
+  async function doBlock(triggerMsgId?: string, triggerMsgText?: string) {
+    await blockUser(contactId);
+    sendBlock(contactId);
+    const me = getIdentity();
+    if (me) {
+      await postAbuseReport({
+        reporterSpeaqId: me.speaqId,
+        reportedSpeaqId: contactId,
+        reason: "harassment",
+        source: "app-block",
+        messageContent: triggerMsgText,
+        messageId: triggerMsgId,
+        language: "en",
+      });
+    }
+    Alert.alert(t("blocked"), t("blockedMsg").replace("%s", contactName));
+  }
+
+  async function submitReportDialog() {
+    if (!reportDialog || reportSubmitting) return;
+    setReportSubmitting(true);
+    const me = getIdentity();
+    if (!me) {
+      setReportSubmitting(false);
+      return;
+    }
+    const ok = await postAbuseReport({
+      reporterSpeaqId: me.speaqId,
+      reportedSpeaqId: contactId,
+      reason: reportReason,
+      source: "app-report",
+      comment: reportComment.trim() || undefined,
+      messageContent: reportDialog.messageText,
+      messageId: reportDialog.messageId,
+      language: "en",
+    });
+    setReportSubmitting(false);
+    setReportDialog(null);
+    setReportComment("");
+    Alert.alert(
+      ok ? t("safetyReportSent") : t("safetyReportFailed"),
+      ok ? t("safetyReportThanks") : t("safetyReportTryAgain"),
+    );
   }
 
   function handleHeaderLongPress() {
@@ -506,6 +575,66 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           <Text style={st.sendIcon}>{">"}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Apple Guideline 1.2 - Report Message dialog */}
+      <Modal
+        visible={!!reportDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !reportSubmitting && setReportDialog(null)}
+      >
+        <View style={st.reportOverlay}>
+          <View style={st.reportCard}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={st.reportTitle}>{t("safetyReportTitle")}</Text>
+              <Text style={st.reportSubtitle}>{t("safetyReportSubtitle")}</Text>
+
+              <Text style={st.reportSectionLabel}>{t("safetyReportReason")}</Text>
+              {(["spam", "harassment", "threat", "csam", "illegal", "impersonation", "other"] as AbuseReason[]).map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[st.reportReasonRow, reportReason === r && st.reportReasonRowActive]}
+                  onPress={() => setReportReason(r)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[st.reportRadio, reportReason === r && st.reportRadioActive]} />
+                  <Text style={st.reportReasonText}>{t(`safetyReason_${r}`)}</Text>
+                </TouchableOpacity>
+              ))}
+
+              <Text style={st.reportSectionLabel}>{t("safetyReportComment")}</Text>
+              <TextInput
+                value={reportComment}
+                onChangeText={(v) => setReportComment(v.slice(0, 500))}
+                placeholder={t("safetyReportCommentPlaceholder")}
+                placeholderTextColor={colors.signal.steel}
+                multiline
+                numberOfLines={3}
+                style={st.reportComment}
+              />
+            </ScrollView>
+
+            <View style={st.reportActions}>
+              <TouchableOpacity
+                style={[st.reportBtn, st.reportBtnSecondary]}
+                onPress={() => !reportSubmitting && setReportDialog(null)}
+                disabled={reportSubmitting}
+              >
+                <Text style={st.reportBtnSecondaryText}>{t("cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.reportBtn, st.reportBtnPrimary, reportSubmitting && { opacity: 0.6 }]}
+                onPress={submitReportDialog}
+                disabled={reportSubmitting}
+              >
+                <Text style={st.reportBtnPrimaryText}>
+                  {reportSubmitting ? t("safetyReportSending") : t("safetyReportSubmit")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -594,4 +723,23 @@ const st = StyleSheet.create({
   fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: colors.border.subtle },
   fileIconText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
   fileName: { fontSize: 13, flex: 1 },
+
+  // Apple Guideline 1.2 - Report message dialog
+  reportOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", paddingHorizontal: 16 },
+  reportCard: { width: "100%", maxWidth: 420, maxHeight: "85%", backgroundColor: colors.depth.elevated, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border.subtle },
+  reportTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  reportSubtitle: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  reportSectionLabel: { color: colors.signal.white, fontSize: 12, fontWeight: "600", marginBottom: 8, marginTop: 4 },
+  reportReasonRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.depth.surface, marginBottom: 6, borderWidth: 1, borderColor: "transparent" },
+  reportReasonRowActive: { backgroundColor: "rgba(212, 168, 78, 0.15)", borderColor: colors.voice.gold },
+  reportRadio: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.signal.steel, marginRight: 10 },
+  reportRadioActive: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
+  reportReasonText: { color: colors.signal.white, fontSize: 13, flex: 1 },
+  reportComment: { color: colors.signal.white, fontSize: 13, backgroundColor: colors.depth.surface, borderRadius: 10, padding: 10, minHeight: 60, textAlignVertical: "top", marginBottom: 12 },
+  reportActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+  reportBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  reportBtnSecondary: { backgroundColor: colors.depth.surface },
+  reportBtnSecondaryText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
+  reportBtnPrimary: { backgroundColor: colors.voice.gold },
+  reportBtnPrimaryText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
 });
