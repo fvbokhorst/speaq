@@ -32,6 +32,7 @@ import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq"
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
 import { contactsService } from "./src/services/contacts";
+import { seedDemoConversationIfNeeded } from "./src/services/demo-seed";
 import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
 import { loadGroups } from "./src/services/groups";
@@ -159,6 +160,7 @@ function App() {
           setNormalPin(pin);
           await setKeystorePin(pin);
           AsyncStorage.setItem("speaq_pin", pin);
+          await seedDemoConversationIfNeeded();
           setPin("");
           setPhase("main");
         } else {
@@ -175,6 +177,7 @@ function App() {
         // Now that the keystore is unlocked, decrypt the stored Kyber + DSA
         // keys and connect the relay. Doing this before setKeystorePin throws.
         try { await loadIdentity(); } catch (e) { console.warn("[boot] loadIdentity failed:", e); }
+        await seedDemoConversationIfNeeded();
         setPin("");
         setPhase("main");
       } else {

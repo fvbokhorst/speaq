@@ -11,6 +11,7 @@ import { getIdentity, getKyberPublicKey } from "../services/speaq";
 import { pickProfilePhoto } from "../services/profile";
 import { getLanguage, setLanguage, LANGUAGES, Language, t } from "../services/i18n";
 import { exportIdentity, loadCredentials, verifyCredential, VerifiableCredential } from "../services/identity-manager";
+import { loadBlocked, getBlockedUsers, unblockUser } from "../services/blocked";
 
 const PRIVACY_POLICY_EN = `SPEAQ Privacy Policy
 Last updated: April 2026
@@ -142,6 +143,8 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
   const [showExport, setShowExport] = useState(false);
   const [exportData, setExportData] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [blockedList, setBlockedList] = useState<string[]>([]);
   const { mode: themeMode, setMode: setThemeMode, theme: th, colors: c } = useTheme();
   const st = useThemedStyles(makeStyles);
   const identity = getIdentity();
@@ -150,7 +153,19 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
     AsyncStorage.getItem("speaq_profile_photo").then((uri) => {
       if (uri) setPhotoUri(uri);
     });
+    loadBlocked().then(() => setBlockedList(getBlockedUsers()));
   }, []);
+
+  async function openBlockedManager() {
+    await loadBlocked();
+    setBlockedList(getBlockedUsers());
+    setShowBlocked(true);
+  }
+
+  async function handleUnblock(speaqId: string) {
+    await unblockUser(speaqId);
+    setBlockedList(getBlockedUsers());
+  }
 
   async function handleChangePhoto() {
     const uri = await pickProfilePhoto();
@@ -315,6 +330,15 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
           </TouchableOpacity>
         </View>
 
+        {/* Privacy */}
+        <Text style={dyn.sectionLabel}>Privacy</Text>
+        <View style={dyn.card}>
+          <TouchableOpacity style={dyn.row} onPress={openBlockedManager}>
+            <Text style={dyn.rowLabel}>Blocked users</Text>
+            <Text style={st.rowAction}>{blockedList.length}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Language */}
         <Text style={dyn.sectionLabel}>{t("language")}</Text>
         <View style={dyn.card}>
@@ -405,6 +429,32 @@ export default function SettingsScreen({ onLogout, onOpenAdvanced, onOpenVault, 
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Blocked Users Modal */}
+      <Modal visible={showBlocked} animationType="slide">
+        <View style={st.privacyContent}>
+          <View style={dyn.privacyHeader}>
+            <Text style={dyn.privacyTitle}>Blocked users</Text>
+            <TouchableOpacity onPress={() => setShowBlocked(false)}>
+              <Text style={st.privacyClose}>{t("close")}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={st.privacyScroll}>
+            {blockedList.length === 0 ? (
+              <Text style={[dyn.privacyText, { textAlign: "center", marginTop: 40 }]}>No blocked users.</Text>
+            ) : (
+              blockedList.map((id) => (
+                <View key={id} style={dyn.row}>
+                  <Text style={[st.rowValueMono, { flex: 1, marginRight: 12 }]} numberOfLines={1} ellipsizeMode="middle">{id}</Text>
+                  <TouchableOpacity onPress={() => handleUnblock(id)}>
+                    <Text style={st.rowAction}>Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Privacy Policy Modal */}
       <Modal visible={showPrivacy} animationType="slide">
