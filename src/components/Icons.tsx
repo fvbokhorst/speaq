@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
+import Svg, { Path, Circle, Rect } from "react-native-svg";
 import { colors } from "../theme/brand";
 
 interface IconProps {
@@ -82,6 +82,25 @@ export function WalletIcon(props: IconProps) {
         strokeLinejoin="round"
       />
       <Circle cx={16} cy={12} r={1} fill={c} />
+    </Svg>
+  );
+}
+
+export function MiningIcon(props: IconProps) {
+  const s = props.size || 22;
+  const c = getColor(props);
+  return (
+    <Svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        stroke={c}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M14 2v6h6" stroke={c} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 18L12 12" stroke={c} strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M9 15L15 15" stroke={c} strokeWidth={1.5} strokeLinecap="round" />
     </Svg>
   );
 }

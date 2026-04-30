@@ -6,10 +6,11 @@
 
 import "react-native-get-random-values"; // Must be first - crypto polyfill
 import React, { useState, useEffect } from "react";
-import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
+import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert, Linking } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import EulaScreen from "./src/screens/EulaScreen";
 import WelcomeScreen from "./src/screens/WelcomeScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
@@ -25,10 +26,9 @@ import MiningScreen from "./src/screens/MiningScreen";
 import InfoScreen from "./src/screens/InfoScreen";
 import LightningScreen from "./src/screens/LightningScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
-import { ChatIcon, ContactIcon, WalletIcon, SettingsIcon } from "./src/components/Icons";
-import Logo from "./src/components/Logo";
-import { consumeThemeReloadMarker } from "./src/theme/brand";
+import { ChatIcon, ContactIcon, WalletIcon, MiningIcon, SettingsIcon } from "./src/components/Icons";
 import { colors } from "./src/theme/brand";
+import { ThemeProvider } from "./src/theme/ThemeContext";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
@@ -44,7 +44,7 @@ import { setNormalPin } from "./src/services/vault";
 import { setKeystorePin } from "./src/services/crypto";
 
 function App() {
-  const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
+  const [phase, setPhase] = useState<"loading" | "onboarding" | "eula" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
   const [chatContactId, setChatContactId] = useState("");
   const [chatContactName, setChatContactName] = useState("");
@@ -53,10 +53,35 @@ function App() {
   const [callIsIncoming, setCallIsIncoming] = useState(false);
   const [callContactName, setCallContactName] = useState("");
   const [langKey, setLangKey] = useState(0); // force re-render on language change
+  const [pendingConnectId, setPendingConnectId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [savedPin, setSavedPin] = useState("");
   const [pinStep, setPinStep] = useState<"create" | "confirm">("create");
   const [tempPin, setTempPin] = useState("");
+
+  // Handle deep links: speaq://connect/[id]
+  useEffect(() => {
+    function handleUrl(event: { url: string }) {
+      const url = event.url;
+      if (url.includes("connect/")) {
+        const id = url.split("connect/").pop()?.split("?")[0] || "";
+        if (id.length >= 8) setPendingConnectId(id);
+      }
+    }
+    // Check if app was opened via deep link
+    Linking.getInitialURL().then((url) => { if (url) handleUrl({ url }); });
+    // Listen for deep links while app is running
+    const sub = Linking.addEventListener("url", handleUrl);
+    return () => sub.remove();
+  }, []);
+
+  // When main screen loads and there's a pending connect, switch to contacts tab
+  useEffect(() => {
+    if (phase === "main" && pendingConnectId) {
+      setActiveTab("contacts");
+      // ContactsScreen will receive the pendingConnectId via props
+    }
+  }, [phase, pendingConnectId]);
 
   // Check if user is registered on startup + load wallet
   useEffect(() => {
@@ -66,22 +91,30 @@ function App() {
     });
     contactsService.load();
     advancedService.load(); // awaited internally - checks Dead Man's Switch on startup
-    loadIdentity();
+    // Note: loadIdentity() is deferred until handlePinSubmit() because
+    // loadKyberKeyPair() inside requires the keystore PIN to be set first
+    // (FIPS 203 audit hardening 2026-04-25). Calling it before PIN entry
+    // throws "[Crypto] Keystore PIN not set" and surfaces a red error toast.
     loadBlocked();
     loadProfile();
     loadGroups();
     loadLanguage();
     loadLightning();
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
+      const eulaAccepted = await AsyncStorage.getItem("speaq_eula_v1_accepted_at");
       if (storedPin) {
         setSavedPin(storedPin);
-        // Skip the lock screen if the reload was caused by an in-app
-        // theme switch in the last 10 seconds. Preserves session continuity.
-        const skip = await consumeThemeReloadMarker();
-        setPhase(skip ? "main" : "pin-enter");
+        // Existing PIN but no EULA acceptance recorded (upgrade case): force the gate.
+        setPhase(eulaAccepted ? "pin-enter" : "eula");
       } else {
         const seen = await AsyncStorage.getItem("speaq_onboarding_done");
-        setPhase(seen ? "welcome" : "onboarding");
+        if (!seen) {
+          setPhase("onboarding");
+        } else if (!eulaAccepted) {
+          setPhase("eula");
+        } else {
+          setPhase("welcome");
+        }
       }
     });
   }, []);
@@ -140,6 +173,9 @@ function App() {
       if (pin === savedPin) {
         setNormalPin(pin);
         await setKeystorePin(pin);
+        // Now that the keystore is unlocked, decrypt the stored Kyber + DSA
+        // keys and connect the relay. Doing this before setKeystorePin throws.
+        try { await loadIdentity(); } catch (e) { console.warn("[boot] loadIdentity failed:", e); }
         setPin("");
         setPhase("main");
       } else {
@@ -155,8 +191,9 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <View style={st.lockContainer}>
-          <View style={st.lockLogoWrap}>
-            <Logo />
+          <View style={st.lockLogo}>
+            <Text style={st.lockSpea}>SPEA</Text>
+            <View style={st.lockQC}><Text style={st.lockQL}>Q</Text><View style={st.lockQB} /></View>
           </View>
         </View>
       </SafeAreaProvider>
@@ -170,7 +207,31 @@ function App() {
         <StatusBar barStyle="light-content" />
         <OnboardingScreen onDone={() => {
           AsyncStorage.setItem("speaq_onboarding_done", "1");
-          setPhase("welcome");
+          setPhase("eula");
+        }} />
+      </SafeAreaProvider>
+    );
+  }
+
+  // EULA acceptance (Apple Guideline 1.2 - User-Generated Content)
+  if (phase === "eula") {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="light-content" />
+        <EulaScreen onAccept={async () => {
+          await AsyncStorage.setItem("speaq_eula_v1_accepted_at", new Date().toISOString());
+          // Re-read the stored PIN at click-time. The useEffect that loaded
+          // savedPin runs at boot, but if the EULA was reached before that
+          // resolved (rare race), the local savedPin state may still be
+          // empty. Going to AsyncStorage here is the source-of-truth and
+          // mirrors what the boot routing would do on the next launch.
+          const storedPin = await AsyncStorage.getItem("speaq_pin");
+          if (storedPin) {
+            setSavedPin(storedPin);
+            setPhase("pin-enter");
+          } else {
+            setPhase("welcome");
+          }
         }} />
       </SafeAreaProvider>
     );
@@ -182,19 +243,9 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <WelcomeScreen onCreateIdentity={async (name: string) => {
-          try {
-            await createIdentity(name);
-            // Direct phase transition -- no interstitial Alert. The old
-            // flow relied on an Alert button to advance, which on iPad
-            // could render behind the Modal and leave the app looking
-            // stuck to Apple reviewers. The pin-setup screen already
-            // tells the user "Set Your PIN / Secure your quantum identity".
-            setPhase("pin-setup");
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error("[SPEAQ] createIdentity failed:", msg);
-            Alert.alert("Unable to create identity", msg);
-          }
+          const id = await createIdentity(name);
+          Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
+            [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
         }} />
       </SafeAreaProvider>
     );
@@ -213,8 +264,9 @@ function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" />
         <View style={st.lockContainer}>
-          <View style={st.lockLogoWrap}>
-            <Logo />
+          <View style={st.lockLogo}>
+            <Text style={st.lockSpea}>SPEA</Text>
+            <View style={st.lockQC}><Text style={st.lockQL}>Q</Text><View style={st.lockQB} /></View>
           </View>
           <Text style={st.lockTitle}>{title}</Text>
           <Text style={st.lockSub}>{sub}</Text>
@@ -223,17 +275,26 @@ function App() {
           </View>
           <View style={st.numpad}>
             {["1","2","3","4","5","6","7","8","9","*","0","del"].map(k => (
-              <TouchableOpacity key={k||"x"} style={[st.nk, !k && st.nkHide]} disabled={!k}
-                onPress={() => k === "del" ? handlePinDelete() : k === "*" ? null : k ? handlePinDigit(k) : null} activeOpacity={k === "*" ? 1 : 0.6}>
-                <Text style={[st.nkTxt, k === "*" && {}]}>{k === "del" ? "←" : k === "*" ? "✱" : k}</Text>
+              <TouchableOpacity key={k} style={st.nk}
+                onPress={() => k === "del" ? handlePinDelete() : handlePinDigit(k)} activeOpacity={0.6}>
+                <Text style={st.nkTxt}>{k === "del" ? "←" : k}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          {pin.length >= 4 && (
-            <TouchableOpacity style={st.unlockBtn} onPress={handlePinSubmit} activeOpacity={0.8}>
-              <Text style={st.unlockTxt}>{phase === "pin-setup" ? (pinStep === "create" ? "Next" : "Set PIN") : "Unlock"}</Text>
-            </TouchableOpacity>
-          )}
+          {/* Always render the submit button so the layout does not shift when
+              the user taps the 4th digit. Visibility + tappability are toggled
+              via opacity + disabled. PWA parity (web fix uses opacity:0 +
+              pointer-events:none until pin >= 4). */}
+          <TouchableOpacity
+            style={[st.unlockBtn, pin.length < 4 && { opacity: 0 }]}
+            onPress={handlePinSubmit}
+            activeOpacity={0.8}
+            disabled={pin.length < 4}
+            accessibilityElementsHidden={pin.length < 4}
+            importantForAccessibility={pin.length < 4 ? "no-hide-descendants" : "yes"}
+          >
+            <Text style={st.unlockTxt}>{phase === "pin-setup" ? (pinStep === "create" ? "Next" : "Set PIN") : "Unlock"}</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaProvider>
     );
@@ -256,7 +317,7 @@ function App() {
           setChatContactName(name);
           setActiveTab("chat");
         }} />}
-        {activeTab === "contacts" && <ContactsScreen onOpenGroups={() => setActiveTab("groups")} onOpenChat={(id: string, name: string) => {
+        {activeTab === "contacts" && <ContactsScreen pendingConnectId={pendingConnectId} onClearPendingConnect={() => setPendingConnectId(null)} onOpenGroups={() => setActiveTab("groups")} onOpenChat={(id: string, name: string) => {
           setChatContactId(id);
           setChatContactName(name);
           setActiveTab("chat");
@@ -273,7 +334,7 @@ function App() {
         }} onOpenAdvanced={() => setActiveTab("advanced")} onOpenVault={() => setActiveTab("vault-screen")} onOpenMining={() => setActiveTab("mining")} onOpenInfo={() => setActiveTab("info")} onOpenBrowser={() => setActiveTab("browser")} onLanguageChange={() => setLangKey((k) => k + 1)} />}
         {activeTab === "advanced" && <AdvancedScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "vault-screen" && <VaultScreen onBack={() => setActiveTab("settings")} />}
-        {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("settings")} />}
+        {activeTab === "mining" && <MiningScreen onBack={() => setActiveTab("chats")} />}
         {activeTab === "info" && <InfoScreen onBack={() => setActiveTab("settings")} />}
         {activeTab === "lightning" && <LightningScreen onBack={() => setActiveTab("wallet")} />}
         {activeTab === "browser" && <BrowserScreen onBack={() => setActiveTab("settings")} />}
@@ -281,7 +342,7 @@ function App() {
           <Tab icon={<ChatIcon active={activeTab === "chats"} />} label={t("chats")} active={activeTab === "chats"} onPress={() => setActiveTab("chats")} />
           <Tab icon={<ContactIcon active={activeTab === "contacts"} />} label={t("contacts")} active={activeTab === "contacts"} onPress={() => setActiveTab("contacts")} />
           <Tab icon={<WalletIcon active={activeTab === "wallet"} />} label={t("wallet")} active={activeTab === "wallet"} onPress={() => setActiveTab("wallet")} />
-          <Tab icon={<WalletIcon active={activeTab === "mining"} />} label="Earn" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
+          <Tab icon={<MiningIcon active={activeTab === "mining"} />} label="Earn" active={activeTab === "mining"} onPress={() => setActiveTab("mining")} />
           <Tab icon={<SettingsIcon active={activeTab === "settings"} />} label={t("settings")} active={activeTab === "settings"} onPress={() => setActiveTab("settings")} />
         </View>
       </View>
@@ -305,7 +366,11 @@ function PH({ title }: { title: string }) {
 
 const st = StyleSheet.create({
   lockContainer: { flex: 1, backgroundColor: colors.depth.void, alignItems: "center", justifyContent: "center" },
-  lockLogoWrap: { marginBottom: 32 },
+  lockLogo: { flexDirection: "row", alignItems: "center", marginBottom: 32 },
+  lockSpea: { fontSize: 28, fontWeight: "700", fontFamily: "Georgia", color: colors.signal.white },
+  lockQC: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.voice.gold, alignItems: "center", justifyContent: "center", marginLeft: 2 },
+  lockQL: { fontSize: 22, fontWeight: "700", fontFamily: "Georgia", color: colors.voice.gold, marginTop: -1 },
+  lockQB: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.quantum.teal, position: "absolute", bottom: 5, right: 7 },
   lockTitle: { color: colors.signal.white, fontSize: 20, fontWeight: "600", marginBottom: 6 },
   lockSub: { color: colors.signal.steel, fontSize: 12, marginBottom: 32 },
   dots: { flexDirection: "row", gap: 12, marginBottom: 40 },
@@ -328,4 +393,12 @@ const st = StyleSheet.create({
   phS: { color: colors.signal.steel, fontSize: 12, marginTop: 8 },
 });
 
-export default App;
+function AppWithTheme() {
+  return (
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  );
+}
+
+export default AppWithTheme;

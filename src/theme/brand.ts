@@ -21,7 +21,7 @@ const THEME_KEY = "speaq_theme";
 const RELOAD_MARKER_KEY = "speaq_theme_reload_ts";
 const RELOAD_GRACE_MS = 10_000;
 
-const darkColors = {
+export const darkColors = {
   voice:    { light: "#F5DFA6", warm: "#E8C47A", gold: "#D4A853", deep: "#A17D3A" },
   quantum:  { bright: "#5EEAD4", teal: "#2DD4BF", core: "#14B8A6", dark: "#0F766E" },
   depth:    { void: "#08090D", surface: "#0E1017", card: "#141620", elevated: "#1A1D2B" },
@@ -29,7 +29,7 @@ const darkColors = {
   border:   { subtle: "rgba(100, 116, 139, 0.15)", hover: "rgba(100, 116, 139, 0.3)" },
 };
 
-const lightColors = {
+export const lightColors = {
   voice:    { light: "#F5DFA6", warm: "#C89441", gold: "#B88A2C", deep: "#8A6420" },
   quantum:  { bright: "#14B8A6", teal: "#0D9488", core: "#0F766E", dark: "#115E59" },
   depth:    { void: "#FFFFFF", surface: "#F8FAFC", card: "#F1F5F9", elevated: "#E2E8F0" },
@@ -138,4 +138,36 @@ export const theme = {
   accentSecondary: colors.quantum.teal,
   border: colors.border.subtle,
   error: colors.signal.red,
+};
+
+// Apple Guideline 1.2 sync (30-04): ThemeContext.tsx imports darkTheme and
+// lightTheme separately. The legacy `theme` export above is the dark variant
+// that mutates with applyTheme(); these two new exports are pure-static
+// snapshots used by ThemeContext.tsx for the dark/light mode toggle.
+export const darkTheme = {
+  background: darkColors.depth.void,
+  surface: darkColors.depth.surface,
+  card: darkColors.depth.card,
+  elevated: darkColors.depth.elevated,
+  textPrimary: darkColors.signal.white,
+  textSecondary: darkColors.signal.light,
+  textMuted: darkColors.signal.steel,
+  accent: darkColors.voice.gold,
+  accentSecondary: darkColors.quantum.teal,
+  border: darkColors.border.subtle,
+  error: darkColors.signal.red,
+};
+
+export const lightTheme = {
+  background: lightColors.depth.void,
+  surface: lightColors.depth.surface,
+  card: lightColors.depth.card,
+  elevated: lightColors.depth.elevated,
+  textPrimary: lightColors.signal.white,
+  textSecondary: lightColors.signal.light,
+  textMuted: lightColors.signal.steel,
+  accent: lightColors.voice.gold,
+  accentSecondary: lightColors.quantum.teal,
+  border: lightColors.border.subtle,
+  error: lightColors.signal.red,
 };

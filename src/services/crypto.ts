@@ -1,5 +1,5 @@
 /**
- * SPEAQ Crypto Service (React Native)
+ * SPEAQ Quantum Crypto Service (React Native)
  *
  * Real post-quantum encryption:
  * 1. Lattice-based Key Encapsulation (NTRU-like, quantum-resistant)
@@ -13,6 +13,79 @@
 import "react-native-get-random-values";
 import CryptoJS from "crypto-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// E11 audit fix (2026-04-25): native crypto stack upgrade.
+// Before: CryptoJS.AES.encrypt(plain, keyString) used OpenSSL-style EVP_BytesToKey + AES-CBC
+// without authentication. That is NOT AEAD, vulnerable to padding-oracle, and used the weak
+// OpenSSL key-derivation (MD5 iterations). We now standardize on AES-256-GCM (NIST AEAD)
+// via @noble/ciphers (pure-JS, no native build needed).
+//
+// Migration: outgoing messages always use AES-GCM. Incoming messages auto-detect: if the
+// ciphertext starts with "U2FsdGVkX1" (base64 of "Salted__") it is legacy CryptoJS CBC -
+// decrypt via CryptoJS for backwards-compat. Otherwise treat as AES-GCM. This lets old
+// peers continue to be readable while new messages are AEAD-protected.
+import { gcm } from "@noble/ciphers/aes";
+import { sha256 as nobleSha256 } from "@noble/hashes/sha2";
+
+function _strToBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
+function _bytesToStr(b: Uint8Array): string { return new TextDecoder().decode(b); }
+function _bytesToB64(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return globalThis.btoa(s);
+}
+function _b64ToBytes(s: string): Uint8Array {
+  const bin = globalThis.atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _deriveAesKey(keyString: string): Uint8Array {
+  // 256-bit key derived deterministically from the messageKey/keystore string.
+  // SHA-256 is appropriate here because the input is already high-entropy
+  // (ratchet message keys are 256 bits of HMAC output).
+  return nobleSha256(_strToBytes(keyString));
+}
+
+function aesGcmEncrypt(plaintext: string, keyString: string): string {
+  const key = _deriveAesKey(keyString);
+  const iv = new Uint8Array(12);
+  // Use crypto.getRandomValues (polyfilled by react-native-get-random-values).
+  globalThis.crypto.getRandomValues(iv);
+  const cipher = gcm(key, iv);
+  const ct = cipher.encrypt(_strToBytes(plaintext));
+  // Wire format: base64 JSON { v: 2, iv, ct }. v:2 distinguishes from CryptoJS legacy.
+  return _bytesToB64(_strToBytes(JSON.stringify({ v: 2, iv: _bytesToB64(iv), ct: _bytesToB64(ct) })));
+}
+
+function aesGcmDecrypt(envelope: string, keyString: string): string {
+  // Envelope is either:
+  //   - new format: base64 of JSON {v:2, iv, ct}  (AES-256-GCM)
+  //   - legacy:    CryptoJS OpenSSL "U2FsdGVkX1..." string (AES-CBC).
+  // Try new first.
+  if (envelope.startsWith("U2FsdGVkX1")) {
+    // Legacy CryptoJS path - keep readable so old peers still work.
+    const bytes = CryptoJS.AES.decrypt(envelope, keyString);
+    const plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    if (!plaintext) throw new Error("Legacy decrypt failed");
+    return plaintext;
+  }
+  try {
+    const wrapped = JSON.parse(_bytesToStr(_b64ToBytes(envelope))) as { v?: number; iv: string; ct: string };
+    if (wrapped.v === 2 && wrapped.iv && wrapped.ct) {
+      const key = _deriveAesKey(keyString);
+      const cipher = gcm(key, _b64ToBytes(wrapped.iv));
+      const pt = cipher.decrypt(_b64ToBytes(wrapped.ct));
+      return _bytesToStr(pt);
+    }
+    throw new Error("Unknown envelope version");
+  } catch {
+    // Fall back to legacy CryptoJS in case envelope was an unprefixed legacy string.
+    const bytes = CryptoJS.AES.decrypt(envelope, keyString);
+    const plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    if (!plaintext) throw new Error("AES decrypt failed (both AEAD and legacy paths)");
+    return plaintext;
+  }
+}
 
 // ============================================================
 // SECTION 1: Utility Functions
@@ -251,135 +324,85 @@ export interface KyberEncapsulation {
 }
 
 /**
- * Generate a Kyber/lattice keypair
+ * D1 audit fix (2026-04-25): replaced custom ring-LWE scheme with NIST FIPS 203
+ * ML-KEM-768 from @noble/post-quantum, the same library and algorithm now used
+ * by the PWA. Native and PWA users share an identical, peer-reviewed key
+ * exchange path.
  *
- * Ring-LWE key generation:
- * - Choose random polynomial a (from seed for compactness)
- * - Choose secret s, error e from CBD
- * - Public key: (seed, b = a*s + e)
- * - Private key: s
+ * Public key:  1184 bytes (ML-KEM-768 encapsulation key)
+ * Private key: 2400 bytes (ML-KEM-768 decapsulation key)
+ * Ciphertext:  1088 bytes
+ * Shared secret: 32 bytes (returned as 64-char hex for ratchet compat)
+ *
+ * MIGRATION: existing AsyncStorage entries from the old homemade scheme are
+ * NOT compatible (different key format). identity-manager / loadKyberKeyPair
+ * detects malformed/old keys via isLegacyKyberKey() and triggers regeneration.
+ * Existing per-contact ratchet states stay valid because they store the
+ * sharedSecret directly, not the Kyber keypair.
  */
+import { ml_kem768 as _ml_kem768 } from "@noble/post-quantum/ml-kem.js";
+
+function _b64ToBytesNative(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _bytesToB64Native(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i += 8192) {
+    s += String.fromCharCode.apply(null, Array.from(b.subarray(i, i + 8192)));
+  }
+  return btoa(s);
+}
+
 export function generateKyberKeyPair(): KyberKeyPair {
-  const seed = randomHex(32);
-  const a = polyFromSeed(seed);
-  const s = sampleCBD(3);
-  const e = sampleCBD(3);
-
-  // b = a*s + e mod q
-  const b = polyAdd(polyMul(a, s), e);
-
-  // Public key: seed (for regenerating a) + b
-  const pubData = seed + ":" + polyToBase64(b);
-  const privData = polyToBase64(s);
-
+  const seed = new Uint8Array(64);
+  // Polyfilled by react-native-get-random-values at the top of this file.
+  globalThis.crypto.getRandomValues(seed);
+  const kp = _ml_kem768.keygen(seed);
   return {
-    publicKey: btoa(pubData),
-    privateKey: btoa(privData),
+    publicKey: _bytesToB64Native(kp.publicKey),
+    privateKey: _bytesToB64Native(kp.secretKey),
   };
 }
 
-/**
- * Encapsulate: create a shared secret using recipient's public key
- *
- * Ring-LWE encapsulation:
- * - Parse public key to get (a, b)
- * - Choose random r, e1, e2 from CBD
- * - u = a*r + e1
- * - v = b*r + e2 + encode(message)
- * - Shared secret = SHA-256(message)
- */
 export function kyberEncapsulate(publicKeyB64: string): KyberEncapsulation {
-  // Parse public key
-  const pubData = atob(publicKeyB64);
-  const sepIdx = pubData.indexOf(":");
-  const seed = pubData.substring(0, sepIdx);
-  const b = polyFromBase64(pubData.substring(sepIdx + 1));
-  const a = polyFromSeed(seed);
-
-  // Sample randomness
-  const r = sampleCBD(3);
-  const e1 = sampleCBD(3);
-  const e2 = sampleCBD(3);
-
-  // Generate random message (32 bytes as polynomial coefficients 0 or q/2)
-  const msgBytes = randomBytes(32);
-  const msgPoly = new Int16Array(LATTICE_N);
-  for (let i = 0; i < 256; i++) {
-    const bit = (msgBytes[i >> 3] >> (i & 7)) & 1;
-    msgPoly[i] = bit ? Math.round(LATTICE_Q / 2) : 0;
+  const pub = _b64ToBytesNative(publicKeyB64);
+  if (pub.length !== 1184) {
+    throw new Error(`kyberEncapsulate: expected 1184-byte ML-KEM-768 public key, got ${pub.length} (legacy peer needs to regenerate)`);
   }
+  const enc = _ml_kem768.encapsulate(pub);
+  return {
+    ciphertext: _bytesToB64Native(enc.cipherText),
+    sharedSecret: toHex(enc.sharedSecret),
+  };
+}
 
-  // u = a*r + e1
-  const u = polyAdd(polyMul(a, r), e1);
-
-  // v = b*r + e2 + msgPoly
-  const v = polyAdd(polyAdd(polyMul(b, r), e2), msgPoly);
-
-  // Compress u and v for ciphertext
-  const uCompressed = compressToBytes(u, 10);
-  const vCompressed = compressToBytes(v, 4);
-
-  // Combine into ciphertext
-  const ctBytes = new Uint8Array(uCompressed.length + vCompressed.length);
-  ctBytes.set(uCompressed);
-  ctBytes.set(vCompressed, uCompressed.length);
-
-  const ctWordArray = CryptoJS.lib.WordArray.create(ctBytes as any);
-  const ciphertext = CryptoJS.enc.Base64.stringify(ctWordArray);
-
-  // Shared secret = SHA-256 of the random message
-  const sharedSecret = sha256(toHex(msgBytes));
-
-  return { ciphertext, sharedSecret };
+export function kyberDecapsulate(ciphertextB64: string, privateKeyB64: string): string {
+  const sk = _b64ToBytesNative(privateKeyB64);
+  const ct = _b64ToBytesNative(ciphertextB64);
+  if (sk.length !== 2400) {
+    throw new Error(`kyberDecapsulate: expected 2400-byte ML-KEM-768 private key, got ${sk.length} (regenerate locally)`);
+  }
+  if (ct.length !== 1088) {
+    throw new Error(`kyberDecapsulate: expected 1088-byte ML-KEM-768 ciphertext, got ${ct.length} (sender used incompatible scheme)`);
+  }
+  const ss = _ml_kem768.decapsulate(ct, sk);
+  return toHex(ss);
 }
 
 /**
- * Decapsulate: recover shared secret using own private key
- *
- * Ring-LWE decapsulation:
- * - Compute v - s*u to recover noisy message
- * - Round to decode message bits
- * - Shared secret = SHA-256(message)
+ * Detects legacy (homemade ring-LWE) Kyber keys so identity-manager can trigger
+ * regeneration. New format is exactly 1184 bytes raw; anything else is legacy.
  */
-export function kyberDecapsulate(ciphertextB64: string, privateKeyB64: string): string {
-  const s = polyFromBase64(atob(privateKeyB64));
-
-  // Parse ciphertext
-  const ctWordArray = CryptoJS.enc.Base64.parse(ciphertextB64);
-  const ctBytes = new Uint8Array(ctWordArray.words.length * 4);
-  for (let i = 0; i < ctWordArray.words.length; i++) {
-    ctBytes[i * 4] = (ctWordArray.words[i] >> 24) & 0xff;
-    ctBytes[i * 4 + 1] = (ctWordArray.words[i] >> 16) & 0xff;
-    ctBytes[i * 4 + 2] = (ctWordArray.words[i] >> 8) & 0xff;
-    ctBytes[i * 4 + 3] = ctWordArray.words[i] & 0xff;
+export function isLegacyKyberKey(publicKeyB64: string): boolean {
+  try {
+    const bytes = _b64ToBytesNative(publicKeyB64);
+    return bytes.length !== 1184;
+  } catch {
+    return true;
   }
-
-  const uSize = LATTICE_N * 10 / 8; // 320 bytes
-  const uCompressed = ctBytes.slice(0, uSize);
-  const vCompressed = ctBytes.slice(uSize, uSize + LATTICE_N * 4 / 8);
-
-  const u = decompressFromBytes(uCompressed, 10);
-  const v = decompressFromBytes(vCompressed, 4);
-
-  // Recover noisy message: v - s*u
-  const su = polyMul(s, u);
-  const noisy = polySub(v, su);
-
-  // Decode message bits by rounding
-  const msgBytes = new Uint8Array(32);
-  for (let i = 0; i < 256; i++) {
-    const coeff = noisy[i];
-    // Closer to q/2 than to 0 means bit=1
-    const dist0 = Math.min(coeff, LATTICE_Q - coeff);
-    const halfQ = Math.round(LATTICE_Q / 2);
-    const distHalf = Math.abs(coeff - halfQ);
-    if (dist0 > distHalf) {
-      msgBytes[i >> 3] |= 1 << (i & 7);
-    }
-  }
-
-  // Shared secret = SHA-256 of decoded message
-  return sha256(toHex(msgBytes));
 }
 
 // ============================================================
@@ -457,8 +480,9 @@ function advanceChain(chainKey: string): { nextChainKey: string; messageKey: str
 export async function ratchetEncrypt(state: RatchetState, plaintext: string, contactId?: string): Promise<RatchetMessage> {
   const { nextChainKey, messageKey } = advanceChain(state.chainKeySend);
 
-  // Encrypt with AES-256 using the one-time message key
-  const ciphertext = CryptoJS.AES.encrypt(plaintext, messageKey).toString();
+  // Encrypt with AES-256-GCM (NIST AEAD) using the one-time message key.
+  // E11 audit fix: was CryptoJS AES-CBC (no auth, weak KDF). Now @noble/ciphers AES-GCM.
+  const ciphertext = aesGcmEncrypt(plaintext, messageKey);
 
   const msg: RatchetMessage = {
     messageNumber: state.sendCount,
@@ -500,10 +524,14 @@ export async function ratchetDecrypt(state: RatchetState, message: RatchetMessag
   // Get the message key for this specific message
   const { nextChainKey, messageKey } = advanceChain(chainKey);
 
-  // Decrypt
-  const bytes = CryptoJS.AES.decrypt(message.ciphertext, messageKey);
-  const plaintext = bytes.toString(CryptoJS.enc.Utf8);
-
+  // Decrypt - try AES-GCM first, fall back to legacy CryptoJS CBC for old peers.
+  // E11 audit fix.
+  let plaintext: string;
+  try {
+    plaintext = aesGcmDecrypt(message.ciphertext, messageKey);
+  } catch {
+    plaintext = "";
+  }
   if (!plaintext) {
     throw new Error("Ratchet decryption failed -- key mismatch or corrupted message");
   }
@@ -555,21 +583,25 @@ export async function setKeystorePin(pin: string): Promise<void> {
   }).toString(CryptoJS.enc.Hex);
 }
 
-/** Encrypt data for storage using the PIN-derived key */
+/** Encrypt data for storage using the PIN-derived key (AES-256-GCM, E11 audit fix) */
 function keystoreEncrypt(data: string): string {
   if (!keystoreDerivedKey) {
     throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
   }
-  return CryptoJS.AES.encrypt(data, keystoreDerivedKey).toString();
+  return aesGcmEncrypt(data, keystoreDerivedKey);
 }
 
-/** Decrypt data from storage using the PIN-derived key */
+/** Decrypt data from storage using the PIN-derived key (auto-detects v2 AEAD vs legacy CryptoJS) */
 function keystoreDecrypt(data: string): string {
   if (!keystoreDerivedKey) {
     throw new Error("[Crypto] Keystore PIN not set -- call setKeystorePin() first");
   }
-  const bytes = CryptoJS.AES.decrypt(data, keystoreDerivedKey);
-  const result = bytes.toString(CryptoJS.enc.Utf8);
+  let result: string;
+  try {
+    result = aesGcmDecrypt(data, keystoreDerivedKey);
+  } catch {
+    result = "";
+  }
   if (!result) {
     throw new Error("[Crypto] Keystore decryption failed -- wrong PIN or corrupted data");
   }
@@ -731,18 +763,177 @@ export function getContactKey(myId: string, contactId: string): string {
 }
 
 /**
- * Encrypt message -- legacy API for backwards compatibility
- * Used only when ratchet is not yet initialized
+ * Encrypt message -- AES-256-GCM (E11 audit fix). Used when ratchet is not yet initialized.
+ * Wire format auto-detects on decrypt so the receiver tolerates legacy CryptoJS CBC.
  */
 export function encryptMessage(key: string, plaintext: string): string {
-  return CryptoJS.AES.encrypt(plaintext, key).toString();
+  return aesGcmEncrypt(plaintext, key);
 }
 
 /**
- * Decrypt message -- legacy API for backwards compatibility
- * Used only when ratchet is not yet initialized
+ * Decrypt message -- tries AES-GCM first, falls back to legacy CryptoJS CBC for old peers.
  */
 export function decryptMessage(key: string, ciphertext: string): string {
-  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  return bytes.toString(CryptoJS.enc.Utf8);
+  try {
+    return aesGcmDecrypt(ciphertext, key);
+  } catch {
+    return "";
+  }
+}
+
+// =================================================================================
+// SECTION 8: Digital signatures for KEY_EXCHANGE auth (E1-N audit fix, 2026-04-26)
+// =================================================================================
+// Mirrors PWA src/app/app/crypto.ts SECTION 7. Native uses ML-DSA-65 (FIPS 204)
+// instead of ECDSA P-256 because @noble/curves is not a dependency here and ML-DSA
+// is post-quantum-superior. The native KEY_EXCHANGE protocol differs from the PWA
+// (it sends kyberPublicKey/kyberCiphertext as top-level fields, not as msg.blob),
+// so signing operates on the same data the receiver verifies, which keeps the two
+// platforms decoupled at the KEY_EXCHANGE layer. Cross-platform call signaling
+// (C2-N below) is wire-compatible with the PWA's blob format.
+
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
+
+export interface SigningKeyPair {
+  publicKey: string;   // base64 of 1952 bytes (ML-DSA-65 pub)
+  privateKey: string;  // base64 of 4032 bytes (ML-DSA-65 secret)
+}
+
+const SIGNING_KEYS_KEY = "speaq_signing_keys";
+const CONTACT_SIGN_PUB_PREFIX = "speaq_sign_pub_";
+
+export function generateSigningKeyPair(): SigningKeyPair {
+  const seed = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(seed);
+  const kp = ml_dsa65.keygen(seed);
+  return {
+    publicKey: _bytesToB64(kp.publicKey),
+    privateKey: _bytesToB64(kp.secretKey),
+  };
+}
+
+export function signData(data: string, privateKeyB64: string): string {
+  const sk = _b64ToBytes(privateKeyB64);
+  if (sk.length !== 4032) throw new Error(`ML-DSA-65 secretKey must be 4032 bytes, got ${sk.length}`);
+  const sig = ml_dsa65.sign(sk, _strToBytes(data));
+  return _bytesToB64(sig);
+}
+
+export function verifySignature(data: string, signatureB64: string, publicKeyB64: string): boolean {
+  try {
+    const pk = _b64ToBytes(publicKeyB64);
+    if (pk.length !== 1952) return false;
+    const sig = _b64ToBytes(signatureB64);
+    if (sig.length !== 3309) return false;
+    return ml_dsa65.verify(pk, _strToBytes(data), sig);
+  } catch {
+    return false;
+  }
+}
+
+export async function saveSigningKeys(keys: SigningKeyPair): Promise<void> {
+  await AsyncStorage.setItem(SIGNING_KEYS_KEY, JSON.stringify(keys));
+}
+
+export async function loadSigningKeys(): Promise<SigningKeyPair | null> {
+  try {
+    const s = await AsyncStorage.getItem(SIGNING_KEYS_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getOrCreateSigningKeys(): Promise<SigningKeyPair> {
+  const existing = await loadSigningKeys();
+  if (existing && existing.publicKey && existing.privateKey) return existing;
+  const fresh = generateSigningKeyPair();
+  await saveSigningKeys(fresh);
+  return fresh;
+}
+
+export async function saveContactSigningKey(contactId: string, pubKey: string): Promise<void> {
+  await AsyncStorage.setItem(`${CONTACT_SIGN_PUB_PREFIX}${contactId}`, pubKey);
+}
+
+export async function loadContactSigningKey(contactId: string): Promise<string | null> {
+  return AsyncStorage.getItem(`${CONTACT_SIGN_PUB_PREFIX}${contactId}`);
+}
+
+// =================================================================================
+// SECTION 9: Call signaling encryption (C2-N + C2.2-N audit fix, 2026-04-26)
+// =================================================================================
+// Mirrors PWA deriveCallKeyForSend / decryptCallBlob. Encrypts WebRTC SDP/ICE
+// with AES-256-GCM keyed off the ratchet rootKey -- the relay knows both SPEAQ
+// IDs (it routes by them) so an ID-derived key is computable by the relay; the
+// ratchet rootKey comes from the Kyber-768 shared secret which the relay does
+// NOT know, making call signaling truly zero-knowledge against the relay.
+//
+// Wire format matches PWA: base64(iv12 ++ ciphertext). Distinct from this file's
+// existing aesGcmEncrypt envelope ({v:2, iv, ct} JSON) because that envelope is
+// PWA-incompatible. Cross-platform call signaling MUST use this raw wire format.
+//
+// Backwards-compat: if ratchet does not exist for the peer, fall back to ID-key
+// (sortedIds path). Receiver tries ratchet-key first, ID-key second, so a
+// pre-C2.2 sender (legacy native, legacy PWA) still works.
+
+function ratchetDerivedCallKeyBytes(rootKey: string): Uint8Array {
+  return _deriveAesKey(rootKey + ":speaq-call-v1");
+}
+
+function idDerivedCallKeyBytes(myId: string, peerId: string): Uint8Array {
+  return _deriveAesKey([myId, peerId].sort().join(":"));
+}
+
+function callBlobEncryptRaw(plaintext: string, key: Uint8Array): string {
+  const iv = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(iv);
+  const ct = gcm(key, iv).encrypt(_strToBytes(plaintext));
+  const combined = new Uint8Array(iv.length + ct.length);
+  combined.set(iv);
+  combined.set(ct, iv.length);
+  return _bytesToB64(combined);
+}
+
+function callBlobDecryptRaw(blobB64: string, key: Uint8Array): string {
+  const raw = _b64ToBytes(blobB64);
+  if (raw.length < 13) throw new Error("call blob too short");
+  const iv = raw.slice(0, 12);
+  const ct = raw.slice(12);
+  return _bytesToStr(gcm(key, iv).decrypt(ct));
+}
+
+export async function deriveCallKeyForSend(myId: string, peerId: string): Promise<{ key: Uint8Array; mode: "ratchet" | "id" }> {
+  const ratchet = await loadRatchetState(peerId);
+  if (ratchet?.rootKey) {
+    return { key: ratchetDerivedCallKeyBytes(ratchet.rootKey), mode: "ratchet" };
+  }
+  return { key: idDerivedCallKeyBytes(myId, peerId), mode: "id" };
+}
+
+export async function encryptCallBlob(myId: string, peerId: string, plaintext: string): Promise<string> {
+  const { key } = await deriveCallKeyForSend(myId, peerId);
+  return callBlobEncryptRaw(plaintext, key);
+}
+
+export async function decryptCallBlob(myId: string, peerId: string, blobB64: string): Promise<string> {
+  const ratchet = await loadRatchetState(peerId);
+  if (ratchet?.rootKey) {
+    try {
+      return callBlobDecryptRaw(blobB64, ratchetDerivedCallKeyBytes(ratchet.rootKey));
+    } catch { /* fallthrough to ID-key for legacy peers */ }
+  }
+  return callBlobDecryptRaw(blobB64, idDerivedCallKeyBytes(myId, peerId));
+}
+
+// Safety number: SHA-256(sortedIds + ":" + rootKey) shown to user as 8 groups of
+// 4 hex chars (Signal-style). Returns null when ratchet is not yet established.
+export async function computeSafetyNumber(myId: string, peerId: string): Promise<string | null> {
+  const ratchet = await loadRatchetState(peerId);
+  if (!ratchet?.rootKey) return null;
+  const sorted = [myId, peerId].sort().join(":");
+  const digest = nobleSha256(_strToBytes(sorted + ":" + ratchet.rootKey));
+  let hex = "";
+  for (let i = 0; i < 16; i++) hex += digest[i].toString(16).padStart(2, "0");
+  return hex.match(/.{4}/g)!.join(" ").toUpperCase();
 }

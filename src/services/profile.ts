@@ -19,18 +19,7 @@ export async function loadProfile(): Promise<void> {
       AsyncStorage.getItem(PHOTO_KEY),
       AsyncStorage.getItem(CONTACT_PHOTOS_KEY),
     ]);
-    if (photo) {
-      // Verify file still exists
-      const path = photo.replace("file://", "");
-      const exists = await RNFS.exists(path);
-      if (exists) {
-        profilePhotoUri = photo;
-      } else {
-        // File gone, clear stale reference
-        profilePhotoUri = null;
-        await AsyncStorage.removeItem(PHOTO_KEY);
-      }
-    }
+    if (photo) profilePhotoUri = photo;
     if (photos) contactPhotos = JSON.parse(photos);
   } catch (e) {}
 }

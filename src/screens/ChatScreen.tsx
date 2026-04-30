@@ -9,15 +9,18 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, Vibration,
+  Modal, ScrollView,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
 import { colors } from "../theme/brand";
-import { sendMessage, onMessage, getIdentity } from "../services/speaq";
+import { sendMessage, sendQCPayment, onMessage, getIdentity, sendBlock } from "../services/speaq";
 import {
   decryptMessage, getContactKey,
   getOrCreateRatchet, ratchetDecrypt,
   loadRatchetState, RatchetState,
+  computeSafetyNumber,
 } from "../services/crypto";
 import {
   loadMessages, saveMessages, cleanExpiredMessages, StoredMessage,
@@ -26,9 +29,11 @@ import {
 } from "../services/messages";
 import { walletService } from "../services/wallet";
 import { isBlocked, blockUser } from "../services/blocked";
+import { postAbuseReport, type AbuseReason } from "../services/abuse-report";
+import { containsObjectionableContent, type SafetyLang } from "../services/keyword-filter";
 import { getContactPhoto } from "../services/profile";
 import { playMessageReceived, playMessageSent } from "../services/sound";
-import { t } from "../services/i18n";
+import { t, getLanguage } from "../services/i18n";
 
 interface Props {
   contactId: string;
@@ -42,8 +47,24 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [disappearTimer, setDisappearTimerState] = useState<DisappearTimer>("off");
+
+  // Apple Guideline 1.2 - Report message dialog state
+  const [reportDialog, setReportDialog] = useState<{ messageId: string; messageText: string } | null>(null);
+  const [reportReason, setReportReason] = useState<AbuseReason>("harassment");
+  const [reportComment, setReportComment] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [revealedFlagged, setRevealedFlagged] = useState<Record<string, boolean>>({});
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profilePhotoRef = useRef<string | null>(null);
+  const photoSentRef = useRef<Set<string>>(new Set());
+
+  // Load profile photo on mount
+  useEffect(() => {
+    AsyncStorage.getItem("speaq_profile_photo").then((photo) => {
+      if (photo) profilePhotoRef.current = photo;
+    });
+  }, []);
 
   // Load persisted messages + clean expired + load timer
   useEffect(() => {
@@ -121,15 +142,30 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               }
             }
             if (data.type === "message") {
+              // Save sender's contact photo if included (fallback to contactId)
+              const photoSenderId = data.senderId || contactId;
+              if (data.photo && photoSenderId) {
+                AsyncStorage.getItem("speaq_contact_photos").then((stored) => {
+                  const photos = stored ? JSON.parse(stored) : {};
+                  photos[photoSenderId] = data.photo;
+                  AsyncStorage.setItem("speaq_contact_photos", JSON.stringify(photos));
+                });
+              }
               Vibration.vibrate(100);
               playMessageReceived();
+              // Handle QC payment receive
+              if (data.qc && data.amount && data.amount > 0) {
+                walletService.receive(data.senderId || contactId, data.amount, `From ${data.fromName || contactId.substring(0, 8)}`);
+              }
+              const flagged = data.text ? containsObjectionableContent(data.text, getLanguage() as SafetyLang) : false;
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
                 text: data.text,
                 sent: false,
-                type: data.paymentAmount ? "payment" : "text",
-                amount: data.paymentAmount,
+                type: (data.qc || data.paymentAmount) ? "payment" : "text",
+                amount: data.amount || data.paymentAmount,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+                flagged,
               };
               setMessages((prev) => [...prev, newMsg]);
             }
@@ -183,7 +219,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           timestamp: now(),
         };
         setMessages((prev) => [...prev, payMsg]);
-        sendMessage(contactId, JSON.stringify({ type: "message", text: `${amount.toFixed(2)} QC`, paymentAmount: amount }));
+        sendQCPayment(contactId, amount);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       }},
     ], "plain-text", "", "decimal-pad");
@@ -287,27 +323,110 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
         ));
         sendMessage(contactId, JSON.stringify({ type: "delete", messageId: item.id }));
       }});
+    } else {
+      // Apple Guideline 1.2 - incoming messages get Report + Block options
+      options.push({ text: t("safetyReportMessage"), onPress: () => {
+        setReportReason("harassment");
+        setReportComment("");
+        setReportDialog({ messageId: item.id, messageText: item.text });
+      }});
+      options.push({ text: t("safetyBlockUser"), style: "destructive", onPress: () => {
+        handleBlockUser(item.id, item.text);
+      }});
     }
     options.push({ text: t("cancel"), style: "cancel" });
     Alert.alert(t("message"), item.text.substring(0, 50), options);
   }
 
-  function handleBlockUser() {
+  // Block: store locally, tell relay (BLOCK), and auto-file an abuse
+  // report (Apple 24-hour SLA). messageId/messageText are passed from
+  // the long-press handler so moderators see what triggered the block.
+  async function handleBlockUser(triggerMsgId?: string, triggerMsgText?: string) {
+    if (triggerMsgId && triggerMsgText) {
+      // Direct block from a specific message - skip the confirm dialog
+      // because the user already chose Block from the action sheet.
+      await doBlock(triggerMsgId, triggerMsgText);
+      return;
+    }
     Alert.alert(t("blockUser"), t("blockUserMsg").replace("%s", contactName), [
       { text: t("cancel"), style: "cancel" },
-      { text: t("block"), style: "destructive", onPress: () => {
-        blockUser(contactId);
-        Alert.alert(t("blocked"), t("blockedMsg").replace("%s", contactName));
-      }},
+      { text: t("block"), style: "destructive", onPress: () => doBlock() },
     ]);
+  }
+
+  async function doBlock(triggerMsgId?: string, triggerMsgText?: string) {
+    await blockUser(contactId);
+    sendBlock(contactId);
+    const me = getIdentity();
+    if (me) {
+      await postAbuseReport({
+        reporterSpeaqId: me.speaqId,
+        reportedSpeaqId: contactId,
+        reason: "harassment",
+        source: "app-block",
+        messageContent: triggerMsgText,
+        messageId: triggerMsgId,
+        language: "en",
+      });
+    }
+    Alert.alert(t("blocked"), t("blockedMsg").replace("%s", contactName));
+  }
+
+  async function submitReportDialog() {
+    if (!reportDialog || reportSubmitting) return;
+    setReportSubmitting(true);
+    const me = getIdentity();
+    if (!me) {
+      setReportSubmitting(false);
+      return;
+    }
+    const ok = await postAbuseReport({
+      reporterSpeaqId: me.speaqId,
+      reportedSpeaqId: contactId,
+      reason: reportReason,
+      source: "app-report",
+      comment: reportComment.trim() || undefined,
+      messageContent: reportDialog.messageText,
+      messageId: reportDialog.messageId,
+      language: "en",
+    });
+    setReportSubmitting(false);
+    setReportDialog(null);
+    setReportComment("");
+    Alert.alert(
+      ok ? t("safetyReportSent") : t("safetyReportFailed"),
+      ok ? t("safetyReportThanks") : t("safetyReportTryAgain"),
+    );
   }
 
   function handleHeaderLongPress() {
     Alert.alert(contactName, contactId, [
+      { text: "Safety number", onPress: handleShowSafetyNumber },
       { text: t("disappearingMessages"), onPress: handleSetDisappear },
       { text: t("blockUser"), style: "destructive", onPress: handleBlockUser },
       { text: t("cancel"), style: "cancel" },
     ]);
+  }
+
+  // Safety number: SHA-256 over (sortedIds + ":" + ratchet.rootKey) presented as
+  // 8 groups of 4 hex chars. Both peers see the same number when their channel
+  // is mutually authenticated. Verify in person or via voice to detect MITM.
+  async function handleShowSafetyNumber() {
+    const me = getIdentity();
+    if (!me) return;
+    const sn = await computeSafetyNumber(me.speaqId, contactId);
+    if (!sn) {
+      Alert.alert(
+        "Safety number not yet available",
+        "Send a message to establish the secure channel, then try again."
+      );
+      return;
+    }
+    Alert.alert(
+      "Safety number",
+      `${sn}\n\nCompare this number with your contact in person or via a separate voice call. If it matches on both ends the channel is mutually authenticated.`,
+      [{ text: "OK", style: "default" }]
+    );
   }
 
   function handleSetDisappear() {
@@ -341,9 +460,19 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           </View>
         )}
         <TouchableWithoutFeedback onLongPress={() => handleLongPress(item)}>
-          <View style={[st.bubble, item.sent ? st.sent : st.received, item.deleted && st.deletedBubble]}>
+          <View style={[st.bubble, item.sent ? st.sent : st.received, item.deleted && st.deletedBubble, !!item.flagged && !item.sent && !revealedFlagged[item.id] && st.flaggedBubble]}>
             {item.deleted ? (
               <Text style={st.deletedText}>{item.text}</Text>
+            ) : !!item.flagged && !item.sent && !revealedFlagged[item.id] ? (
+              <View style={{ paddingVertical: 4 }}>
+                <Text style={st.flaggedNotice}>{t("safetyFlaggedNotice")}</Text>
+                <TouchableOpacity onPress={() => setRevealedFlagged((prev) => ({ ...prev, [item.id]: true }))}>
+                  <Text style={st.flaggedReveal}>{t("safetyReveal")}</Text>
+                </TouchableOpacity>
+                <View style={st.bubbleFooter}>
+                  <Text style={[st.bubbleTime, st.receivedTime]}>{item.timestamp}</Text>
+                </View>
+              </View>
             ) : item.type === "payment" ? (
               <View style={st.paymentBubble}>
                 <Text style={st.paymentIcon}>Q</Text>
@@ -420,7 +549,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
       <View style={st.encBanner}>
         <Text style={st.encText}>
-          Kyber-768 + AES-256-GCM + Double Ratchet
+          AES-256-GCM + lattice key exchange (custom) + Double Ratchet
           {disappearTimer !== "off" ? ` -- ${DISAPPEAR_OPTIONS.find((o) => o.key === disappearTimer)?.label}` : ""}
         </Text>
       </View>
@@ -460,6 +589,66 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
           <Text style={st.sendIcon}>{">"}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Apple Guideline 1.2 - Report Message dialog */}
+      <Modal
+        visible={!!reportDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !reportSubmitting && setReportDialog(null)}
+      >
+        <View style={st.reportOverlay}>
+          <View style={st.reportCard}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={st.reportTitle}>{t("safetyReportTitle")}</Text>
+              <Text style={st.reportSubtitle}>{t("safetyReportSubtitle")}</Text>
+
+              <Text style={st.reportSectionLabel}>{t("safetyReportReason")}</Text>
+              {(["spam", "harassment", "threat", "csam", "illegal", "impersonation", "other"] as AbuseReason[]).map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[st.reportReasonRow, reportReason === r && st.reportReasonRowActive]}
+                  onPress={() => setReportReason(r)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[st.reportRadio, reportReason === r && st.reportRadioActive]} />
+                  <Text style={st.reportReasonText}>{t(`safetyReason_${r}`)}</Text>
+                </TouchableOpacity>
+              ))}
+
+              <Text style={st.reportSectionLabel}>{t("safetyReportComment")}</Text>
+              <TextInput
+                value={reportComment}
+                onChangeText={(v) => setReportComment(v.slice(0, 500))}
+                placeholder={t("safetyReportCommentPlaceholder")}
+                placeholderTextColor={colors.signal.steel}
+                multiline
+                numberOfLines={3}
+                style={st.reportComment}
+              />
+            </ScrollView>
+
+            <View style={st.reportActions}>
+              <TouchableOpacity
+                style={[st.reportBtn, st.reportBtnSecondary]}
+                onPress={() => !reportSubmitting && setReportDialog(null)}
+                disabled={reportSubmitting}
+              >
+                <Text style={st.reportBtnSecondaryText}>{t("cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.reportBtn, st.reportBtnPrimary, reportSubmitting && { opacity: 0.6 }]}
+                onPress={submitReportDialog}
+                disabled={reportSubmitting}
+              >
+                <Text style={st.reportBtnPrimaryText}>
+                  {reportSubmitting ? t("safetyReportSending") : t("safetyReportSubmit")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -548,4 +737,28 @@ const st = StyleSheet.create({
   fileIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 8, borderWidth: 1, borderColor: colors.border.subtle },
   fileIconText: { color: colors.voice.gold, fontSize: 14, fontWeight: "600" },
   fileName: { fontSize: 13, flex: 1 },
+
+  // Apple Guideline 1.2 - flagged content blur + reveal
+  flaggedBubble: { borderWidth: 1, borderColor: "rgba(226, 75, 74, 0.5)" },
+  flaggedNotice: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  flaggedReveal: { color: colors.voice.gold, fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
+
+  // Apple Guideline 1.2 - Report message dialog
+  reportOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", paddingHorizontal: 16 },
+  reportCard: { width: "100%", maxWidth: 420, maxHeight: "85%", backgroundColor: colors.depth.elevated, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border.subtle },
+  reportTitle: { color: colors.signal.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  reportSubtitle: { color: colors.signal.steel, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  reportSectionLabel: { color: colors.signal.white, fontSize: 12, fontWeight: "600", marginBottom: 8, marginTop: 4 },
+  reportReasonRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.depth.surface, marginBottom: 6, borderWidth: 1, borderColor: "transparent" },
+  reportReasonRowActive: { backgroundColor: "rgba(212, 168, 78, 0.15)", borderColor: colors.voice.gold },
+  reportRadio: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.signal.steel, marginRight: 10 },
+  reportRadioActive: { borderColor: colors.voice.gold, backgroundColor: colors.voice.gold },
+  reportReasonText: { color: colors.signal.white, fontSize: 13, flex: 1 },
+  reportComment: { color: colors.signal.white, fontSize: 13, backgroundColor: colors.depth.surface, borderRadius: 10, padding: 10, minHeight: 60, textAlignVertical: "top", marginBottom: 12 },
+  reportActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+  reportBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  reportBtnSecondary: { backgroundColor: colors.depth.surface },
+  reportBtnSecondaryText: { color: colors.signal.white, fontSize: 14, fontWeight: "600" },
+  reportBtnPrimary: { backgroundColor: colors.voice.gold },
+  reportBtnPrimaryText: { color: colors.depth.void, fontSize: 14, fontWeight: "600" },
 });

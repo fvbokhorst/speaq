@@ -66,6 +66,9 @@ yarn-error.log
 # testing
 /coverage
 
+# Workspace package build output (rebuilt by tsc, not source-of-truth)
+packages/*/dist/
+
 # Yarn
 .yarn/*
 !.yarn/patches
