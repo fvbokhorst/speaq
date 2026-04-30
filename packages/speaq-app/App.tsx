@@ -10,6 +10,7 @@ import { StatusBar, View, StyleSheet, TouchableOpacity, Text, Alert, Linking } f
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import EulaScreen from "./src/screens/EulaScreen";
 import WelcomeScreen from "./src/screens/WelcomeScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatScreen from "./src/screens/ChatScreen";
@@ -43,7 +44,7 @@ import { setNormalPin } from "./src/services/vault";
 import { setKeystorePin } from "./src/services/crypto";
 
 function App() {
-  const [phase, setPhase] = useState<"loading" | "onboarding" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
+  const [phase, setPhase] = useState<"loading" | "onboarding" | "eula" | "welcome" | "pin-setup" | "pin-enter" | "main">("loading");
   const [activeTab, setActiveTab] = useState("chats");
   const [chatContactId, setChatContactId] = useState("");
   const [chatContactName, setChatContactName] = useState("");
@@ -97,12 +98,20 @@ function App() {
     loadLanguage();
     loadLightning();
     AsyncStorage.getItem("speaq_pin").then(async (storedPin) => {
+      const eulaAccepted = await AsyncStorage.getItem("speaq_eula_v1_accepted_at");
       if (storedPin) {
         setSavedPin(storedPin);
-        setPhase("pin-enter");
+        // Existing PIN but no EULA acceptance recorded (upgrade case): force the gate.
+        setPhase(eulaAccepted ? "pin-enter" : "eula");
       } else {
         const seen = await AsyncStorage.getItem("speaq_onboarding_done");
-        setPhase(seen ? "welcome" : "onboarding");
+        if (!seen) {
+          setPhase("onboarding");
+        } else if (!eulaAccepted) {
+          setPhase("eula");
+        } else {
+          setPhase("welcome");
+        }
       }
     });
   }, []);
@@ -192,7 +201,20 @@ function App() {
         <StatusBar barStyle="light-content" />
         <OnboardingScreen onDone={() => {
           AsyncStorage.setItem("speaq_onboarding_done", "1");
-          setPhase("welcome");
+          setPhase("eula");
+        }} />
+      </SafeAreaProvider>
+    );
+  }
+
+  // EULA acceptance (Apple Guideline 1.2 - User-Generated Content)
+  if (phase === "eula") {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="light-content" />
+        <EulaScreen onAccept={() => {
+          AsyncStorage.setItem("speaq_eula_v1_accepted_at", new Date().toISOString());
+          setPhase(savedPin ? "pin-enter" : "welcome");
         }} />
       </SafeAreaProvider>
     );
