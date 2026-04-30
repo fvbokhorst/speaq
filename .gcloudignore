@@ -4,6 +4,15 @@ node_modules/
 **/node_modules/
 **/dist/
 **/target/
+**/build/
+**/Pods/
+ios/
+android/
+packages/speaq-app/
+packages/speaq-chain/
+__mocks__/
+__tests__/
+.bundle/
 Apple_Submission/
 *.log
 .DS_Store
@@ -11,3 +20,7 @@ Apple_Submission/
 .env.local
 07*/
 05*/
+*.tsbuildinfo
+*.xcworkspace/
+*.xcodeproj/
+DerivedData/
