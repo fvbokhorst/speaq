@@ -1115,13 +1115,19 @@ wss.on("connection", (ws: WebSocket) => {
           const recipient = clients.get(to);
 
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-            // Recipient online: relay immediately (fire-and-forget)
-            recipient.ws.send(JSON.stringify({
+            // Recipient online: relay immediately (fire-and-forget).
+            // Forward optional protocol/encrypted markers so the recipient client
+            // can route ratchet payloads to the right decrypt branch (ChatScreen on
+            // native gates ratchet decrypt on msg.protocol === "ratchet-v1").
+            const forward: Record<string, unknown> = {
               type: "RECEIVE",
               from: clientId,
               blob,
               id: messageId,
-            }));
+            };
+            if (msg.protocol) forward.protocol = msg.protocol;
+            if (msg.encrypted) forward.encrypted = msg.encrypted;
+            recipient.ws.send(JSON.stringify(forward));
             // Include mining receipt for relay contribution
             const receiptData = `${clientId}:relay:0.0001:${Date.now()}`;
             const miningReceipt = relaySign(receiptData);
