@@ -612,14 +612,25 @@ function keystoreDecrypt(data: string): string {
 // SECTION 5: Ratchet State Persistence
 // ============================================================
 
-/** Save ratchet state for a contact to AsyncStorage (encrypted with PIN) */
+/** Save ratchet state for a contact to AsyncStorage (encrypted with PIN, or plaintext fallback) */
 export async function saveRatchetState(contactId: string, state: RatchetState): Promise<void> {
+  const plaintext = JSON.stringify(state);
+  // Try encrypted form first (keystore PIN ready). If keystoreEncrypt throws because the
+  // keystore isn't initialised yet (e.g. a relayed message arrived during boot before
+  // setKeystorePin completed), persist the plaintext JSON anyway so the state survives
+  // and loadRatchetState can read it via its JSON.parse fallback. Otherwise we'd silently
+  // lose ratchet state and the loadRatchetState bug ("Failed to load ratchet state" red
+  // box) would recur on every send.
   try {
-    const plaintext = JSON.stringify(state);
     const encrypted = keystoreEncrypt(plaintext);
     await AsyncStorage.setItem(RATCHET_PREFIX + contactId, encrypted);
   } catch (e) {
-    console.error("[Crypto] Failed to save ratchet state:", e);
+    try {
+      await AsyncStorage.setItem(RATCHET_PREFIX + contactId, plaintext);
+      console.warn("[Crypto] Saved ratchet state as plaintext for", contactId, "- keystore not ready:", (e as Error)?.message);
+    } catch (e2) {
+      console.warn("[Crypto] Failed to save ratchet state:", e2);
+    }
   }
 }
 
@@ -628,16 +639,25 @@ export async function loadRatchetState(contactId: string): Promise<RatchetState 
   try {
     const data = await AsyncStorage.getItem(RATCHET_PREFIX + contactId);
     if (!data) return null;
-    // Try encrypted format first, fall back to plaintext (migration)
+    // Try encrypted v2 format first, fall back to plaintext (migration / pre-keystore data).
     try {
       const decrypted = keystoreDecrypt(data);
       return JSON.parse(decrypted);
     } catch {
-      // Legacy plaintext data -- parse directly, will be re-encrypted on next save
-      return JSON.parse(data);
+      // Could not decrypt with current keystore key. Try plaintext-JSON shape;
+      // if that ALSO fails, the entry is corrupt or wrong-PIN. Delete it so the
+      // next saveRatchetState writes a clean record under the current PIN, and
+      // return null so getOrCreateRatchet derives a fresh state.
+      try {
+        return JSON.parse(data);
+      } catch {
+        try { await AsyncStorage.removeItem(RATCHET_PREFIX + contactId); } catch { /* best-effort */ }
+        console.warn("[Crypto] Ratchet state corrupt for", contactId, "- cleared");
+        return null;
+      }
     }
   } catch (e) {
-    console.error("[Crypto] Failed to load ratchet state:", e);
+    console.warn("[Crypto] Failed to load ratchet state:", e);
     return null;
   }
 }
