@@ -19,7 +19,7 @@ import http from "http";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { configurePush, triggerSilentPush, isConfigured as isPushConfigured } from "./push/push-service";
+import { configurePush, triggerSilentPush, triggerCallPush, isConfigured as isPushConfigured } from "./push/push-service";
 import { upsertSubscription, removeByEndpoint, removeAllFor, cleanupStale } from "./push/push-store";
 import { createAbuseReport, validateAbuseReport, loadDenyList, isSpeaqIdDeniedSync, listAbuseReports, actionAbuseReport, unbanSpeaqId } from "./abuse/abuse-store";
 // Audit follow-up (2026-04-25): post-quantum AUTH. Server now accepts BOTH ECDSA P-256
@@ -385,6 +385,46 @@ function checkRateLimit(speaqId: string): boolean {
   return true;
 }
 
+// --- Pending Calls (CALL_OFFER queue for offline recipients) ---
+// CALL_OFFERs are short-lived: 30s TTL, no rotation kept. When recipient
+// reconnects within the window, the offer is replayed as if just received
+// so the existing CALL_OFFER handler in the PWA fires the ring screen.
+// Privacy: blobs are encrypted, server is zero-knowledge.
+
+interface PendingCall {
+  from: string;
+  blob?: string;
+  sdp?: string;
+  video?: boolean;
+  callId?: string;
+  expiresAt: number;
+}
+const PENDING_CALL_TTL_MS = 30 * 1000;
+const pendingCalls = new Map<string, PendingCall[]>();
+
+function queuePendingCall(to: string, call: PendingCall): void {
+  const list = pendingCalls.get(to) || [];
+  list.push(call);
+  pendingCalls.set(to, list);
+}
+
+function takePendingCalls(speaqId: string): PendingCall[] {
+  const list = pendingCalls.get(speaqId) || [];
+  pendingCalls.delete(speaqId);
+  const now = Date.now();
+  return list.filter((c) => c.expiresAt > now);
+}
+
+// Cleanup expired pending calls every 30 seconds.
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, list] of pendingCalls.entries()) {
+    const valid = list.filter((c) => c.expiresAt > now);
+    if (valid.length === 0) pendingCalls.delete(id);
+    else pendingCalls.set(id, valid);
+  }
+}, 30 * 1000);
+
 // --- Offline Queue ---
 
 function queueOfflineMessage(to: string, from: string, blob: string): void {
@@ -437,7 +477,7 @@ setInterval(() => {
 // --- Express REST API ---
 
 const app = express();
-app.use(cors({ origin: "*", allowedHeaders: ["Content-Type", "x-admin-pin"] }));
+app.use(cors({ origin: "*", allowedHeaders: ["Content-Type", "x-admin-pin", "x-speaq-id"] }));
 app.use(express.json({ limit: "1mb" }));
 
 // Health check
@@ -450,6 +490,76 @@ app.get("/api/v1/health", (_req, res) => {
     uptime: process.uptime(),
     version: "0.1.0",
   });
+});
+
+// TURN credentials (RFC 7635 / coturn use-auth-secret)
+// Generates time-limited HMAC-SHA1 credentials for the SPEAQ-operated coturn
+// server. Privacy-preserving: relay server NEVER stores per-user TURN sessions
+// or who-called-whom; coturn keeps minimal logs. Returns iceServers array
+// directly consumable by RTCPeerConnection on PWA + native (same shape).
+//
+// See: 02 Areas/SPEAQ/SPEAQ_TURN_Contract_v1.md (vault) for the contract.
+const TURN_REQUESTS = new Map<string, number[]>();
+const TURN_RATE_WINDOW_MS = 60_000;
+const TURN_RATE_LIMIT = 10;
+const TURN_HOST = process.env.TURN_HOST || "turn.thespeaq.com";
+const TURN_PORT = process.env.TURN_PORT || "3478";
+const TURN_TTL_SECONDS = parseInt(process.env.TURN_TTL_SECONDS || "300", 10);
+const COTURN_SECRET = process.env.COTURN_STATIC_SECRET || "";
+
+// TURN debug-stats receiver. PWA periodically POSTs RTCPeerConnection.getStats()
+// readings here so we can diagnose call-quality issues server-side without
+// requiring the user to open browser DevTools.
+app.post("/api/v1/turn-stats", (req, res) => {
+  const { speaqId, callId, stats } = req.body || {};
+  console.log(`[turn-stats] ${speaqId?.slice(0, 8)}.. call=${callId} ${JSON.stringify(stats)}`);
+  res.json({ ok: true });
+});
+
+app.get("/api/v1/turn-credentials", (req, res) => {
+  const speaqId = (req.headers["x-speaq-id"] as string) || "";
+  if (!speaqId || speaqId.length < 8) {
+    return res.status(400).json({ error: "X-Speaq-Id header required" });
+  }
+  if (!COTURN_SECRET) {
+    return res.status(503).json({ error: "TURN service unavailable" });
+  }
+
+  // Rate limit: 10 req/minuut per speaqId (prevent enumeration / resource abuse)
+  const now = Date.now();
+  const recent = (TURN_REQUESTS.get(speaqId) || []).filter((t) => now - t < TURN_RATE_WINDOW_MS);
+  if (recent.length >= TURN_RATE_LIMIT) {
+    return res.status(429).json({ error: "Rate limit exceeded" });
+  }
+  recent.push(now);
+  TURN_REQUESTS.set(speaqId, recent);
+
+  // Periodic cleanup of stale rate-limit entries
+  if (Math.random() < 0.01) {
+    for (const [id, ts] of TURN_REQUESTS) {
+      const fresh = ts.filter((t) => now - t < TURN_RATE_WINDOW_MS);
+      if (fresh.length === 0) TURN_REQUESTS.delete(id);
+      else TURN_REQUESTS.set(id, fresh);
+    }
+  }
+
+  // RFC 7635 username: "<unix_expiry>:<speaqId>", credential: HMAC-SHA1 base64
+  const expiry = Math.floor(now / 1000) + TURN_TTL_SECONDS;
+  const username = `${expiry}:${speaqId}`;
+  const credential = crypto.createHmac("sha1", COTURN_SECRET).update(username).digest("base64");
+
+  // Multi-port iceServers:
+  // - STUN + TURN on 3478 (UDP/TCP): default fast path
+  // - TURNS on 443 (TLS over TCP): bypasses iOS-Brave-tab firewall/Shields blocks
+  //   that prevent UDP-3478 traffic. TLS-encrypted, looks like HTTPS to network.
+  const iceServers = [
+    { urls: [`stun:${TURN_HOST}:${TURN_PORT}`] },
+    { urls: [`turn:${TURN_HOST}:${TURN_PORT}?transport=udp`], username, credential },
+    { urls: [`turn:${TURN_HOST}:${TURN_PORT}?transport=tcp`], username, credential },
+    { urls: [`turns:${TURN_HOST}:443?transport=tcp`], username, credential },
+  ];
+
+  return res.json({ iceServers, ttl: TURN_TTL_SECONDS });
 });
 
 // Register public keys
@@ -935,7 +1045,18 @@ wss.on("connection", (ws: WebSocket) => {
       ws.send(JSON.stringify({ type: "RECEIVE", from: m.from, blob: m.blob, id: m.id }));
     }
     if (offline.length > 0) clearOfflineMessages(sid);
-    ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length, authMode: mode }));
+    // Replay pending CALL_OFFERs (queued while peer was offline) so the ring
+    // screen fires when the user opens the PWA from a push notification.
+    const pendingForUser = takePendingCalls(sid);
+    for (const pc of pendingForUser) {
+      const out: Record<string, unknown> = { type: "CALL_OFFER", from: pc.from };
+      if (pc.callId) out.callId = pc.callId;
+      if (pc.blob) out.blob = pc.blob;
+      if (pc.sdp) out.sdp = pc.sdp;
+      if (typeof pc.video !== "undefined") out.video = pc.video;
+      ws.send(JSON.stringify(out));
+    }
+    ws.send(JSON.stringify({ type: "AUTH_OK", offlineDelivered: offline.length, pendingCalls: pendingForUser.length, authMode: mode }));
   };
 
   // Helper: verify the challenge signature.
@@ -1178,7 +1299,23 @@ wss.on("connection", (ws: WebSocket) => {
             if (typeof msg.video !== "undefined") out.video = msg.video;
             recipient.ws.send(JSON.stringify(out));
           } else {
-            ws.send(JSON.stringify({ type: "CALL_UNAVAILABLE", to: msg.to, callId: msg.callId }));
+            // Recipient offline. Queue the offer for ~30s and trigger a push so
+            // the recipient's PWA wakes up. On AUTH the queued offer replays as
+            // if it just arrived - existing CALL_OFFER handler fires the ring.
+            queuePendingCall(msg.to as string, {
+              from: clientId,
+              blob: msg.blob as string | undefined,
+              sdp: msg.sdp as string | undefined,
+              video: typeof msg.video === "boolean" ? msg.video : undefined,
+              callId: msg.callId as string | undefined,
+              expiresAt: Date.now() + PENDING_CALL_TTL_MS,
+            });
+            if (isPushConfigured()) {
+              triggerCallPush(msg.to as string).catch((err) => {
+                console.warn("[push] call-trigger failed for", msg.to, err instanceof Error ? err.message : err);
+              });
+            }
+            ws.send(JSON.stringify({ type: "CALL_UNAVAILABLE", to: msg.to, callId: msg.callId, queued: true }));
           }
           break;
         }

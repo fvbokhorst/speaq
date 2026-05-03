@@ -61,3 +61,33 @@ export async function triggerSilentPush(speaqId: string): Promise<void> {
     })
   );
 }
+
+// Like triggerSilentPush but signals an incoming call instead of a message.
+// Same privacy guarantees: data-only payload, no caller identity, no content.
+// SW shows generic "Incoming call" notification; the PWA fetches the queued
+// CALL_OFFER on next AUTH (within the 30-second pending-call TTL window).
+export async function triggerCallPush(speaqId: string): Promise<void> {
+  if (!configured) return;
+  if (!allowTrigger(speaqId)) return;
+
+  const subs = await listSubscriptionsFor(speaqId);
+  if (subs.length === 0) return;
+
+  const payload = JSON.stringify({ t: "call", ts: Date.now() });
+
+  await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: sub.keys },
+          payload,
+          { TTL: 30, urgency: "high" }
+        );
+      } catch (err: unknown) {
+        const statusCode = (err as { statusCode?: number }).statusCode;
+        const drop = statusCode === 404 || statusCode === 410;
+        await recordFailure(sub.endpoint, drop).catch(() => undefined);
+      }
+    })
+  );
+}
