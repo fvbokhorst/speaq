@@ -5,32 +5,62 @@ import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import Logo from "../components/Logo";
 
 interface Props {
-  onCreateIdentity: (name: string) => void;
+  onCreateIdentity: (name: string) => Promise<void> | void;
 }
+
+// Multi-phase status messages shown while identity is being generated.
+// Rotated every ~2.5 seconds so the user always sees the screen is alive.
+// Order matches the actual work in src/services/speaq.ts createIdentity():
+//   1. ensureKeystoreSalt + generateKyberKeyPair (FIPS 203 ML-KEM-768)
+//   2. ensureSigningKeys (FIPS 204 ML-DSA-65)
+//   3. generateDID + AsyncStorage encrypted save
+//   4. connectRelay + initial WebSocket handshake
+const STATUS_MESSAGES = [
+  "Creating sovereign identity",
+  "Generating quantum-secure keys (Kyber-768)",
+  "Generating signature keys (ML-DSA-65)",
+  "Sealing identity to device",
+  "Connecting to SPEAQ network",
+  "Almost ready",
+];
+
+const SOFT_WARNING_AFTER_MS = 15000; // soft hint
+const HARD_TIMEOUT_MS = 60000;        // give up + retry
 
 export default function WelcomeScreen({ onCreateIdentity }: Props) {
   const { colors: c } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [showNameModal, setShowNameModal] = useState(false);
   const [name, setName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [statusIndex, setStatusIndex] = useState(0);
+  const [showSoftWarning, setShowSoftWarning] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
-  // Close modal + dismiss keyboard before handing off to the parent -- so
-  // on iPad the subsequent phase transition isn't blocked by the Modal
-  // still being presented (iPadOS 26.5 regression: Alert presented while a
-  // RN Modal is visible can render beneath the modal overlay).
-  const submit = () => {
-    const trimmed = name.trim();
-    if (!trimmed || submitting) return;
-    setSubmitting(true);
-    Keyboard.dismiss();
-    setShowNameModal(false);
-    // Yield a frame so the modal unmount happens before the parent's
-    // async work (which may show its own UI).
-    setTimeout(() => onCreateIdentity(trimmed), 0);
-  };
+  // Rotate phase messages while creating, until success or timeout.
+  // Reviewer / user always sees text changing - clear "app is working" signal.
+  useEffect(() => {
+    if (!creating || timedOut) return;
+    const startedAt = Date.now();
+    const rotator = setInterval(() => {
+      setStatusIndex((i) => (i + 1) % STATUS_MESSAGES.length);
+    }, 2500);
+    const softWarn = setTimeout(() => setShowSoftWarning(true), SOFT_WARNING_AFTER_MS);
+    const hardLimit = setTimeout(() => {
+      // Stop the rotator and surface a retry option. Apple reviewers explicitly
+      // need an explicit error state if work doesn't finish in reasonable time
+      // ("App loaded indefinitely" is the rejection reason for 1.0 build 5).
+      void startedAt;
+      setTimedOut(true);
+    }, HARD_TIMEOUT_MS);
+    return () => {
+      clearInterval(rotator);
+      clearTimeout(softWarn);
+      clearTimeout(hardLimit);
+    };
+  }, [creating, timedOut]);
 
   useEffect(() => {
     Animated.loop(
@@ -41,6 +71,75 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
     ).start();
     Animated.timing(fadeIn, { toValue: 1, duration: 800, delay: 200, useNativeDriver: true }).start();
   }, []);
+
+  const startCreate = (n: string) => {
+    setStatusIndex(0);
+    setShowSoftWarning(false);
+    setTimedOut(false);
+    setCreating(true);
+    setShowNameModal(false);
+    Keyboard.dismiss();
+    // Yield a frame so the modal unmount finishes before the parent's
+    // async work (which on iPad would otherwise compete with the modal).
+    setTimeout(() => {
+      Promise.resolve(onCreateIdentity(n)).catch((err) => {
+        console.error("[WelcomeScreen] onCreateIdentity failed:", err);
+        setTimedOut(true);
+      });
+    }, 0);
+  };
+
+  const submit = () => {
+    const trimmed = name.trim();
+    if (!trimmed || creating) return;
+    startCreate(trimmed);
+  };
+
+  const retry = () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setCreating(false);
+      setTimedOut(false);
+      setShowNameModal(true);
+      return;
+    }
+    startCreate(trimmed);
+  };
+
+  // Creating-identity full screen: replaces the welcome content while
+  // post-quantum keygen runs. Reviewer always sees a phase message and a
+  // spinner; after 15s a softer hint appears; after 60s a retry CTA.
+  if (creating) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.creatingContent}>
+          <Logo glowAnim={glowAnim} />
+          <Text style={styles.creatingTitle}>{timedOut ? "Setup is taking longer than expected" : STATUS_MESSAGES[statusIndex]}</Text>
+          {!timedOut && <ActivityIndicator color={c.voice.gold} size="large" style={styles.creatingSpinner} />}
+          {!timedOut && (
+            <Text style={styles.creatingSub}>
+              {showSoftWarning
+                ? "First-time setup is computational. Post-quantum keys are being generated on this device for maximum privacy. Hang on."
+                : "Generating post-quantum cryptographic keys on-device. This takes a moment."}
+            </Text>
+          )}
+          {timedOut && (
+            <>
+              <Text style={styles.creatingError}>
+                Setup did not finish in the expected time. This can happen on slower networks or during first-time post-quantum key generation. You can try again now or check your internet connection first.
+              </Text>
+              <TouchableOpacity style={styles.retryButton} onPress={retry} activeOpacity={0.8}>
+                <Text style={styles.retryLabel}>Try again</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+        <View style={styles.bottom}>
+          <Text style={styles.bottomText}>FIPS 203 ML-KEM-768  -  FIPS 204 ML-DSA-65  -  on-device</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -86,7 +185,7 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
         animationType="fade"
         presentationStyle="overFullScreen"
         statusBarTranslucent
-        onRequestClose={() => !submitting && setShowNameModal(false)}
+        onRequestClose={() => setShowNameModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -100,27 +199,21 @@ export default function WelcomeScreen({ onCreateIdentity }: Props) {
               placeholderTextColor={c.signal.steel}
               autoFocus
               returnKeyType="done"
-              editable={!submitting}
               onSubmitEditing={submit}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancel}
-                onPress={() => !submitting && setShowNameModal(false)}
-                disabled={submitting}
+                onPress={() => setShowNameModal(false)}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirm, (!name.trim() || submitting) && styles.modalDisabled]}
+                style={[styles.modalConfirm, !name.trim() && styles.modalDisabled]}
                 onPress={submit}
-                disabled={!name.trim() || submitting}
+                disabled={!name.trim()}
               >
-                {submitting ? (
-                  <ActivityIndicator color={c.depth.void} />
-                ) : (
-                  <Text style={styles.modalConfirmText}>Create</Text>
-                )}
+                <Text style={styles.modalConfirmText}>Create</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -153,6 +246,27 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   bottom: { position: "absolute", bottom: 44 },
   bottomText: { color: c.signal.steel, fontSize: 9, letterSpacing: 0.5 },
+
+  // Creating-identity full screen
+  creatingContent: { alignItems: "center", paddingHorizontal: spacing.lg, maxWidth: 360 },
+  creatingTitle: {
+    color: c.signal.white, fontSize: 18, fontWeight: "600", textAlign: "center",
+    marginTop: 36, letterSpacing: 0.3, lineHeight: 24,
+  },
+  creatingSpinner: { marginTop: 28 },
+  creatingSub: {
+    color: c.signal.steel, fontSize: 13, textAlign: "center",
+    marginTop: 24, lineHeight: 20,
+  },
+  creatingError: {
+    color: c.voice.warm, fontSize: 13, textAlign: "center",
+    marginTop: 24, lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: 24, paddingHorizontal: 32, paddingVertical: 13,
+    backgroundColor: c.voice.gold, borderRadius: radius.lg,
+  },
+  retryLabel: { color: c.depth.void, fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
