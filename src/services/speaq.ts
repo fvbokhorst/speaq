@@ -18,6 +18,7 @@ import {
   KyberKeyPair,
   getOrCreateSigningKeys, signData, verifySignature,
   saveContactSigningKey, loadContactSigningKey,
+  ensureKeystoreSalt,
   SigningKeyPair,
 } from "./crypto";
 import { generateDID, saveDID, loadDID } from "./identity-manager";
@@ -41,6 +42,15 @@ async function ensureSigningKeys(): Promise<SigningKeyPair> {
 
 let ws: WebSocket | null = null;
 let connected = false;
+
+// Rate-limit incoming KEY_EXCHANGE rekeys: a signed peer should not be able to
+// force the local ratchet to reset more than once per minute. Without this, a
+// peer (or an attacker who has somehow obtained the peer's signing key) could
+// loop KEY_EXCHANGE messages and indefinitely block message delivery while the
+// ratchet is rebuilt each time. 60s window is enough to cover legitimate
+// reconnect / reinstall flows without enabling rapid-fire DoS.
+const REKEY_MIN_INTERVAL_MS = 60_000;
+const lastRekeyAt: Map<string, number> = new Map();
 
 type MessageCallback = (msg: any) => void;
 const listeners: MessageCallback[] = [];
@@ -76,12 +86,22 @@ function generateSpeaqId(): string {
  * NOW: also generates a Kyber keypair for quantum key exchange
  */
 export async function createIdentity(displayName: string): Promise<typeof identity> {
+  const tStart = Date.now();
+  console.warn("[TIMING] createIdentity START name=" + displayName);
+  // Provision a device-bound persistent salt BEFORE any keystore-encrypted save.
+  // PIN-keystore-key derivation reads this salt; setting it up-front keeps the
+  // wrap-key stable across app restarts. ensureKeystoreSalt is idempotent.
+  await ensureKeystoreSalt();
+  console.warn("[TIMING] createIdentity ensureKeystoreSalt done after " + (Date.now() - tStart) + "ms");
+
   // Generate Kyber keypair for quantum key exchange
   kyberKeys = generateKyberKeyPair();
   await saveKyberKeyPair(kyberKeys);
+  console.warn("[TIMING] createIdentity Kyber+save done after " + (Date.now() - tStart) + "ms");
 
   // E1-N: generate ML-DSA-65 signing keypair so KEY_EXCHANGE can be signed.
   await ensureSigningKeys();
+  console.warn("[TIMING] createIdentity ensureSigningKeys done after " + (Date.now() - tStart) + "ms");
 
   // Generate DID from Kyber public key
   const did = generateDID(kyberKeys.publicKey);
@@ -96,9 +116,11 @@ export async function createIdentity(displayName: string): Promise<typeof identi
 
   // Persist identity (includes DID)
   await AsyncStorage.setItem("speaq_identity", JSON.stringify(identity));
+  console.warn("[TIMING] createIdentity DID+identity-save done after " + (Date.now() - tStart) + "ms");
 
   // Connect to relay
   connectRelay();
+  console.warn("[TIMING] createIdentity TOTAL " + (Date.now() - tStart) + "ms (relay connect dispatched)");
 
   return identity;
 }
@@ -172,6 +194,7 @@ function connectRelay() {
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string);
+      console.warn("[SPEAQ-LOG] ws.onmessage type=" + msg.type + " from=" + (msg.from||"?") + " keys=" + Object.keys(msg).join(","));
 
       // Handle KEY_EXCHANGE messages internally
       if (msg.type === "KEY_EXCHANGE" && msg.from && msg.kyberPublicKey) {
@@ -242,19 +265,41 @@ async function verifyAndPinSigningKey(
  */
 async function handleKeyExchange(msg: any) {
   if (!identity) return;
+  console.warn("[SPEAQ-LOG] handleKeyExchange from=" + msg.from + " pkLen=" + (msg.kyberPublicKey?.length||0) + " sigLen=" + (msg.sig?.length||0));
 
   // E1-N: verify the sender's signature on their kyberPublicKey before trusting it.
   if (!(await verifyAndPinSigningKey(msg.from, msg.kyberPublicKey, msg.sig, msg.signPub))) {
+    console.warn("[SPEAQ-LOG] handleKeyExchange REJECTED (signature/pinning) from=" + msg.from);
     return;
   }
 
+  // Rate-limit rekeys per peer: drop redundant KEY_EXCHANGEs within REKEY_MIN_INTERVAL_MS.
+  const now = Date.now();
+  const last = lastRekeyAt.get(msg.from) || 0;
+  if (now - last < REKEY_MIN_INTERVAL_MS) {
+    console.warn("[SPEAQ] KEY_EXCHANGE rate-limited from", msg.from, "(rekey window not elapsed)");
+    return;
+  }
+  lastRekeyAt.set(msg.from, now);
+
   // Store their public key
   await saveContactPublicKey(msg.from, msg.kyberPublicKey);
+
+  // Always-rekey on incoming KEY_EXCHANGE: wipe any pre-existing ratchet state for
+  // this contact so getOrCreateRatchet performs a fresh Kyber encapsulate and we
+  // can return a KEY_EXCHANGE_RESPONSE. Without this, a stale pairSeed-fallback
+  // ratchet (left over from a previous failed exchange) would short-circuit
+  // getOrCreateRatchet and the peer would never receive the ciphertext, so they
+  // could never derive the shared secret -- forcing both sides into incompatible
+  // legacy modes ("All decryption methods failed" on the receiver).
+  try { await AsyncStorage.removeItem("speaq_ratchet_" + msg.from); } catch { /* best-effort */ }
 
   // Perform Kyber encapsulation to establish shared secret
   const { state, kyberCiphertext } = await getOrCreateRatchet(
     identity.speaqId, msg.from, msg.kyberPublicKey
   );
+
+  console.warn("[SPEAQ-LOG] handleKeyExchange ratchetReady from=" + msg.from + " ctOut=" + (kyberCiphertext ? "yes" : "no"));
 
   // Send ciphertext back so they can decapsulate.
   // E1-N: sign the ciphertext so the peer can verify it came from us.
@@ -282,13 +327,16 @@ async function handleKeyExchange(msg: any) {
  */
 async function handleKeyExchangeResponse(msg: any) {
   if (!identity) return;
+  console.warn("[SPEAQ-LOG] handleKeyExchangeResponse from=" + msg.from + " ctLen=" + (msg.kyberCiphertext?.length||0));
 
   if (!(await verifyAndPinSigningKey(msg.from, msg.kyberCiphertext, msg.sig, msg.signPub))) {
+    console.warn("[SPEAQ-LOG] handleKeyExchangeResponse REJECTED (signature/pinning) from=" + msg.from);
     return;
   }
 
   try {
     await initRatchetFromKeyExchange(msg.from, msg.kyberCiphertext, identity.speaqId);
+    console.warn("[SPEAQ-LOG] handleKeyExchangeResponse ratchetReady from=" + msg.from);
     listeners.forEach((cb) => cb({
       type: "KEY_EXCHANGE_COMPLETE",
       from: msg.from,

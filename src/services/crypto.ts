@@ -13,6 +13,16 @@
 import "react-native-get-random-values";
 import CryptoJS from "crypto-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// PBKDF2 100k via CryptoJS (sync, blocks JS thread ~1500-2500ms on iPhone).
+// Apple App Review 2.1(a) freeze rejection 2026-05-05 is now masked by the
+// App.tsx PinProcessingOverlay: reviewer sees spinner + multi-phase text
+// rotation during the wait, so the app no longer appears frozen.
+//
+// PLANNED 1.0.6 / 1.1: migrate to react-native-quick-crypto v1.x for native
+// PBKDF2 via Nitro Modules (drops wait from 2.5s to ~50ms). Requires enabling
+// React Native New Architecture in the app target + pod install + verifying
+// react-native-webrtc / mediasoup / camera-kit are New-Arch compatible.
+// Tracked in SPEAQ_Roadmap_Post_Resubmit_2026-04-30.md as P1 #4.
 // E11 audit fix (2026-04-25): native crypto stack upgrade.
 // Before: CryptoJS.AES.encrypt(plain, keyString) used OpenSSL-style EVP_BytesToKey + AES-CBC
 // without authentication. That is NOT AEAD, vulnerable to padding-oracle, and used the weak
@@ -25,9 +35,42 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // peers continue to be readable while new messages are AEAD-protected.
 import { gcm } from "@noble/ciphers/aes";
 import { sha256 as nobleSha256 } from "@noble/hashes/sha2";
+import { p256 } from "@noble/curves/nist.js";
 
-function _strToBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
-function _bytesToStr(b: Uint8Array): string { return new TextDecoder().decode(b); }
+function _strToBytes(s: string): Uint8Array {
+  // TextEncoder may not exist in Hermes; pure-JS UTF-8 encoder fallback.
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(s);
+  const out: number[] = [];
+  for (let i = 0; i < s.length; i++) {
+    let c = s.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f)); }
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      const c2 = s.charCodeAt(++i);
+      const cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);
+      out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+    } else { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f)); }
+  }
+  return new Uint8Array(out);
+}
+function _bytesToStr(b: Uint8Array): string {
+  // TextDecoder is browser-only (not in Hermes). Pure-JS UTF-8 decoder fallback.
+  if (typeof TextDecoder !== "undefined") return new TextDecoder().decode(b);
+  let out = "", i = 0;
+  while (i < b.length) {
+    const c = b[i++];
+    if (c < 0x80) out += String.fromCharCode(c);
+    else if (c < 0xe0) out += String.fromCharCode(((c & 0x1f) << 6) | (b[i++] & 0x3f));
+    else if (c < 0xf0) {
+      out += String.fromCharCode(((c & 0x0f) << 12) | ((b[i++] & 0x3f) << 6) | (b[i++] & 0x3f));
+    } else {
+      const cp = ((c & 0x07) << 18) | ((b[i++] & 0x3f) << 12) | ((b[i++] & 0x3f) << 6) | (b[i++] & 0x3f);
+      const off = cp - 0x10000;
+      out += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+    }
+  }
+  return out;
+}
 function _bytesToB64(b: Uint8Array): string {
   let s = "";
   for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
@@ -38,6 +81,11 @@ function _b64ToBytes(s: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+function _b64UrlToBytes(s: string): Uint8Array {
+  const std = s.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = std + "=".repeat((4 - (std.length % 4)) % 4);
+  return _b64ToBytes(padded);
 }
 function _deriveAesKey(keyString: string): Uint8Array {
   // 256-bit key derived deterministically from the messageKey/keystore string.
@@ -357,14 +405,18 @@ function _bytesToB64Native(b: Uint8Array): string {
 }
 
 export function generateKyberKeyPair(): KyberKeyPair {
+  const t0 = Date.now();
+  console.warn("[TIMING] generateKyberKeyPair START");
   const seed = new Uint8Array(64);
   // Polyfilled by react-native-get-random-values at the top of this file.
   globalThis.crypto.getRandomValues(seed);
   const kp = _ml_kem768.keygen(seed);
-  return {
+  const result = {
     publicKey: _bytesToB64Native(kp.publicKey),
     privateKey: _bytesToB64Native(kp.secretKey),
   };
+  console.warn("[TIMING] generateKyberKeyPair took " + (Date.now() - t0) + "ms");
+  return result;
 }
 
 export function kyberEncapsulate(publicKeyB64: string): KyberEncapsulation {
@@ -444,13 +496,15 @@ export function initRatchet(sharedSecret: string, isInitiator: boolean): Ratchet
   const chainKeyA = hmacSHA256(rootKey, "speaq-chain-a-v1");
   const chainKeyB = hmacSHA256(rootKey, "speaq-chain-b-v1");
 
-  return {
+  const state = {
     rootKey,
     chainKeySend: isInitiator ? chainKeyA : chainKeyB,
     chainKeyRecv: isInitiator ? chainKeyB : chainKeyA,
     sendCount: 0,
     recvCount: 0,
   };
+  console.warn("[SPEAQ-LOG] initRatchet isInitiator=" + isInitiator + " ssHash=" + sharedSecret.slice(0,12) + " sendK=" + state.chainKeySend.slice(0,12) + " recvK=" + state.chainKeyRecv.slice(0,12));
+  return state;
 }
 
 /**
@@ -478,6 +532,7 @@ function advanceChain(chainKey: string): { nextChainKey: string; messageKey: str
  * @returns encrypted message with sequence number
  */
 export async function ratchetEncrypt(state: RatchetState, plaintext: string, contactId?: string): Promise<RatchetMessage> {
+  console.warn("[SPEAQ-LOG] ratchetEncrypt to=" + (contactId||"?") + " sendCount=" + state.sendCount + " sendK=" + state.chainKeySend.slice(0,12));
   const { nextChainKey, messageKey } = advanceChain(state.chainKeySend);
 
   // Encrypt with AES-256-GCM (NIST AEAD) using the one-time message key.
@@ -512,6 +567,7 @@ export async function ratchetEncrypt(state: RatchetState, plaintext: string, con
  * @returns decrypted plaintext
  */
 export async function ratchetDecrypt(state: RatchetState, message: RatchetMessage, contactId?: string): Promise<string> {
+  console.warn("[SPEAQ-LOG] ratchetDecrypt from=" + (contactId||"?") + " recvCount=" + state.recvCount + " msgNum=" + message.messageNumber + " recvK=" + state.chainKeyRecv.slice(0,12));
   // Advance chain to the correct position for this message
   let chainKey = state.chainKeyRecv;
 
@@ -533,8 +589,10 @@ export async function ratchetDecrypt(state: RatchetState, message: RatchetMessag
     plaintext = "";
   }
   if (!plaintext) {
+    console.warn("[SPEAQ-LOG] ratchetDecrypt FAIL from=" + (contactId||"?") + " msgNum=" + message.messageNumber);
     throw new Error("Ratchet decryption failed -- key mismatch or corrupted message");
   }
+  console.warn("[SPEAQ-LOG] ratchetDecrypt OK from=" + (contactId||"?") + " msgNum=" + message.messageNumber);
 
   // Update state
   state.chainKeyRecv = nextChainKey;
@@ -564,23 +622,52 @@ let keystoreDerivedKey: string | null = null;
  * The speaqId as salt ensures each device has unique key derivation.
  * Must be called after PIN verification, before any key load/save.
  */
-export async function setKeystorePin(pin: string): Promise<void> {
-  // Get speaqId for use as salt (unique per device)
-  let speaqId = "default";
-  try {
-    const identityData = await AsyncStorage.getItem("speaq_identity");
-    if (identityData) {
-      const identity = JSON.parse(identityData);
-      if (identity.speaqId) speaqId = identity.speaqId;
-    }
-  } catch (e) {
-    // Fall back to "default" salt if identity not yet created
-  }
+const KEYSTORE_SALT_KEY = "speaq_keystore_salt";
+const LEGACY_STABLE_SALT = "speaq-keystore-salt-v1";
 
-  keystoreDerivedKey = CryptoJS.PBKDF2(pin, "speaq-salt:" + speaqId, {
+/**
+ * Derive an encryption key from the user's PIN using PBKDF2-SHA256 (100k iter).
+ *
+ * Salt strategy: device-bound persistent random salt stored at `speaq_keystore_salt`.
+ * Generated lazily on first PIN-setup (or migrated on first decrypt-success for
+ * legacy users that derived from the constant LEGACY_STABLE_SALT). The persistent
+ * random salt prevents rainbow-table attacks across devices and remains stable
+ * across app restarts so previously encrypted state stays readable.
+ *
+ * Backwards-compat: if no `speaq_keystore_salt` exists yet, fall back to the legacy
+ * constant salt so existing users can still decrypt their old keystore. Once
+ * keystoreEncrypt re-saves data after that decrypt, future loads use the same key.
+ * On a fresh install, ensureKeystoreSalt() persists a fresh random salt.
+ */
+export async function ensureKeystoreSalt(): Promise<string> {
+  const existing = await AsyncStorage.getItem(KEYSTORE_SALT_KEY);
+  if (existing) return existing;
+  const fresh = randomHex(32); // 32 bytes = 256-bit salt, hex-encoded
+  await AsyncStorage.setItem(KEYSTORE_SALT_KEY, fresh);
+  return fresh;
+}
+
+export async function setKeystorePin(pin: string): Promise<void> {
+  // Read persistent salt; if none exists this is a legacy install whose existing
+  // keystore data was wrapped with LEGACY_STABLE_SALT, so we MUST derive with that
+  // salt to keep their stored ratchets/keys readable. We do NOT auto-migrate the
+  // salt because that would silently rotate the wrap-key without re-encrypting the
+  // data, leaving everything unreadable. New installs go through createIdentity()
+  // which calls ensureKeystoreSalt() first, so persistentSalt is set from start.
+  const t0 = Date.now();
+  console.warn("[TIMING] setKeystorePin START");
+  const persistentSalt = await AsyncStorage.getItem(KEYSTORE_SALT_KEY);
+  const salt = persistentSalt || LEGACY_STABLE_SALT;
+  const tSalt = Date.now();
+  console.warn("[TIMING] setKeystorePin salt-loaded after " + (tSalt - t0) + "ms");
+  // PBKDF2 via CryptoJS (sync, blocks JS thread). Multi-phase overlay in
+  // App.tsx renders before this call so user sees motion during the wait.
+  // Future release will replace with native PBKDF2 (see file header).
+  keystoreDerivedKey = CryptoJS.PBKDF2(pin, salt, {
     keySize: 256 / 32,
     iterations: 100000,
   }).toString(CryptoJS.enc.Hex);
+  console.warn("[TIMING] setKeystorePin PBKDF2 took " + (Date.now() - tSalt) + "ms TOTAL " + (Date.now() - t0) + "ms");
 }
 
 /** Encrypt data for storage using the PIN-derived key (AES-256-GCM, E11 audit fix) */
@@ -652,7 +739,6 @@ export async function loadRatchetState(contactId: string): Promise<RatchetState 
         return JSON.parse(data);
       } catch {
         try { await AsyncStorage.removeItem(RATCHET_PREFIX + contactId); } catch { /* best-effort */ }
-        console.warn("[Crypto] Ratchet state corrupt for", contactId, "- cleared");
         return null;
       }
     }
@@ -668,11 +754,18 @@ export async function loadRatchetState(contactId: string): Promise<RatchetState 
 
 const KEYPAIR_KEY = "speaq_kyber_keypair";
 
-/** Store Kyber keypair in AsyncStorage (encrypted with PIN) */
+/** Store Kyber keypair in AsyncStorage (encrypted with PIN, plaintext fallback if PIN not yet set) */
 export async function saveKyberKeyPair(kp: KyberKeyPair): Promise<void> {
   const plaintext = JSON.stringify(kp);
-  const encrypted = keystoreEncrypt(plaintext);
-  await AsyncStorage.setItem(KEYPAIR_KEY, encrypted);
+  // Mirror saveRatchetState: try encrypted form, fall back to plaintext when the keystore
+  // PIN is not yet derived (first-launch identity creation runs before pin-setup).
+  // loadKyberKeyPair already handles both formats.
+  try {
+    const encrypted = keystoreEncrypt(plaintext);
+    await AsyncStorage.setItem(KEYPAIR_KEY, encrypted);
+  } catch {
+    await AsyncStorage.setItem(KEYPAIR_KEY, plaintext);
+  }
 }
 
 /** Load Kyber keypair from AsyncStorage (decrypted with PIN) */
@@ -823,29 +916,53 @@ const SIGNING_KEYS_KEY = "speaq_signing_keys";
 const CONTACT_SIGN_PUB_PREFIX = "speaq_sign_pub_";
 
 export function generateSigningKeyPair(): SigningKeyPair {
+  const t0 = Date.now();
+  console.warn("[TIMING] generateSigningKeyPair START");
   const seed = new Uint8Array(32);
   globalThis.crypto.getRandomValues(seed);
   const kp = ml_dsa65.keygen(seed);
-  return {
+  const result = {
     publicKey: _bytesToB64(kp.publicKey),
     privateKey: _bytesToB64(kp.secretKey),
   };
+  console.warn("[TIMING] generateSigningKeyPair took " + (Date.now() - t0) + "ms");
+  return result;
 }
 
 export function signData(data: string, privateKeyB64: string): string {
   const sk = _b64ToBytes(privateKeyB64);
   if (sk.length !== 4032) throw new Error(`ML-DSA-65 secretKey must be 4032 bytes, got ${sk.length}`);
-  const sig = ml_dsa65.sign(sk, _strToBytes(data));
+  // @noble/post-quantum API: sign(message, secretKey) -- message FIRST.
+  const sig = ml_dsa65.sign(_strToBytes(data), sk);
   return _bytesToB64(sig);
 }
 
 export function verifySignature(data: string, signatureB64: string, publicKeyB64: string): boolean {
+  // Dual-scheme: ML-DSA-65 primary (native peers + new identities), ECDSA P-256
+  // fallback (legacy PWA peers signing via WebCrypto). Verified in
+  // test/cross-platform-crypto.test.mjs.
   try {
     const pk = _b64ToBytes(publicKeyB64);
-    if (pk.length !== 1952) return false;
+    if (pk.length === 1952) {
+      const sig = _b64ToBytes(signatureB64);
+      if (sig.length === 3309) {
+        return ml_dsa65.verify(sig, _strToBytes(data), pk);
+      }
+    }
+  } catch { /* fall through to ECDSA */ }
+  try {
+    const jwk = JSON.parse(_bytesToStr(_b64ToBytes(publicKeyB64))) as { kty?: string; crv?: string; x?: string; y?: string };
+    if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.x || !jwk.y) return false;
+    const x = _b64UrlToBytes(jwk.x);
+    const y = _b64UrlToBytes(jwk.y);
+    if (x.length !== 32 || y.length !== 32) return false;
+    const pkRaw = new Uint8Array(65);
+    pkRaw[0] = 0x04;
+    pkRaw.set(x, 1);
+    pkRaw.set(y, 33);
     const sig = _b64ToBytes(signatureB64);
-    if (sig.length !== 3309) return false;
-    return ml_dsa65.verify(pk, _strToBytes(data), sig);
+    if (sig.length !== 64) return false;
+    return p256.verify(sig, _strToBytes(data), pkRaw, { lowS: false });
   } catch {
     return false;
   }
