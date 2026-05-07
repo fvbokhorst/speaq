@@ -556,12 +556,20 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
   // State is saved inside ratchetEncrypt BEFORE returning (crash-safe)
   const ratchetMsg = await ratchetEncrypt(state, plaintext, toSpeaqId);
 
-  // Send as SEND_SEALED -- no sender ID exposed to relay
-  // Sender identity is encrypted inside the blob
+  // 2026-05-07 cross-platform fix: use SEND (not SEND_SEALED) so PWA peers
+  // route the message through their RECEIVE handler. PWA does not implement
+  // a RECEIVE_SEALED handler, so SEND_SEALED-from-native silently disappeared
+  // on PWA. Sender identity is still inside the encrypted blob (sealed-sender
+  // semantics preserved at the application layer); only the relay frame-type
+  // changes. Mirrors PWA's send code in speaq-web@page.tsx:1990 which also
+  // sends type:"SEND" + protocol:"ratchet-v1".
   ws.send(JSON.stringify({
-    type: "SEND_SEALED",
+    type: "SEND",
     to: toSpeaqId,
-    blob: JSON.stringify(ratchetMsg),
+    blob: JSON.stringify({
+      messageNumber: ratchetMsg.messageNumber,
+      ciphertext: ratchetMsg.ciphertext,
+    }),
     encrypted: true,
     protocol: "ratchet-v1",
   }));
