@@ -104,17 +104,46 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
             const myId = getIdentity()?.speaqId || "";
             let data: any;
 
-            // Try ratchet decryption first (quantum-grade, forward secrecy)
-            if (msg.protocol === "ratchet-v1") {
+            // Sealed-sender pre-decrypt: speaq.ts:handleSealedReceive already ran
+            // ratchetDecrypt and attached the plaintext on msg.plaintext to avoid
+            // double-advancing the ratchet counter. Use it directly when present.
+            if (typeof msg.plaintext === "string") {
               try {
-                const ratchetMsg = JSON.parse(msg.blob);
-                const { state } = await getOrCreateRatchet(myId, contactId);
-                // State is saved inside ratchetDecrypt BEFORE returning (crash-safe)
-                const decrypted = await ratchetDecrypt(state, ratchetMsg, contactId);
-                data = JSON.parse(decrypted);
+                data = JSON.parse(msg.plaintext);
+              } catch {
+                data = null;
+              }
+            }
+
+            // Try ratchet decryption first (quantum-grade, forward secrecy).
+            // PWA peers serialise ratchet envelopes with short field names
+            // ({mn, ct}); native uses {messageNumber, ciphertext}. Normalise so
+            // either shape decrypts. Pairs with PWA fix from speaq-web@12b1496.
+            // Also try ratchet-decrypt when protocol marker is missing -- some
+            // older PWA clients omit it; we fall back to legacy only if the
+            // blob is not a parseable ratchet envelope.
+            if (!data && msg.blob) {
+              try {
+                const parsed = JSON.parse(msg.blob);
+                const messageNumber = parsed.messageNumber ?? parsed.mn;
+                const ciphertext = parsed.ciphertext ?? parsed.ct;
+                if (typeof messageNumber === "number" && typeof ciphertext === "string") {
+                  const ratchetMsg = { messageNumber, ciphertext };
+                  const { state } = await getOrCreateRatchet(myId, contactId);
+                  const decrypted = await ratchetDecrypt(state, ratchetMsg, contactId);
+                  console.log("[SPEAQ-DBG] ratchet decrypt OK len=", decrypted.length, "preview=", decrypted.substring(0, 80));
+                  try {
+                    data = JSON.parse(decrypted);
+                  } catch {
+                    // PWA may send the message text as a plain string instead
+                    // of a JSON envelope. Wrap it so the rest of the pipeline
+                    // treats it as a normal text message.
+                    console.log("[SPEAQ-DBG] decrypted is not JSON, treating as plain text");
+                    data = { type: "message", text: decrypted };
+                  }
+                }
               } catch (ratchetErr) {
                 console.warn("[ChatScreen] Ratchet decrypt failed, trying legacy:", ratchetErr);
-                // Fall through to legacy decryption
                 data = null;
               }
             }

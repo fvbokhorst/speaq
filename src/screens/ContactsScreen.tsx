@@ -29,6 +29,8 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
   const [newContactName, setNewContactName] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<Contact | null>(null);
+  const [editName, setEditName] = useState("");
   const identity = getIdentity();
   const qrData = `https://thespeaq.com/connect/${identity?.speaqId || "unknown"}`;
 
@@ -50,6 +52,57 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
 
   function shareId() {
     Share.share({ message: `Connect with me on SPEAQ!\n\nMy SPEAQ ID: ${identity?.speaqId}\n\nDownload: thespeaq.com` });
+  }
+
+  function openContactMenu(contact: Contact) {
+    Alert.alert(
+      contact.name,
+      contact.id,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Edit",
+          onPress: () => {
+            setEditTarget(contact);
+            setEditName(contact.name);
+          },
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => confirmDelete(contact),
+        },
+      ],
+      { cancelable: true },
+    );
+  }
+
+  function confirmDelete(contact: Contact) {
+    Alert.alert(
+      "Delete contact?",
+      `${contact.name} and all messages, ratchet state, and pinned signing keys will be permanently removed. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await contactsService.removeContact(contact.id);
+            setContacts(contactsService.getContacts());
+          },
+        },
+      ],
+    );
+  }
+
+  function saveEdit() {
+    if (!editTarget) return;
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    contactsService.editContact(editTarget.id, trimmed);
+    setContacts(contactsService.getContacts());
+    setEditTarget(null);
+    setEditName("");
   }
 
   return (
@@ -98,14 +151,21 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
           <Text style={st.emptySub}>Tap "+ Add" to add a contact by SPEAQ ID{"\n"}or scan their QR code</Text>
         </View>
       ) : (
-        contacts.map((c) => (
-          <TouchableOpacity key={c.id} style={st.contactItem} onPress={() => onOpenChat(c.id, c.name)} activeOpacity={0.7}>
+        contacts.map((contact) => (
+          <TouchableOpacity
+            key={contact.id}
+            style={st.contactItem}
+            onPress={() => onOpenChat(contact.id, contact.name)}
+            onLongPress={() => openContactMenu(contact)}
+            delayLongPress={350}
+            activeOpacity={0.7}
+          >
             <View style={st.contactAvatar}>
-              <Text style={st.contactAvatarText}>{c.name.charAt(0)}</Text>
+              <Text style={st.contactAvatarText}>{contact.name.charAt(0)}</Text>
             </View>
             <View style={st.contactInfo}>
-              <Text style={st.contactName}>{c.name}</Text>
-              <Text style={st.contactId}>{c.id}</Text>
+              <Text style={st.contactName}>{contact.name}</Text>
+              <Text style={st.contactId}>{contact.id}</Text>
             </View>
             <Text style={st.contactStatus}>Secure</Text>
           </TouchableOpacity>
@@ -193,6 +253,36 @@ export default function ContactsScreen({ onOpenChat, onOpenGroups }: Props) {
               <TouchableOpacity style={[st.addConfirmBtn, (!newContactId.trim() || !newContactName.trim()) && st.addDisabled]}
                 onPress={addContact} disabled={!newContactId.trim() || !newContactName.trim()}>
                 <Text style={st.addConfirmText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Contact Modal */}
+      <Modal visible={!!editTarget} transparent animationType="fade">
+        <View style={st.modalOverlay}>
+          <View style={st.addModalBox}>
+            <Text style={st.addModalTitle}>Edit Contact</Text>
+            <TextInput
+              style={st.addInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Contact name"
+              placeholderTextColor={c.signal.steel}
+              autoFocus
+            />
+            <Text style={[st.qrId, { marginTop: 4 }]}>{editTarget?.id}</Text>
+            <View style={st.addModalBtns}>
+              <TouchableOpacity style={st.addCancelBtn} onPress={() => { setEditTarget(null); setEditName(""); }}>
+                <Text style={st.addCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.addConfirmBtn, !editName.trim() && st.addDisabled]}
+                onPress={saveEdit}
+                disabled={!editName.trim()}
+              >
+                <Text style={st.addConfirmText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>

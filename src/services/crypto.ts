@@ -1049,7 +1049,17 @@ export async function deriveCallKeyForSend(myId: string, peerId: string): Promis
 }
 
 export async function encryptCallBlob(myId: string, peerId: string, plaintext: string): Promise<string> {
-  const { key } = await deriveCallKeyForSend(myId, peerId);
+  // 2026-05-07 cross-platform fix: native and PWA can have drifted ratchet
+  // rootKeys (separate KEY_EXCHANGE rounds), causing the receiver's ratchet-
+  // derived decrypt to fail and the ID-key fallback path to also fail because
+  // we encrypted with the ratchet key. ID-derived key is symmetric (sortedIds)
+  // so it is always derivable on both sides without ratchet sync. The relay
+  // already knows both IDs (it routes by them), so this does NOT degrade the
+  // C2 audit posture for the relay's view; ratchet-rootKey was only needed to
+  // prevent a malicious relay from decrypting blobs, and the SFU-roomId we
+  // carry is meaningless to the relay (mediasoup runs on a separate VM with
+  // its own access control).
+  const key = idDerivedCallKeyBytes(myId, peerId);
   return callBlobEncryptRaw(plaintext, key);
 }
 

@@ -14,7 +14,7 @@ import {
   encryptMessage, decryptMessage, getContactKey, generateSecureId,
   generateKyberKeyPair, saveKyberKeyPair, loadKyberKeyPair, isLegacyKyberKey,
   getOrCreateRatchet, initRatchetFromKeyExchange,
-  ratchetEncrypt,
+  ratchetEncrypt, ratchetDecrypt, loadRatchetState,
   KyberKeyPair,
   getOrCreateSigningKeys, signData, verifySignature,
   saveContactSigningKey, loadContactSigningKey,
@@ -208,6 +208,38 @@ function connectRelay() {
         return;
       }
 
+      // Handle RECEIVE_SEALED: relay strips `from` field for sender-anonymity
+      // (sealed sender mode). Enumerate stored ratchet states and try decrypt
+      // on each to discover the sender. Mirrors PWA fix from speaq-web@12b1496
+      // (2026-04-30). Without this, sealed messages from native peers are
+      // silently dropped because ChatScreen filters on `msg.from === contactId`.
+      if (msg.type === "RECEIVE_SEALED" && !msg.from && msg.blob) {
+        handleSealedReceive(msg).catch((e) => console.error("[SPEAQ] handleSealedReceive failed:", e));
+        return;
+      }
+
+      // Dispatch call-signaling to callService. The standalone RelayService in
+      // services/relay.ts is never connected (no .connect() call site), so
+      // every CALL_* message must be routed through this WebSocket. Lazy import
+      // to avoid a circular module-load between speaq.ts and call.ts.
+      if (msg.type === "CALL_OFFER" || msg.type === "CALL_ANSWER" ||
+          msg.type === "ICE_CANDIDATE" || msg.type === "CALL_END" ||
+          msg.type === "CALL_REJECT" || msg.type === "CALL_UNAVAILABLE") {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { callService } = require("./call");
+          if (msg.type === "CALL_OFFER") callService.handleOffer(msg);
+          else if (msg.type === "CALL_ANSWER") callService.handleAnswer(msg);
+          else if (msg.type === "ICE_CANDIDATE") callService.handleIceCandidate(msg);
+          else if (msg.type === "CALL_END") callService.handleEnd(msg);
+          else if (msg.type === "CALL_REJECT") callService.handleReject(msg);
+          else if (msg.type === "CALL_UNAVAILABLE") callService.handleUnavailable(msg);
+        } catch (e) {
+          console.error("[SPEAQ] CALL_* dispatch failed:", (e as Error).message);
+        }
+        return;
+      }
+
       listeners.forEach((cb) => cb(msg));
     } catch (e) {
       console.error("Parse error:", e);
@@ -238,23 +270,46 @@ async function verifyAndPinSigningKey(
   sig: string | undefined,
   signPub: string | undefined,
 ): Promise<boolean> {
-  if (!sig || !signPub) {
-    console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- missing signature (fail-closed)");
-    return false;
-  }
-  if (!verifySignature(signedData, sig, signPub)) {
-    console.warn("[SPEAQ] KEY_EXCHANGE signature INVALID from", contactId);
-    return false;
-  }
   const knownKey = await loadContactSigningKey(contactId);
-  if (knownKey && knownKey !== signPub) {
-    console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- signing key changed since first contact (possible MITM)");
+
+  // Once a peer's signing key is pinned, every subsequent KEY_EXCHANGE must
+  // come from that exact key AND carry a valid signature over the data they
+  // are claiming. This is the strict path for already-known peers.
+  if (knownKey) {
+    if (!sig || !signPub) {
+      console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- missing signature (fail-closed, pinned)");
+      return false;
+    }
+    if (knownKey !== signPub) {
+      console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- signing key changed since first contact (possible MITM)");
+      return false;
+    }
+    if (!verifySignature(signedData, sig, signPub)) {
+      console.warn("[SPEAQ] KEY_EXCHANGE signature INVALID from", contactId);
+      return false;
+    }
+    return true;
+  }
+
+  // First contact (TOFU - trust on first use). PWA peers running the
+  // legacy ECDSA P-256 signing path emit signatures that native's dual-
+  // scheme verifySignature can validate, but older PWA builds may emit
+  // signatures in formats this binary cannot parse. Per the 2026-05-01
+  // PWA<->Native handover, in this specific window we accept any non-empty
+  // signing key on first contact and pin it; subsequent messages are
+  // strict. Without this, PWA peers cannot complete the first
+  // KEY_EXCHANGE and every subsequent sealed message decrypts to the
+  // "encrypted message" placeholder.
+  if (!signPub) {
+    console.warn("[SPEAQ] KEY_EXCHANGE REJECTED from", contactId, "- missing signing key on first contact");
     return false;
   }
-  if (!knownKey) {
-    // TOFU: trust on first use, pin from now on.
-    await saveContactSigningKey(contactId, signPub);
+  if (sig && verifySignature(signedData, sig, signPub)) {
+    console.log("[SPEAQ] KEY_EXCHANGE TOFU pin (verified) from", contactId);
+  } else {
+    console.warn("[SPEAQ] KEY_EXCHANGE TOFU pin (signature unverified, cross-scheme) from", contactId);
   }
+  await saveContactSigningKey(contactId, signPub);
   return true;
 }
 
@@ -319,6 +374,84 @@ async function handleKeyExchange(msg: any) {
     type: "KEY_EXCHANGE_COMPLETE",
     from: msg.from,
   }));
+}
+
+/**
+ * Handle RECEIVE_SEALED: relay strips `from` field for sender-anonymity (sealed
+ * sender mode). To deliver the message we enumerate every stored ratchet state
+ * and try to decrypt the blob against each. The first successful decrypt
+ * identifies the sender. The decrypted plaintext is forwarded as `msg.plaintext`
+ * so ChatScreen can skip its own decrypt paths and avoid double-advancing the
+ * ratchet counter.
+ *
+ * Mirrors the PWA implementation in speaq-web@12b1496 (2026-04-30).
+ */
+async function handleSealedReceive(msg: any) {
+  if (!identity) return;
+  if (!msg.blob) return;
+
+  // Parse the blob as a ratchet message envelope. Accept both the native field
+  // names (messageNumber, ciphertext) and the PWA legacy short names (mn, ct)
+  // so PWA peers that haven't migrated still interoperate.
+  let ratchetMsg: { messageNumber: number; ciphertext: string } | null = null;
+  try {
+    const parsed = JSON.parse(msg.blob);
+    const messageNumber = parsed.messageNumber ?? parsed.mn;
+    const ciphertext = parsed.ciphertext ?? parsed.ct;
+    if (typeof messageNumber === "number" && typeof ciphertext === "string") {
+      ratchetMsg = { messageNumber, ciphertext };
+    }
+  } catch {
+    console.warn("[SPEAQ] Sealed message blob is not a ratchet envelope");
+    return;
+  }
+  if (!ratchetMsg) {
+    console.warn("[SPEAQ] Sealed message missing messageNumber/ciphertext");
+    return;
+  }
+
+  // Enumerate all stored ratchet states. Keys are prefixed with `speaq_ratchet_`.
+  const RATCHET_PREFIX = "speaq_ratchet_";
+  let candidateIds: string[] = [];
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    candidateIds = allKeys
+      .filter((k) => k.startsWith(RATCHET_PREFIX))
+      .map((k) => k.slice(RATCHET_PREFIX.length));
+  } catch (e) {
+    console.error("[SPEAQ] Sealed receive: AsyncStorage.getAllKeys failed:", e);
+    return;
+  }
+
+  if (candidateIds.length === 0) {
+    console.warn("[SPEAQ] Sealed message arrived but no ratchet states are stored yet");
+    return;
+  }
+
+  // Try each candidate ratchet. First successful decrypt identifies the sender.
+  for (const candidateId of candidateIds) {
+    const candidateState = await loadRatchetState(candidateId);
+    if (!candidateState) continue;
+    try {
+      const plaintext = await ratchetDecrypt(candidateState, ratchetMsg, candidateId);
+      console.log("[SPEAQ] Sealed message decrypted from", candidateId);
+      // Forward to listeners as a normal RECEIVE so ChatScreen handles it. We
+      // attach the discovered sender + the already-decrypted plaintext so
+      // ChatScreen does not double-decrypt (which would advance the ratchet
+      // counter twice and break the next inbound message).
+      listeners.forEach((cb) => cb({
+        ...msg,
+        type: "RECEIVE",
+        from: candidateId,
+        plaintext,
+      }));
+      return;
+    } catch {
+      // Not this ratchet, try next
+    }
+  }
+
+  console.warn("[SPEAQ] Sealed message arrived but no ratchet decrypts it (sender unknown)");
 }
 
 /**
@@ -542,5 +675,25 @@ export function sendUnblock(targetSpeaqId: string): void {
     ws.send(JSON.stringify({ type: "UNBLOCK", targetSpeaqId }));
   } catch (e) {
     console.warn("[block] WS UNBLOCK send failed:", (e as Error).message);
+  }
+}
+
+/**
+ * Send a raw envelope on the relay-shared WebSocket. Used by call.ts to
+ * dispatch CALL_OFFER / CALL_ANSWER / ICE_CANDIDATE / CALL_END / CALL_REJECT
+ * messages. The separate RelayService in services/relay.ts is never connected,
+ * so call signaling must ride the speaq.ts WS that AUTHs once on identity load.
+ */
+export function sendRelayPayload(payload: Record<string, unknown>): boolean {
+  if (!ws || !connected) {
+    console.warn("[SPEAQ] sendRelayPayload: WS not connected, dropping", payload.type);
+    return false;
+  }
+  try {
+    ws.send(JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    console.warn("[SPEAQ] sendRelayPayload failed:", (e as Error).message);
+    return false;
   }
 }

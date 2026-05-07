@@ -12,17 +12,21 @@ import {
   MediaStream,
 } from "react-native-webrtc";
 import { relay } from "./relay";
-import { getIdentity } from "./speaq";
+import { getIdentity, sendRelayPayload } from "./speaq";
 import { encryptCallBlob, decryptCallBlob } from "./crypto";
+import { getIceServers } from "./turn";
+import { connectSfu, type SfuSession } from "./sfu";
+import InCallManager from "react-native-incall-manager";
 
 export type CallState = "idle" | "calling" | "ringing" | "connected" | "ended";
 
 type CallEventHandler = (data: any) => void;
 
-// SPEAQ-operated STUN/TURN. coturn on the speaq-node VM. No Google data exposure.
-const ICE_SERVERS = [
-  { urls: "stun:stun.thespeaq.com:3478" },
-  { urls: "stun:136.109.120.222:3478" },
+// STUN-only fallback used when the relay /api/v1/turn-credentials lookup fails
+// (offline, transient relay error). Cross-network calls without TURN will fail
+// to negotiate over symmetric NAT, so we fetch real iceServers per-call below.
+const ICE_SERVERS_FALLBACK = [
+  { urls: "stun:turn.thespeaq.com:3478" },
 ];
 
 // C2-N + C2.2-N audit fix (2026-04-26): every WebRTC signaling payload is now
@@ -62,8 +66,13 @@ class CallService {
   private callState: CallState = "idle";
   private contactId: string | null = null;
   private isVideo: boolean = false;
+  private speakerOn: boolean = false;
   private handlers: Map<string, CallEventHandler[]> = new Map();
   private iceCandidateBuffer: RTCIceCandidate[] = [];
+  // SFU room-based call state (replaces p2p+TURN flow for 1-on-1 calls).
+  // PWA peers already use this since 2026-05-03; native joins the same room.
+  private sfuSession: SfuSession | null = null;
+  private sfuRoomId: string | null = null;
 
   constructor() {
     // Listen for call signaling from relay
@@ -83,51 +92,65 @@ class CallService {
     this.contactId = contactId;
     this.isVideo = video;
     this.callId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    this.sfuRoomId = this.callId;
     this.setState("calling");
 
-    await this.setupPeerConnection();
     await this.getLocalMedia(video);
 
-    const offer = await this.pc!.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: video,
-    });
-    await this.pc!.setLocalDescription(offer);
+    try {
+      InCallManager.start({ media: video ? "video" : "audio" });
+      InCallManager.setForceSpeakerphoneOn(video);
+      InCallManager.setKeepScreenOn(true);
+      this.speakerOn = video;
+    } catch (e) {
+      console.warn("[SPEAQ] InCallManager.start failed:", (e as Error).message);
+    }
 
-    relay.on("__raw_send", () => {});
-    const ws = (relay as any).ws;
-    if (ws) {
+    await this.joinSfuAndPublish(this.sfuRoomId, video);
+
+    {
       const myId = getIdentity()?.speaqId;
-      const blob = myId ? await encryptCallBlob(myId, contactId, JSON.stringify({ sdp: offer.sdp, video })) : null;
-      ws.send(JSON.stringify({
+      const blob = myId ? await encryptCallBlob(myId, contactId, JSON.stringify({ sfu: true, roomId: this.sfuRoomId, video })) : null;
+      sendRelayPayload({
         type: "CALL_OFFER",
         to: contactId,
-        ...(blob ? { blob } : { sdp: offer.sdp, video }),
+        ...(blob ? { blob } : { sfu: true, roomId: this.sfuRoomId, video }),
         callId: this.callId,
-        video, // kept top-level so the receiver can render UI before decrypting
-      }));
+        sfu: true,
+        roomId: this.sfuRoomId,
+        video,
+      });
+      console.log("[SPEAQ-SFU] CALL_OFFER sent, room=", this.sfuRoomId);
     }
   }
 
   async acceptCall(): Promise<void> {
-    if (this.callState !== "ringing" || !this.pc) return;
+    if (this.callState !== "ringing" || !this.sfuRoomId) return;
 
     await this.getLocalMedia(this.isVideo);
 
-    const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer);
+    try {
+      InCallManager.start({ media: this.isVideo ? "video" : "audio" });
+      InCallManager.setForceSpeakerphoneOn(this.isVideo);
+      InCallManager.setKeepScreenOn(true);
+      this.speakerOn = this.isVideo;
+    } catch (e) {
+      console.warn("[SPEAQ] InCallManager.start (accept) failed:", (e as Error).message);
+    }
 
-    const ws = (relay as any).ws;
-    if (ws) {
+    await this.joinSfuAndPublish(this.sfuRoomId, this.isVideo);
+
+    {
       const myId = getIdentity()?.speaqId;
-      const blob = myId && this.contactId ? await encryptCallBlob(myId, this.contactId, JSON.stringify({ sdp: answer.sdp })) : null;
-      ws.send(JSON.stringify({
+      const blob = myId && this.contactId ? await encryptCallBlob(myId, this.contactId, JSON.stringify({ sfu: true, accepted: true })) : null;
+      sendRelayPayload({
         type: "CALL_ANSWER",
         to: this.contactId,
-        ...(blob ? { blob } : { sdp: answer.sdp }),
+        ...(blob ? { blob } : { sfu: true, accepted: true }),
         callId: this.callId,
-      }));
+      });
     }
+    this.setState("connected");
 
     // Flush buffered ICE candidates
     for (const candidate of this.iceCandidateBuffer) {
@@ -141,14 +164,11 @@ class CallService {
   rejectCall(): void {
     if (this.callState !== "ringing") return;
 
-    const ws = (relay as any).ws;
-    if (ws) {
-      ws.send(JSON.stringify({
-        type: "CALL_REJECT",
-        to: this.contactId,
-        callId: this.callId,
-      }));
-    }
+    sendRelayPayload({
+      type: "CALL_REJECT",
+      to: this.contactId,
+      callId: this.callId,
+    });
 
     this.cleanup();
   }
@@ -156,13 +176,12 @@ class CallService {
   endCall(): void {
     if (this.callState === "idle") return;
 
-    const ws = (relay as any).ws;
-    if (ws && this.contactId) {
-      ws.send(JSON.stringify({
+    if (this.contactId) {
+      sendRelayPayload({
         type: "CALL_END",
         to: this.contactId,
         callId: this.callId,
-      }));
+      });
     }
 
     this.cleanup();
@@ -179,7 +198,20 @@ class CallService {
   }
 
   toggleSpeaker(): void {
-    // Handled by react-native-webrtc InCallManager or system audio routing
+    // Toggle the iOS audio output between earpiece and speaker via
+    // InCallManager (which calls AVAudioSession overrideOutputAudioPort
+    // under the hood).
+    try {
+      this.speakerOn = !this.speakerOn;
+      InCallManager.setForceSpeakerphoneOn(this.speakerOn);
+      this.emit("speakerChanged", this.speakerOn);
+    } catch (e) {
+      console.warn("[SPEAQ] toggleSpeaker failed:", (e as Error).message);
+    }
+  }
+
+  isSpeakerOn(): boolean {
+    return this.speakerOn;
   }
 
   toggleCamera(): boolean {
@@ -248,31 +280,48 @@ class CallService {
   }
 
   private async setupPeerConnection(): Promise<void> {
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const myId = getIdentity()?.speaqId || "";
+    let iceServers = ICE_SERVERS_FALLBACK;
+    try {
+      const fetched = await getIceServers(myId);
+      if (fetched && fetched.length > 0) {
+        iceServers = fetched as any;
+        console.log("[SPEAQ-DBG] iceServers fetched:", iceServers.length, "entries");
+      }
+    } catch (e) {
+      console.warn("[SPEAQ] getIceServers failed, using STUN fallback:", (e as Error).message);
+    }
+    this.pc = new RTCPeerConnection({ iceServers });
 
     this.pc.onicecandidate = async (event: any) => {
       if (event.candidate && this.contactId) {
-        const ws = (relay as any).ws;
-        if (!ws) return;
         const myId = getIdentity()?.speaqId;
         const blob = myId ? await encryptCallBlob(myId, this.contactId, JSON.stringify({ candidate: event.candidate })) : null;
-        ws.send(JSON.stringify({
+        sendRelayPayload({
           type: "ICE_CANDIDATE",
           to: this.contactId,
           ...(blob ? { blob } : { candidate: event.candidate }),
           callId: this.callId,
-        }));
+        });
       }
     };
 
     this.pc.ontrack = (event: any) => {
       if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach((t: any) => {
+          console.log("[SPEAQ-DBG] remote track:", t.kind, "muted=", t.muted, "enabled=", t.enabled);
+        });
         this.remoteStream = event.streams[0];
         this.emit("remoteStream", this.remoteStream);
       }
     };
 
+    this.pc.oniceconnectionstatechange = () => {
+      console.log("[SPEAQ-DBG] iceConnectionState=", this.pc?.iceConnectionState);
+    };
+
     this.pc.onconnectionstatechange = () => {
+      console.log("[SPEAQ-DBG] connectionState=", this.pc?.connectionState);
       if (this.pc?.connectionState === "disconnected" || this.pc?.connectionState === "failed") {
         this.cleanup();
       }
@@ -287,44 +336,113 @@ class CallService {
 
     this.localStream = await mediaDevices.getUserMedia(constraints) as MediaStream;
 
-    if (this.pc && this.localStream) {
+    // Log every track for diagnostics. SFU-pad does not need addTrack on a
+    // p2p RTCPeerConnection; tracks are published via sfuSession.publish() in
+    // joinSfuAndPublish() below.
+    if (this.localStream) {
       this.localStream.getTracks().forEach((track: any) => {
-        this.pc!.addTrack(track, this.localStream!);
+        console.log("[SPEAQ-DBG] local track:", track.kind, "muted=", track.muted, "enabled=", track.enabled);
       });
     }
 
     this.emit("localStream", this.localStream);
   }
 
-  private async handleOffer(msg: any): Promise<void> {
-    if (this.callState !== "idle") {
-      // Already in a call, reject
-      const ws = (relay as any).ws;
-      if (ws) {
-        ws.send(JSON.stringify({ type: "CALL_REJECT", to: msg.from, callId: msg.callId }));
+  /**
+   * SFU room join + publish lokale tracks. Mirrors PWA behaviour from
+   * speaq-web-build/src/app/app/sfu.ts: each peer connects to the same
+   * roomId (= callId) on wss://sfu.thespeaq.com and publishes their tracks.
+   * Remote tracks bubble up to CallScreen via the existing remoteStream
+   * event, wrapped in a fresh MediaStream per kind.
+   */
+  private async joinSfuAndPublish(roomId: string, _video: boolean): Promise<void> {
+    if (!this.localStream) {
+      throw new Error("joinSfuAndPublish: localStream missing");
+    }
+    const session = await connectSfu(roomId);
+    this.sfuSession = session;
+    console.log("[SPEAQ-SFU] joined room=", roomId, "as peerId=", session.ourPeerId);
+
+    session.onRemoteTrack((peerId, track, kind) => {
+      console.log("[SPEAQ-SFU] remote track from", peerId, kind);
+      // Wrap into a MediaStream so CallScreen's RTCView (which expects a
+      // streamURL) and AVAudioSession playback both work as before.
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream([track] as any);
+      } else {
+        try { (this.remoteStream as any).addTrack(track); } catch {}
       }
+      this.emit("remoteStream", this.remoteStream);
+    });
+
+    session.onPeerLeft((peerId) => {
+      console.log("[SPEAQ-SFU] peer left", peerId);
+    });
+
+    for (const track of this.localStream.getTracks()) {
+      const kind = (track as any).kind === "video" ? "video" : "audio";
+      await session.publish(track, kind as any);
+      console.log("[SPEAQ-SFU] published", kind);
+    }
+  }
+
+  // PUBLIC: dispatched by speaq.ts ws.onmessage (the relay-shared WS owned
+  // by speaq.ts). The relay-service WS in relay.ts is never connected, so
+  // these handlers must be reachable from outside this class. Behaviour is
+  // unchanged - only visibility was widened.
+  async handleOffer(msg: any): Promise<void> {
+    if (this.callState !== "idle") {
+      sendRelayPayload({ type: "CALL_REJECT", to: msg.from, callId: msg.callId });
       return;
     }
 
+    // Try SFU-flow first: PWA peers carry { sfu: true, roomId, video } in the
+    // encrypted blob (and as top-level msg.sfu/msg.roomId when relay strips
+    // the blob for legacy pre-blob clients). If sfu is missing, fall back to
+    // the p2p path for older callers.
     const decoded = await tryDecryptCallBlob(msg.from, msg, "sdp");
-    if (!decoded || !decoded.sdp) {
-      console.error("[SPEAQ] CALL_OFFER without usable SDP, ignoring");
+    const isSfu = (decoded && decoded.sfu) || msg.sfu === true;
+    const sfuRoomId = (decoded && decoded.roomId) || msg.roomId;
+
+    if (isSfu && sfuRoomId) {
+      this.contactId = msg.from;
+      this.callId = msg.callId;
+      this.sfuRoomId = String(sfuRoomId);
+      this.isVideo = (decoded && decoded.video) ?? msg.video ?? false;
+      this.setState("ringing");
+      this.emit("incomingCall", { from: msg.from, callId: msg.callId, video: this.isVideo });
+      console.log("[SPEAQ-SFU] incoming SFU call, room=", this.sfuRoomId);
       return;
     }
 
+    // Legacy p2p fallback (for callers running pre-1.0.6(4) builds).
+    if (!decoded || !decoded.sdp) {
+      console.error("[SPEAQ] CALL_OFFER without usable SDP or SFU room, ignoring");
+      return;
+    }
     this.contactId = msg.from;
     this.callId = msg.callId;
     this.isVideo = decoded.video ?? msg.video ?? false;
     this.setState("ringing");
-
     await this.setupPeerConnection();
     await this.pc!.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: decoded.sdp }));
-
     this.emit("incomingCall", { from: msg.from, callId: msg.callId, video: this.isVideo });
   }
 
-  private async handleAnswer(msg: any): Promise<void> {
-    if (!this.pc || msg.callId !== this.callId) return;
+  async handleAnswer(msg: any): Promise<void> {
+    if (msg.callId !== this.callId) return;
+
+    // SFU-flow: the answer just confirms the callee joined the same room.
+    // No SDP processing needed - mediasoup already established the media path
+    // when both sides called connectSfu(roomId).
+    if (this.sfuSession) {
+      console.log("[SPEAQ-SFU] CALL_ANSWER received, marking connected");
+      this.setState("connected");
+      return;
+    }
+
+    // Legacy p2p answer.
+    if (!this.pc) return;
     const decoded = await tryDecryptCallBlob(msg.from || this.contactId || undefined, msg, "sdp");
     if (!decoded || !decoded.sdp) {
       console.error("[SPEAQ] CALL_ANSWER without usable SDP, ignoring");
@@ -334,8 +452,11 @@ class CallService {
     this.setState("connected");
   }
 
-  private async handleIceCandidate(msg: any): Promise<void> {
+  async handleIceCandidate(msg: any): Promise<void> {
     if (msg.callId !== this.callId) return;
+    // No-op for SFU calls (mediasoup handles its own ICE).
+    if (this.sfuSession) return;
+
     const decoded = await tryDecryptCallBlob(msg.from || this.contactId || undefined, msg, "candidate");
     if (!decoded || !decoded.candidate) return;
     const candidate = new RTCIceCandidate(decoded.candidate);
@@ -346,18 +467,18 @@ class CallService {
     }
   }
 
-  private handleEnd(msg: any): void {
+  handleEnd(msg: any): void {
     if (msg.callId !== this.callId) return;
     this.cleanup();
   }
 
-  private handleReject(msg: any): void {
+  handleReject(msg: any): void {
     if (msg.callId !== this.callId) return;
     this.emit("callRejected", msg);
     this.cleanup();
   }
 
-  private handleUnavailable(msg: any): void {
+  handleUnavailable(msg: any): void {
     if (msg.callId !== this.callId) return;
     this.emit("callUnavailable", msg);
     this.cleanup();
@@ -365,6 +486,16 @@ class CallService {
 
   private cleanup(): void {
     this.stopQualityMonitor();
+    // Release AVAudioSession back to system. Pairs with InCallManager.start()
+    // in startCall + acceptCall. Without this the audio session stays in
+    // PlayAndRecord and other apps cannot reclaim the speaker route.
+    try {
+      InCallManager.stop();
+      InCallManager.setKeepScreenOn(false);
+      this.speakerOn = false;
+    } catch (e) {
+      console.warn("[SPEAQ] InCallManager.stop failed:", (e as Error).message);
+    }
     if (this.screenShareStream) {
       this.screenShareStream.getTracks().forEach((track: any) => track.stop());
       this.screenShareStream = null;
@@ -378,6 +509,11 @@ class CallService {
       this.pc.close();
       this.pc = null;
     }
+    if (this.sfuSession) {
+      try { this.sfuSession.close(); } catch {}
+      this.sfuSession = null;
+    }
+    this.sfuRoomId = null;
     // Cleanup group peers
     for (const [, pc] of this.groupPeers) {
       pc.close();
@@ -413,22 +549,27 @@ class CallService {
 
     await this.getLocalMedia(video);
 
+    const myIdGroup = getIdentity()?.speaqId || "";
+    let groupIceServers: any = ICE_SERVERS_FALLBACK;
+    try {
+      const fetched = await getIceServers(myIdGroup);
+      if (fetched && fetched.length > 0) groupIceServers = fetched;
+    } catch {}
+
     // Create a peer connection for each member
     for (const memberId of memberIds) {
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({ iceServers: groupIceServers });
 
       pc.onicecandidate = async (event: any) => {
         if (event.candidate) {
-          const ws = (relay as any).ws;
-          if (!ws) return;
           const myId = getIdentity()?.speaqId;
           const blob = myId ? await encryptCallBlob(myId, memberId, JSON.stringify({ candidate: event.candidate })) : null;
-          ws.send(JSON.stringify({
+          sendRelayPayload({
             type: "ICE_CANDIDATE",
             to: memberId,
             ...(blob ? { blob } : { candidate: event.candidate }),
             callId: this.callId,
-          }));
+          });
         }
       };
 
@@ -451,18 +592,17 @@ class CallService {
       });
       await pc.setLocalDescription(offer);
 
-      const ws = (relay as any).ws;
-      if (ws) {
+      {
         const myId = getIdentity()?.speaqId;
         const blob = myId ? await encryptCallBlob(myId, memberId, JSON.stringify({ sdp: offer.sdp, video })) : null;
-        ws.send(JSON.stringify({
+        sendRelayPayload({
           type: "CALL_OFFER",
           to: memberId,
           ...(blob ? { blob } : { sdp: offer.sdp, video }),
           callId: this.callId,
           video, // kept top-level so the receiver can render UI before decrypting
           group: true,
-        }));
+        });
       }
 
       this.groupPeers.set(memberId, pc);

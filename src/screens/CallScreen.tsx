@@ -9,6 +9,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from "react
 import { RTCView } from "react-native-webrtc";
 import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { callService, CallState } from "../services/call";
+import { MicIcon, VideoIcon, FlipCameraIcon, ScreenShareIcon, PhoneEndIcon, PhoneIcon } from "../components/Icons";
 
 interface Props {
   contactName: string;
@@ -162,41 +163,41 @@ export default function CallScreen({ contactName, isVideo, isIncoming, onEnd }: 
           {callState === "ringing" && isIncoming ? (
             <View style={st.incomingRow}>
               <TouchableOpacity style={st.rejectBtn} onPress={handleReject}>
-                <Text style={st.btnIcon}>X</Text>
+                <PhoneEndIcon size={28} color="#fff" />
                 <Text style={st.btnLabel}>Decline</Text>
               </TouchableOpacity>
               <TouchableOpacity style={st.acceptBtn} onPress={handleAccept}>
-                <Text style={st.btnIcon}>P</Text>
+                <PhoneIcon size={28} color="#fff" />
                 <Text style={st.btnLabel}>Accept</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={st.activeRow}>
               <TouchableOpacity style={[st.ctrlBtn, muted && st.ctrlActive]} onPress={handleMute}>
-                <Text style={st.ctrlIcon}>M</Text>
+                <MicIcon size={26} off={muted} color="#fff" />
                 <Text style={st.ctrlLabel}>{muted ? "Unmute" : "Mute"}</Text>
               </TouchableOpacity>
 
               {isVideo && (
                 <>
                   <TouchableOpacity style={[st.ctrlBtn, cameraOff && st.ctrlActive]} onPress={handleCamera}>
-                    <Text style={st.ctrlIcon}>C</Text>
+                    <VideoIcon size={26} off={cameraOff} color="#fff" />
                     <Text style={st.ctrlLabel}>{cameraOff ? "Camera On" : "Camera Off"}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={st.ctrlBtn} onPress={handleFlip}>
-                    <Text style={st.ctrlIcon}>F</Text>
+                    <FlipCameraIcon size={26} color="#fff" />
                     <Text style={st.ctrlLabel}>Flip</Text>
                   </TouchableOpacity>
                 </>
               )}
 
               <TouchableOpacity style={[st.ctrlBtn, screenSharing && st.ctrlActive]} onPress={handleScreenShare}>
-                <Text style={st.ctrlIcon}>S</Text>
+                <ScreenShareIcon size={26} color="#fff" />
                 <Text style={st.ctrlLabel}>{screenSharing ? "Stop Share" : "Share"}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={st.endBtn} onPress={handleEnd}>
-                <Text style={st.endIcon}>X</Text>
+                <PhoneEndIcon size={28} color="#fff" />
                 <Text style={st.ctrlLabel}>End</Text>
               </TouchableOpacity>
             </View>
