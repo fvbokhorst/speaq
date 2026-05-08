@@ -350,10 +350,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             <Text style={st.balanceHint}>{t("available")}: {balance.toFixed(2)} QC</Text>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowSend(false); setSendTo(""); setSendToName(""); setSendAmount(""); setSendNote(""); }}>
-                <Text style={st.cancelText}>{t("cancel")}</Text>
+                <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={st.confirmBtn} onPress={handleProceedToConfirm}>
-                <Text style={st.confirmText}>{t("next")}</Text>
+                <Text style={[st.confirmText, { color: "#0F172A" }]}>{t("next")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -380,10 +380,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             </View>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowConfirm(false); setShowSend(true); }}>
-                <Text style={st.cancelText}>{t("back")}</Text>
+                <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("back")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={st.confirmBtnGold} onPress={handleConfirmSend}>
-                <Text style={st.confirmText}>{t("confirm")}</Text>
+                <Text style={[st.confirmText, { color: "#0F172A" }]}>{t("confirm")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -411,7 +411,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
               </ScrollView>
             )}
             <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowContactPicker(false); setShowSend(true); }}>
-              <Text style={st.cancelText}>{t("cancel")}</Text>
+              <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("cancel")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -437,7 +437,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
               </View>
             )}
             <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowRequest(false); setReceiveAmount(""); }}>
-              <Text style={st.cancelText}>{t("close")}</Text>
+              <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -454,11 +454,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
               placeholder={t("description")} placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowNewProject(false)}>
-                <Text style={st.cancelText}>{t("cancel")}</Text>
+                <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[st.confirmBtn, !projectName.trim() && { opacity: 0.3 }]}
                 onPress={handleCreateProject} disabled={!projectName.trim()}>
-                <Text style={st.confirmText}>{t("create")}</Text>
+                <Text style={[st.confirmText, { color: "#0F172A" }]}>{t("create")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -486,11 +486,11 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
               placeholder={t("labelOptional")} placeholderTextColor={c.signal.steel} />
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => setShowLinkWallet(false)}>
-                <Text style={st.cancelText}>{t("cancel")}</Text>
+                <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[st.confirmBtn, !walletAddress.trim() && { opacity: 0.3 }]}
                 onPress={handleLinkWallet} disabled={!walletAddress.trim()}>
-                <Text style={st.confirmText}>{t("link")}</Text>
+                <Text style={[st.confirmText, { color: "#0F172A" }]}>{t("link")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -513,7 +513,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             <Text style={st.qrId}>{identity?.speaqId || "No ID"}</Text>
             <Text style={st.qrHint}>{t("shareQrHint")}</Text>
             <TouchableOpacity style={st.cancelBtn} onPress={() => setShowReceive(false)}>
-              <Text style={st.cancelText}>{t("close")}</Text>
+              <Text style={[st.cancelText, { color: "#0F172A" }]}>{t("close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
