@@ -14,6 +14,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
 import DocumentPicker from "react-native-document-picker";
+import RNFS from "react-native-fs";
 import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
 import { sendMessage, sendQCPayment, onMessage, getIdentity, sendBlock } from "../services/speaq";
 import {
@@ -193,13 +194,40 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               // walletReceiveListener (see App.tsx). ChatScreen renders the
               // payment-bubble below but does NOT credit the wallet itself,
               // to avoid double-credit when both handlers fire.
-              const flagged = data.text ? containsObjectionableContent(data.text, getLanguage() as SafetyLang) : false;
+              // Cross-platform attachment detection mirrors PWA conventions
+              // at speaq-web/page.tsx:3083 (photo) and 3108 (file). The text
+              // payload contains base64 data URL wrapped in [img]...[/img] or
+              // [file:name]...[/file] markers. Extract into fileUri so the
+              // existing image-bubble + file-row renderers can show them.
+              let attachedImageDataUrl: string | undefined;
+              let attachedFileName: string | undefined;
+              if (typeof data.text === "string") {
+                const imgMatch = data.text.match(/^\[img\]([\s\S]+)\[\/img\]$/);
+                if (imgMatch) {
+                  attachedImageDataUrl = imgMatch[1];
+                } else {
+                  const fileMatch = data.text.match(/^\[file:([^\]]+)\]([\s\S]+)\[\/file\]$/);
+                  if (fileMatch) {
+                    attachedFileName = fileMatch[1];
+                    attachedImageDataUrl = fileMatch[2];
+                  }
+                }
+              }
+              const flagged = data.text && !attachedImageDataUrl
+                ? containsObjectionableContent(data.text, getLanguage() as SafetyLang)
+                : false;
+              const messageType: StoredMessage["type"] =
+                attachedImageDataUrl && !attachedFileName ? "image" :
+                attachedFileName ? "file" :
+                (data.qc || data.paymentAmount) ? "payment" : "text";
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
-                text: data.text,
+                text: attachedFileName || (attachedImageDataUrl ? "[Photo]" : data.text),
                 sent: false,
-                type: (data.qc || data.paymentAmount) ? "payment" : "text",
+                type: messageType,
                 amount: data.amount || data.paymentAmount,
+                fileName: attachedFileName,
+                fileUri: attachedImageDataUrl,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
                 flagged,
               };
@@ -311,18 +339,43 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
 
   async function handlePickImage() {
     try {
-      const result = await launchImageLibrary({ mediaType: "mixed", selectionLimit: 1 });
-      if (result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        const name = asset.fileName || "photo";
-        setMessages((prev) => [...prev, {
-          id: Date.now().toString(), text: name, sent: true, type: "image",
-          fileName: name, fileUri: asset.uri, timestamp: now(),
-        }]);
-        sendMessage(contactId, `[File: ${name}]`);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      // quality 0.5 + maxWidth/Height 1280 caps payload size. Mirrors PWA's
+      // compressImage default (1280px / quality 0.75) reasonably closely.
+      const result = await launchImageLibrary({
+        mediaType: "mixed",
+        selectionLimit: 1,
+        quality: 0.5,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        includeBase64: false,
+      });
+      if (!result.assets || !result.assets[0]) return;
+      const asset = result.assets[0];
+      const name = asset.fileName || "photo";
+      if (!asset.uri) return;
+      // Cap 10MB raw to mirror PWA chat photo limit at speaq-web/page.tsx:3072.
+      // Cross-platform interop requires the wire format to match: PWA packs
+      // photos as text "[img]<dataUrl>[/img]", so we do the same and the
+      // receiver-side parser (see ChatScreen receive at line ~175) extracts
+      // the dataUrl into fileUri for the existing image-bubble renderer.
+      const fileSize = asset.fileSize || 0;
+      if (fileSize > 10 * 1024 * 1024) {
+        Alert.alert(t("fileTooLarge") || "File too large", "Maximum 10 MB.");
+        return;
       }
-    } catch (e) {}
+      const base64 = await RNFS.readFile(asset.uri, "base64");
+      const mime = asset.type || "image/jpeg";
+      const dataUrl = `data:${mime};base64,${base64}`;
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(), text: name, sent: true, type: "image",
+        fileName: name, fileUri: dataUrl, timestamp: now(),
+      }]);
+      sendMessage(contactId, `[img]${dataUrl}[/img]`);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (e) {
+      console.error("[ChatScreen] handlePickImage failed:", e);
+      Alert.alert("Photo error", "Could not send photo.");
+    }
   }
 
   async function handlePickFile() {
