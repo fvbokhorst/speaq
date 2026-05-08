@@ -197,19 +197,21 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               // Cross-platform attachment detection mirrors PWA conventions
               // at speaq-web/page.tsx:3083 (photo) and 3108 (file). The text
               // payload contains base64 data URL wrapped in [img]...[/img] or
-              // [file:name]...[/file] markers. Extract into fileUri so the
-              // existing image-bubble + file-row renderers can show them.
+              // [file:name]...[/file] markers. We use startsWith + slice
+              // instead of regex.match because Hermes regex on multi-KB
+              // strings (typical for base64 photos) can freeze or crash in
+              // Release builds. String-slicing is O(n) and safe for any size.
               let attachedImageDataUrl: string | undefined;
               let attachedFileName: string | undefined;
               if (typeof data.text === "string") {
-                const imgMatch = data.text.match(/^\[img\]([\s\S]+)\[\/img\]$/);
-                if (imgMatch) {
-                  attachedImageDataUrl = imgMatch[1];
-                } else {
-                  const fileMatch = data.text.match(/^\[file:([^\]]+)\]([\s\S]+)\[\/file\]$/);
-                  if (fileMatch) {
-                    attachedFileName = fileMatch[1];
-                    attachedImageDataUrl = fileMatch[2];
+                if (data.text.startsWith("[img]") && data.text.endsWith("[/img]")) {
+                  attachedImageDataUrl = data.text.slice(5, data.text.length - 6);
+                } else if (data.text.startsWith("[file:")) {
+                  const closeBracket = data.text.indexOf("]");
+                  const endTag = "[/file]";
+                  if (closeBracket > 6 && data.text.endsWith(endTag)) {
+                    attachedFileName = data.text.slice(6, closeBracket);
+                    attachedImageDataUrl = data.text.slice(closeBracket + 1, data.text.length - endTag.length);
                   }
                 }
               }
@@ -367,11 +369,14 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
       const base64 = await RNFS.readFile(asset.uri, "base64");
       const mime = asset.type || "image/jpeg";
       const dataUrl = `data:${mime};base64,${base64}`;
+      console.log("[ChatScreen] photo dataUrl size:", dataUrl.length, "rawSize:", asset.fileSize, "mime:", mime);
       setMessages((prev) => [...prev, {
         id: Date.now().toString(), text: name, sent: true, type: "image",
         fileName: name, fileUri: dataUrl, timestamp: now(),
       }]);
-      sendMessage(contactId, `[img]${dataUrl}[/img]`);
+      const photoText = `[img]${dataUrl}[/img]`;
+      console.log("[ChatScreen] photo wire-text size:", photoText.length);
+      sendMessage(contactId, photoText);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e) {
       console.error("[ChatScreen] handlePickImage failed:", e);
