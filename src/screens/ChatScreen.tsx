@@ -267,7 +267,8 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
     Alert.prompt(t("sendQCreditsChat"), `${t("send")} QC ${t("to")} ${contactName}:`, [
       { text: t("cancel"), style: "cancel" },
       { text: t("send"), onPress: (val) => {
-        const amount = parseFloat(val || "0");
+        // Locale-tolerant parse: NL keyboards send comma as decimal separator.
+        const amount = parseFloat((val || "0").replace(",", "."));
         if (amount <= 0) return;
         if (amount > walletService.getBalance()) {
           Alert.alert(t("insufficient"), t("insufficientQC"));

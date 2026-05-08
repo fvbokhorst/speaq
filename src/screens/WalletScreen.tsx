@@ -69,7 +69,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
   const identity = getIdentity();
 
   function handleProceedToConfirm() {
-    const amount = parseFloat(parseFloat(sendAmount).toFixed(8));
+    // Locale-tolerant parse: NL keyboards send "," as decimal separator,
+    // but parseFloat only accepts "." Without this, "0,01" becomes NaN
+    // and the validation falsely rejects valid amounts.
+    const amount = parseFloat(parseFloat(sendAmount.replace(",", ".")).toFixed(8));
     if (!sendTo.trim() || isNaN(amount) || amount <= 0) {
       Alert.alert(t("invalid"), t("invalidRecipientAmount"));
       return;
@@ -84,7 +87,8 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
   }
 
   async function handleConfirmSend() {
-    const amount = parseFloat(sendAmount);
+    // Locale-tolerant parse, see handleProceedToConfirm.
+    const amount = parseFloat(sendAmount.replace(",", "."));
     const recipientId = sendTo.trim();
     walletService.send(recipientId, amount, sendNote.trim());
     setBalance(walletService.getBalance());
@@ -124,7 +128,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
         Alert.prompt(t("fundProject"), t("fundProjectMsg").replace("%s", balance.toFixed(2)), [
           { text: t("cancel"), style: "cancel" },
           { text: t("fund"), onPress: (val) => {
-            const amount = parseFloat(val || "0");
+            const amount = parseFloat((val || "0").replace(",", "."));
             if (amount > 0 && walletService.fundProject(project.id, amount)) {
               setBalance(walletService.getBalance());
               setProjects(walletService.getProjects());
@@ -137,7 +141,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
         Alert.prompt(t("withdraw"), t("withdrawMsg").replace("%s", project.balance.toFixed(2)), [
           { text: t("cancel"), style: "cancel" },
           { text: t("withdraw"), onPress: (val) => {
-            const amount = parseFloat(val || "0");
+            const amount = parseFloat((val || "0").replace(",", "."));
             if (amount > 0 && walletService.withdrawFromProject(project.id, amount)) {
               setBalance(walletService.getBalance());
               setProjects(walletService.getProjects());
@@ -361,7 +365,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>{t("confirmPayment")}</Text>
             <View style={st.confirmCard}>
-              <Text style={st.confirmAmount}>{parseFloat(sendAmount || "0").toFixed(2)}</Text>
+              <Text style={st.confirmAmount}>{parseFloat((sendAmount || "0").replace(",", ".")).toFixed(2)}</Text>
               <Text style={st.confirmQC}>Q-Credits</Text>
               <View style={st.confirmDivider} />
               <Text style={st.confirmLabel}>{t("to")}</Text>
@@ -371,7 +375,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
                 <Text style={st.confirmValue}>{sendNote}</Text>
               </> : null}
               <Text style={st.confirmLabel}>{t("remaining")}</Text>
-              <Text style={st.confirmValue}>{(balance - parseFloat(sendAmount || "0")).toFixed(2)} QC</Text>
+              <Text style={st.confirmValue}>{(balance - parseFloat((sendAmount || "0").replace(",", "."))).toFixed(2)} QC</Text>
             </View>
             <View style={st.modalBtns}>
               <TouchableOpacity style={st.cancelBtn} onPress={() => { setShowConfirm(false); setShowSend(true); }}>
