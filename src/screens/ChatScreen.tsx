@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, TouchableWithoutFeedback,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, Vibration,
-  Modal, ScrollView,
+  Modal, ScrollView, Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { launchImageLibrary } from "react-native-image-picker";
@@ -203,6 +203,7 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               // Release builds. String-slicing is O(n) and safe for any size.
               let attachedImageDataUrl: string | undefined;
               let attachedFileName: string | undefined;
+              let attachedLocation: string | undefined; // "lat,lng" if present
               if (typeof data.text === "string") {
                 if (data.text.startsWith("[img]") && data.text.endsWith("[/img]")) {
                   attachedImageDataUrl = data.text.slice(5, data.text.length - 6);
@@ -213,6 +214,16 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                     attachedFileName = data.text.slice(6, closeBracket);
                     attachedImageDataUrl = data.text.slice(closeBracket + 1, data.text.length - endTag.length);
                   }
+                } else if (data.text.startsWith("[Location:") && data.text.endsWith("]")) {
+                  // Format: "[Location: lat, lng]" matches PWA share-location
+                  // at speaq-web/page.tsx:3279. Strip prefix + suffix and trim
+                  // spaces, then store "lat,lng" in fileUri so render can use
+                  // it for the tap-to-Maps URL.
+                  const inner = data.text.slice(10, -1).trim();
+                  const parts = inner.split(",").map((s: string) => s.trim());
+                  if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+                    attachedLocation = `${parts[0]},${parts[1]}`;
+                  }
                 }
               }
               const flagged = data.text && !attachedImageDataUrl
@@ -221,15 +232,19 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               const messageType: StoredMessage["type"] =
                 attachedImageDataUrl && !attachedFileName ? "image" :
                 attachedFileName ? "file" :
+                attachedLocation ? "location" :
                 (data.qc || data.paymentAmount) ? "payment" : "text";
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
-                text: attachedFileName || (attachedImageDataUrl ? "[Photo]" : data.text),
+                text: attachedFileName ||
+                  (attachedImageDataUrl ? "[Photo]" :
+                    attachedLocation ? attachedLocation :
+                    data.text),
                 sent: false,
                 type: messageType,
                 amount: data.amount || data.paymentAmount,
                 fileName: attachedFileName,
-                fileUri: attachedImageDataUrl,
+                fileUri: attachedImageDataUrl || attachedLocation,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
                 flagged,
               };
@@ -595,10 +610,31 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                   </View>
                 )}
                 {item.type === "location" && (
-                  <View style={st.locationBubble}>
+                  <TouchableOpacity
+                    style={st.locationBubble}
+                    onPress={() => {
+                      // fileUri holds "lat,lng" string from cross-platform parser.
+                      // Use Apple Maps URL scheme on iOS for native opening.
+                      const coords = (item.fileUri || "").split(",");
+                      if (coords.length !== 2) return;
+                      const lat = coords[0].trim();
+                      const lng = coords[1].trim();
+                      const url = `https://maps.apple.com/?ll=${lat},${lng}&q=${lat},${lng}`;
+                      Linking.openURL(url).catch(() =>
+                        Alert.alert("Could not open Maps", "Apple Maps is not available.")
+                      );
+                    }}
+                  >
                     <Text style={st.locationIcon}>L</Text>
-                    <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>Location shared</Text>
-                  </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>
+                        {item.fileUri || "Location shared"}
+                      </Text>
+                      <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText, { fontSize: 11, opacity: 0.7 }]}>
+                        Tap to open in Maps
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 )}
                 {item.type === "text" && (
                   <Text style={[st.bubbleText, item.sent ? st.sentText : st.receivedText]}>{item.text}</Text>
