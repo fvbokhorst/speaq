@@ -171,9 +171,11 @@ export async function startMining(): Promise<void> {
   await AsyncStorage.setItem(MINING_ACTIVE_KEY, "true");
   await saveStats();
 
-  // Track network contributions (rewards assigned by server)
-  // No on-device computation - rewards come from relay server
+  // Run a local mining cycle every 30s for parity with PWA. trackContributions
+  // remains as a no-op level-update; simulateMiningCycle is what actually
+  // generates rewards client-side until signed server receipts ship in 1.1.0+.
   miningInterval = setInterval(() => {
+    simulateMiningCycle();
     trackContributions();
   }, 30000);
 }
@@ -217,6 +219,38 @@ function trackContributions(): void {
   // Update level based on total earned
   stats.level = Math.min(10, Math.floor(stats.totalEarned / 5) + 1);
   saveStats();
+}
+
+// Local mining cycle for cross-platform parity with PWA. The native client
+// originally waited on signed mining receipts from the relay server, but that
+// flow is not yet built, so users mined zero. Mirrors PWA simulateMiningCycle
+// at speaq-web/src/app/app/mining.ts so iPhone earns rewards at the same
+// rate. Real signed Proof-of-Contribution lands with testnet (1.1.0+).
+function simulateMiningCycle(): void {
+  if (isSupplyExhausted()) return;
+  const halvMult = getHalvingMultiplier();
+  const today = new Date().toISOString().split("T")[0];
+
+  for (const type of stats.activeTypes) {
+    if (type === "mesh") continue; // Mesh requires native BLE, out of MVP scope
+    const rate = REWARD_RATES[type];
+    if (!rate) continue;
+
+    // Daily cap per type
+    const todayForType = rewards
+      .filter((r) => r.type === type && new Date(r.timestamp).toISOString().split("T")[0] === today)
+      .reduce((sum, r) => sum + r.amount, 0);
+    if (todayForType >= rate.dailyCap) continue;
+
+    // Per-cycle hit chance (matches PWA at app/mining.ts:155)
+    const chance = type === "relay" ? 0.6 : type === "validation" ? 0.4 : type === "storage" ? 0.3 : 0.1;
+    if (Math.random() > chance) continue;
+
+    const amount = Math.round(rate.perAction * halvMult * 100000) / 100000;
+    if (amount <= 0) continue;
+
+    creditServerReward(type, amount, rate.description);
+  }
 }
 
 // Called when a relay mining receipt is received from the server
