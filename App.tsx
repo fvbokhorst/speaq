@@ -257,7 +257,13 @@ function App() {
             await loadIdentity();
             console.warn("[TIMING] handlePinSubmit loadIdentity done after " + (Date.now() - tStart) + "ms");
           } catch (e) { console.warn("[boot] loadIdentity failed:", e); }
-          await seedDemoConversationIfNeeded();
+          // F6 PIN-unlock optimisation: seed demo conversation in background,
+          // not blocking the unlock-completion. The demo seed is purely cosmetic
+          // (sample contact + welcome message) and not needed before phase=main
+          // transitions. Pre-fix this added ~500ms-1s to the apparent unlock time.
+          seedDemoConversationIfNeeded().catch((e) =>
+            console.warn("[boot] seedDemoConversationIfNeeded background failed:", e)
+          );
           console.warn("[TIMING] handlePinSubmit pin-enter TOTAL " + (Date.now() - tStart) + "ms");
           setPin("");
           setPhase("main");

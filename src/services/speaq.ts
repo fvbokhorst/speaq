@@ -129,16 +129,28 @@ export async function createIdentity(displayName: string): Promise<typeof identi
  * Load identity from storage and reconnect
  */
 export async function loadIdentity(): Promise<typeof identity> {
+  const tStart = Date.now();
   try {
     const data = await AsyncStorage.getItem("speaq_identity");
+    console.warn("[TIMING] loadIdentity AsyncStorage.getItem identity done after " + (Date.now() - tStart) + "ms");
     if (data) {
       identity = JSON.parse(data);
 
-      // Load Kyber keypair. D1 audit fix: detect legacy (homemade ring-LWE) keys
-      // and regenerate with FIPS 203 ML-KEM-768. Existing ratchet states retain
-      // their sharedSecret so old conversations remain readable; only NEW key
+      // F6 PIN-unlock latency optimisation: previously these two crypto-heavy
+      // decrypts ran sequentially, accounting for ~3-5s on iPhone. They have
+      // no inter-dependency (signingKeys cache lives in module scope, kyberKeys
+      // load is independent), so Promise.all halves the wall-clock time.
+      // D1 audit fix: detect legacy (homemade ring-LWE) keys and regenerate
+      // with FIPS 203 ML-KEM-768. Existing ratchet states retain their
+      // sharedSecret so old conversations remain readable; only NEW key
       // exchanges with contacts use the upgraded keys.
-      kyberKeys = await loadKyberKeyPair();
+      const [loadedKyber] = await Promise.all([
+        loadKyberKeyPair(),
+        ensureSigningKeys(), // E1-N: lazy-init signing keys (audit hardening 2026-04-26)
+      ]);
+      kyberKeys = loadedKyber;
+      console.warn("[TIMING] loadIdentity kyber+signing parallel decrypt done after " + (Date.now() - tStart) + "ms");
+
       if (kyberKeys && isLegacyKyberKey(kyberKeys.publicKey)) {
         console.warn("[SPEAQ] Legacy Kyber keys detected - regenerating with FIPS 203 ML-KEM-768");
         kyberKeys = generateKyberKeyPair();
@@ -149,9 +161,6 @@ export async function loadIdentity(): Promise<typeof identity> {
         kyberKeys = generateKyberKeyPair();
         await saveKyberKeyPair(kyberKeys);
       }
-
-      // E1-N: lazy-init signing keys for existing identities (audit hardening 2026-04-26)
-      await ensureSigningKeys();
 
       // Migration: existing identity without DID -- generate now
       if (identity && !identity.did && kyberKeys) {
@@ -166,6 +175,7 @@ export async function loadIdentity(): Promise<typeof identity> {
       }
 
       connectRelay();
+      console.warn("[TIMING] loadIdentity TOTAL " + (Date.now() - tStart) + "ms (relay connect dispatched)");
     }
   } catch (e) {
     console.error("Load identity error:", e);
