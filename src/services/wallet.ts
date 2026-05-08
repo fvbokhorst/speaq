@@ -35,6 +35,9 @@ const STORAGE_KEY = "speaq_wallet";
 
 class WalletService {
   private balance: number = 0;
+  private totalReceived: number = 0;
+  private totalSent: number = 0;
+  private totalMined: number = 0;
   private transactions: Transaction[] = [];
   private projects: Project[] = [];
   private linkedWallets: LinkedWallet[] = [];
@@ -47,6 +50,9 @@ class WalletService {
       if (data) {
         const parsed = JSON.parse(data);
         this.balance = parsed.balance || 0;
+        this.totalReceived = parsed.totalReceived || 0;
+        this.totalSent = parsed.totalSent || 0;
+        this.totalMined = parsed.totalMined || 0;
         this.transactions = parsed.transactions || [];
         this.projects = parsed.projects || [];
         this.linkedWallets = parsed.linkedWallets || [];
@@ -63,6 +69,9 @@ class WalletService {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
         balance: this.balance,
+        totalReceived: this.totalReceived,
+        totalSent: this.totalSent,
+        totalMined: this.totalMined,
         transactions: this.transactions,
         projects: this.projects,
         linkedWallets: this.linkedWallets,
@@ -86,6 +95,7 @@ class WalletService {
     if (amount <= 0 || amount > this.balance) return false;
 
     this.balance -= amount;
+    this.totalSent += amount;
     this.transactions.push({
       id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
       type: "send",
@@ -100,6 +110,7 @@ class WalletService {
 
   receive(from: string, amount: number, note: string = ""): void {
     this.balance += amount;
+    this.totalReceived += amount;
     this.transactions.push({
       id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
       type: "receive",
@@ -111,10 +122,27 @@ class WalletService {
     this.save();
   }
 
-  // Contribution reward (Proof-of-Contribution, not cryptocurrency mining)
+  // Contribution reward (Proof-of-Contribution, not cryptocurrency mining).
+  // Tracked separately from totalReceived so user can distinguish peer-payments
+  // from network-rewards. Mirror of PWA wallet.ts addMiningReward semantics
+  // where totalMined is its own bucket alongside totalReceived/totalSent.
   addMiningReward(amount: number, type: string): void {
-    this.receive("SPEAQ Network", amount, `Contribution: ${type}`);
+    this.balance += amount;
+    this.totalMined += amount;
+    this.transactions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      type: "receive",
+      amount,
+      peer: "SPEAQ Network",
+      note: `Contribution: ${type}`,
+      timestamp: Date.now(),
+    });
+    this.save();
   }
+
+  getTotalReceived(): number { return this.totalReceived; }
+  getTotalSent(): number { return this.totalSent; }
+  getTotalMined(): number { return this.totalMined; }
 
   // --- Projects ---
 

@@ -31,6 +31,7 @@ import { ThemeProvider, useThemedStyles } from "./src/theme/ThemeContext";
 import { createIdentity, getIdentity, loadIdentity } from "./src/services/speaq";
 import { callService } from "./src/services/call";
 import { walletService } from "./src/services/wallet";
+import { initWalletReceiveListener } from "./src/services/walletReceiveListener";
 import { contactsService } from "./src/services/contacts";
 import { seedDemoConversationIfNeeded } from "./src/services/demo-seed";
 import { advancedService } from "./src/services/advanced";
@@ -130,6 +131,12 @@ function App() {
   useEffect(() => {
     walletService.load().then(() => {
       loadMining(); // Mining must start AFTER wallet is loaded
+      // App-level QC-receive subscriber: ensures incoming QC payments are
+      // credited to the wallet regardless of which screen is active. Mirrors
+      // PWA app-level handler at speaq-web/src/app/app/page.tsx:1306.
+      // Pre-1.0.7 only ChatScreen mounted on the right contact would credit;
+      // anything else dropped silently. See SPEAQ_F1-F5_Implementation_2026-05-08.md
+      initWalletReceiveListener();
     });
     contactsService.load();
     advancedService.load(); // awaited internally - checks Dead Man's Switch on startup

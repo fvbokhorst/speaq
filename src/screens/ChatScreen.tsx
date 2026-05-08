@@ -172,7 +172,12 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
                 }
               }
             }
-            if (data.type === "message") {
+            // F3: accept payloads where data.type === "message" OR data.qc is set.
+            // Older PWA builds did not include type:"message" in QC-payloads;
+            // accepting either form ensures cross-platform interop (defense in
+            // depth alongside the PWA-side fixes 5bb73cd + 7aba06a that now
+            // include type:"message"). See SPEAQ_F1-F5_Implementation_2026-05-08.md.
+            if (data.type === "message" || data.qc) {
               // Save sender's contact photo if included (fallback to contactId)
               const photoSenderId = data.senderId || contactId;
               if (data.photo && photoSenderId) {
@@ -184,10 +189,10 @@ export default function ChatScreen({ contactId, contactName, onBack, onCall }: P
               }
               Vibration.vibrate(100);
               playMessageReceived();
-              // Handle QC payment receive
-              if (data.qc && data.amount && data.amount > 0) {
-                walletService.receive(data.senderId || contactId, data.amount, `From ${data.fromName || contactId.substring(0, 8)}`);
-              }
+              // Wallet update for QC payments is now handled at app-level by
+              // walletReceiveListener (see App.tsx). ChatScreen renders the
+              // payment-bubble below but does NOT credit the wallet itself,
+              // to avoid double-credit when both handlers fire.
               const flagged = data.text ? containsObjectionableContent(data.text, getLanguage() as SafetyLang) : false;
               const newMsg: StoredMessage = {
                 id: Date.now().toString(),
