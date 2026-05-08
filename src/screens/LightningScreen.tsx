@@ -254,11 +254,11 @@ export default function LightningScreen({ onBack }: Props) {
             <View style={st.directionRow}>
               <TouchableOpacity style={[st.dirBtn, convertDirection === "toQC" && st.dirBtnActive]}
                 onPress={() => setConvertDirection("toQC")}>
-                <Text style={[st.dirText, convertDirection === "toQC" && st.dirTextActive]}>Sats -> QC</Text>
+                <Text style={[st.dirText, convertDirection === "toQC" && st.dirTextActive]}>Sats {'->'} QC</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[st.dirBtn, convertDirection === "toLN" && st.dirBtnActive]}
                 onPress={() => setConvertDirection("toLN")}>
-                <Text style={[st.dirText, convertDirection === "toLN" && st.dirTextActive]}>QC -> Sats</Text>
+                <Text style={[st.dirText, convertDirection === "toLN" && st.dirTextActive]}>QC {'->'} Sats</Text>
               </TouchableOpacity>
             </View>
             <TextInput style={st.modalInput} value={convertAmount} onChangeText={setConvertAmount}
