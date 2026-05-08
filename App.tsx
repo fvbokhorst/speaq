@@ -38,7 +38,7 @@ import { advancedService } from "./src/services/advanced";
 import { loadBlocked } from "./src/services/blocked";
 import { loadGroups } from "./src/services/groups";
 import { loadLightning } from "./src/services/lightning";
-import { loadMining } from "./src/services/mining";
+import { loadMining, startMining } from "./src/services/mining";
 import { loadLanguage, t } from "./src/services/i18n";
 import { loadProfile } from "./src/services/profile";
 import { setNormalPin } from "./src/services/vault";
@@ -339,7 +339,25 @@ function App() {
         <StatusBar barStyle="light-content" />
         <WelcomeScreen onCreateIdentity={async (name: string) => {
           const id = await createIdentity(name);
-          Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nNow set a PIN to secure your identity.`,
+          // One-time welcome bonus + default-on mining for new identities. Both
+          // are claimed-once via AsyncStorage flags so re-creating identity later
+          // does not re-mint. Lifetime QC starts at 1.0 instead of 0.0 so users
+          // can immediately experiment with sending without waiting for mining.
+          try {
+            const welcomeClaimed = await AsyncStorage.getItem("speaq_welcome_claimed");
+            if (!welcomeClaimed) {
+              walletService.addMiningReward(1.0, "welcome");
+              await AsyncStorage.setItem("speaq_welcome_claimed", "true");
+            }
+            const miningInitialized = await AsyncStorage.getItem("speaq_mining_initialized");
+            if (!miningInitialized) {
+              await startMining();
+              await AsyncStorage.setItem("speaq_mining_initialized", "true");
+            }
+          } catch (e) {
+            console.warn("[App] welcome bonus / mining init failed:", e);
+          }
+          Alert.alert("Welcome " + name, `SPEAQ ID: ${id?.speaqId}\n\nYou received a 1 QC welcome bonus and mining is now active. Set a PIN to secure your identity.`,
             [{ text: "Set PIN", onPress: () => setPhase("pin-setup") }]);
         }} />
       </SafeAreaProvider>
