@@ -90,7 +90,8 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     // Locale-tolerant parse, see handleProceedToConfirm.
     const amount = parseFloat(sendAmount.replace(",", "."));
     const recipientId = sendTo.trim();
-    walletService.send(recipientId, amount, sendNote.trim());
+    const note = sendNote.trim();
+    walletService.send(recipientId, amount, note);
     setBalance(walletService.getBalance());
     setTransactions(walletService.getTransactions());
     setShowConfirm(false);
@@ -100,7 +101,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     setSendNote("");
     Alert.alert(t("sentSuccess"), t("sentSuccessMsg").replace("%s", amount.toFixed(2)));
     try {
-      await sendQCPayment(recipientId, amount);
+      await sendQCPayment(recipientId, amount, note);
     } catch (e) {
       console.error("[WalletScreen] sendQCPayment failed:", (e as Error).message);
     }

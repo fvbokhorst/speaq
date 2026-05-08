@@ -84,9 +84,15 @@ export function initWalletReceiveListener(): void {
 
     const senderId: string = data.senderId || data.from || msg.from || "unknown";
     const senderName: string = data.fromName || senderId.substring(0, 8);
+    // Sender-supplied note travels in payload.note (added 2026-05-08 to fix
+    // "memo not visible at receiver" bug). Fall back to "From X" if absent
+    // so receivers see at least where the QC came from.
+    const txNote: string = (typeof data.note === "string" && data.note.trim())
+      ? data.note.trim()
+      : `From ${senderName}`;
 
     // Update wallet (single source of truth - ChatScreen no longer does this).
-    walletService.receive(senderId, data.amount, `From ${senderName}`);
+    walletService.receive(senderId, data.amount, txNote);
 
     // F4: auto-add contact if not already present. Mirrors PWA page.tsx:1346.
     const contacts = contactsService.getContacts();

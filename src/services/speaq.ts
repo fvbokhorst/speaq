@@ -587,8 +587,12 @@ export async function sendMessage(toSpeaqId: string, text: string): Promise<void
 
 /**
  * Send a QC payment to a contact (encrypted via ratchet)
+ *
+ * @param note Optional sender memo. Travels inside the encrypted payload
+ *   so the receiver sees it in their wallet transaction-history. Without
+ *   this, only the hardcoded "[Payment: X QC]" text reaches the receiver.
  */
-export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<void> {
+export async function sendQCPayment(toSpeaqId: string, amount: number, note?: string): Promise<void> {
   if (!ws || !connected || !identity) return;
 
   // Load profile photo for payment messages
@@ -609,6 +613,7 @@ export async function sendQCPayment(toSpeaqId: string, amount: number): Promise<
     timestamp: Date.now(),
   };
   if (photo) payload.photo = photo;
+  if (note && note.trim()) payload.note = note.trim();
   const plaintext = JSON.stringify(payload);
 
   const contactPubKey = await loadContactPublicKey(toSpeaqId);

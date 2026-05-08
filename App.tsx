@@ -257,6 +257,26 @@ function App() {
             await loadIdentity();
             console.warn("[TIMING] handlePinSubmit loadIdentity done after " + (Date.now() - tStart) + "ms");
           } catch (e) { console.warn("[boot] loadIdentity failed:", e); }
+          // Retroactive welcome bonus + mining default-on for users who upgraded
+          // from a pre-1.0.7 build where these were not yet claimed. Same flag
+          // mechanism as new-identity flow, so claim-once is preserved across
+          // both code paths. Without this retroactive check, existing users
+          // would never receive their 1.0 QC starter and would have to enable
+          // mining manually.
+          try {
+            const welcomeClaimed = await AsyncStorage.getItem("speaq_welcome_claimed");
+            if (!welcomeClaimed) {
+              walletService.addMiningReward(1.0, "welcome");
+              await AsyncStorage.setItem("speaq_welcome_claimed", "true");
+            }
+            const miningInitialized = await AsyncStorage.getItem("speaq_mining_initialized");
+            if (!miningInitialized) {
+              await startMining();
+              await AsyncStorage.setItem("speaq_mining_initialized", "true");
+            }
+          } catch (e) {
+            console.warn("[boot] retroactive welcome/mining failed:", e);
+          }
           // F6 PIN-unlock optimisation: seed demo conversation in background,
           // not blocking the unlock-completion. The demo seed is purely cosmetic
           // (sample contact + welcome message) and not needed before phase=main
