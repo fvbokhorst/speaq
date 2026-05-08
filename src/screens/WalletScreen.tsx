@@ -398,13 +398,13 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
             {contactsService.getContacts().length === 0 ? (
               <Text style={st.emptySub}>{t("noContactsYet")}</Text>
             ) : (
-              <ScrollView style={{ maxHeight: 300 }}>
+              <ScrollView style={{ maxHeight: 300, width: "100%" }}>
                 {contactsService.getContacts().map((c) => (
                   <TouchableOpacity key={c.id} style={st.contactRow} onPress={() => handlePickContactForSend(c)}>
-                    <View style={st.contactAvatar}><Text style={st.contactInit}>{c.name.charAt(0)}</Text></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={st.contactName}>{c.name}</Text>
-                      <Text style={st.contactId}>{c.id}</Text>
+                    <View style={st.contactAvatar}><Text style={st.contactInit}>{c.name.charAt(0).toUpperCase()}</Text></View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={st.contactName} numberOfLines={1}>{c.name || c.id.substring(0, 12)}</Text>
+                      <Text style={st.contactId} numberOfLines={1}>{c.id}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -601,10 +601,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   confirmLabel: { color: c.signal.steel, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8 },
   confirmValue: { color: c.signal.white, fontSize: 15, fontWeight: "500", marginTop: 2 },
   confirmBtnGold: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: c.voice.gold, alignItems: "center" },
-  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: c.border.subtle },
+  contactRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: c.border.subtle, width: "100%" },
   contactAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.depth.elevated, alignItems: "center", justifyContent: "center", marginRight: 14, borderWidth: 1, borderColor: c.quantum.teal },
   contactInit: { color: c.quantum.teal, fontSize: 16, fontWeight: "600" },
-  contactName: { color: c.signal.white, fontSize: 16, fontWeight: "600", flexShrink: 1 },
+  contactName: { color: c.signal.white, fontSize: 16, fontWeight: "700", flexShrink: 1 },
   contactId: { color: c.signal.steel, fontSize: 11, fontFamily: "Courier", marginTop: 2 },
   modalSub: { color: c.signal.steel, fontSize: 11, marginBottom: 16 },
   qrAmountText: { color: c.voice.gold, fontSize: 18, fontWeight: "600", marginTop: 12 },
