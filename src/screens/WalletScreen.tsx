@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useThemedStyles, useTheme, ThemeColors } from "../theme/ThemeContext";
-import { getIdentity } from "../services/speaq";
+import { getIdentity, sendQCPayment } from "../services/speaq";
 import { walletService, Transaction, Project, LinkedWallet } from "../services/wallet";
 import { contactsService, Contact } from "../services/contacts";
 import { t } from "../services/i18n";
@@ -83,9 +83,10 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     setShowConfirm(true);
   }
 
-  function handleConfirmSend() {
+  async function handleConfirmSend() {
     const amount = parseFloat(sendAmount);
-    walletService.send(sendTo.trim(), amount, sendNote.trim());
+    const recipientId = sendTo.trim();
+    walletService.send(recipientId, amount, sendNote.trim());
     setBalance(walletService.getBalance());
     setTransactions(walletService.getTransactions());
     setShowConfirm(false);
@@ -94,12 +95,18 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
     setSendAmount("");
     setSendNote("");
     Alert.alert(t("sentSuccess"), t("sentSuccessMsg").replace("%s", amount.toFixed(2)));
+    try {
+      await sendQCPayment(recipientId, amount);
+    } catch (e) {
+      console.error("[WalletScreen] sendQCPayment failed:", (e as Error).message);
+    }
   }
 
   function handlePickContactForSend(contact: Contact) {
     setSendTo(contact.id);
     setSendToName(contact.name);
     setShowContactPicker(false);
+    setShowSend(true);
   }
 
   function handleCreateProject() {
@@ -323,7 +330,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
         <View style={st.modalOverlay}>
           <View style={st.modalBox}>
             <Text style={st.modalTitle}>{t("sendQCredits")}</Text>
-            <TouchableOpacity style={st.contactPickBtn} onPress={() => setShowContactPicker(true)}>
+            <TouchableOpacity style={st.contactPickBtn} onPress={() => { setShowSend(false); setShowContactPicker(true); }}>
               <Text style={st.contactPickText}>{sendToName || t("chooseContact")}</Text>
               <Text style={st.contactPickArrow}>{">"}</Text>
             </TouchableOpacity>
@@ -398,7 +405,7 @@ export default function WalletScreen({ onOpenChat, onOpenTransactions, onOpenLig
                 ))}
               </ScrollView>
             )}
-            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => setShowContactPicker(false)}>
+            <TouchableOpacity style={[st.cancelBtn, { marginTop: 12 }]} onPress={() => { setShowContactPicker(false); setShowSend(true); }}>
               <Text style={st.cancelText}>{t("cancel")}</Text>
             </TouchableOpacity>
           </View>
